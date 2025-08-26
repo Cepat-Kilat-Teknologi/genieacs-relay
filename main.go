@@ -91,6 +91,7 @@ func main() {
 
 	log.Printf("Starting server with GenieACS URL: %s", genieacsBaseURL)
 
+	// Existing handlers...
 	http.HandleFunc("/api/v1/genieacs/ssid/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			getSSIDByIPHandler(w, r)
@@ -115,7 +116,22 @@ func main() {
 		}
 	}))
 
-	http.HandleFunc("/api/v1/genieacs/dhcp-client/", authMiddleware(getDHCPClientHandler))
+	http.HandleFunc("/api/v1/genieacs/dhcp-client/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			getDHCPClientBySNHandler(w, r) // Ubah nama handler yang existing
+		} else {
+			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
+		}
+	}))
+
+	// New handler for DHCP client by IP
+	http.HandleFunc("/api/v1/genieacs/dhcp-client-by-ip/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			getDHCPClientByIPHandler(w, r)
+		} else {
+			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
+		}
+	}))
 
 	// Health check endpoint
 	http.HandleFunc("/api/v1/genieacs/ssid/health", func(w http.ResponseWriter, r *http.Request) {
@@ -597,7 +613,8 @@ func applyChanges(deviceID string) error {
 	return nil
 }
 
-func getDHCPClientHandler(w http.ResponseWriter, r *http.Request) {
+// Handler for DHCP client by Serial Number (existing functionality)
+func getDHCPClientBySNHandler(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 	sn := parts[len(parts)-1]
 
@@ -618,6 +635,40 @@ func getDHCPClientHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dhcpClients, err := getDHCPClients(deviceID)
+	if err != nil {
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+
+	sendResponse(w, http.StatusOK, "OK", dhcpClients)
+}
+
+// New handler for getting DHCP clients by IP address
+func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.Path, "/")
+	ip := parts[len(parts)-1]
+
+	if ip == "" {
+		sendError(w, http.StatusBadRequest, "Bad Request", "IP Address required")
+		return
+	}
+
+	// Get device ID by IP
+	deviceID, err := getDeviceIDByIP(ip)
+	if err != nil {
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		return
+	}
+
+	// Refresh DHCP data
+	err = refreshDHCP(deviceID)
+	if err != nil {
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
+		return
+	}
+
+	// Get DHCP clients
 	dhcpClients, err := getDHCPClients(deviceID)
 	if err != nil {
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
