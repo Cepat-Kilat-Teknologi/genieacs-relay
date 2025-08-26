@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,12 +12,49 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
-// Global variables that will be set from environment
+// Global variables
 var (
 	genieacsBaseURL string
 	validAPIKey     string
+)
+
+// Cache untuk device data dengan TTL
+type deviceCache struct {
+	sync.RWMutex
+	data    map[string]cachedDeviceData
+	timeout time.Duration
+}
+
+type cachedDeviceData struct {
+	data      map[string]interface{}
+	timestamp time.Time
+}
+
+var (
+	httpClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+			IdleConnTimeout:     30 * time.Second,
+			DisableCompression:  true,
+		},
+	}
+
+	deviceCacheInstance = &deviceCache{
+		data:    make(map[string]cachedDeviceData),
+		timeout: 30 * time.Second, // Cache 30 detik
+	}
+
+	// Worker pool untuk concurrent operations
+	taskWorkerPool = &workerPool{
+		workers: 10,
+		queue:   make(chan task, 100),
+	}
 )
 
 type Device struct {
@@ -49,6 +87,130 @@ type Response struct {
 	Status string      `json:"status"`
 	Data   interface{} `json:"data,omitempty"`
 	Error  string      `json:"error,omitempty"`
+}
+
+// Worker pool implementation
+type task struct {
+	deviceID string
+	taskType string
+	params   [][]interface{}
+}
+
+type workerPool struct {
+	workers int
+	queue   chan task
+	wg      sync.WaitGroup
+}
+
+func (wp *workerPool) Start() {
+	for i := 0; i < wp.workers; i++ {
+		wp.wg.Add(1)
+		go wp.worker()
+	}
+}
+
+func (wp *workerPool) Stop() {
+	close(wp.queue)
+	wp.wg.Wait()
+}
+
+func (wp *workerPool) worker() {
+	defer wp.wg.Done()
+
+	for t := range wp.queue {
+		switch t.taskType {
+		case "setParameterValues":
+			setParameterValues(t.deviceID, t.params)
+		case "applyChanges":
+			applyChanges(t.deviceID)
+		case "refreshWLAN":
+			refreshWLANConfig(t.deviceID)
+		}
+	}
+}
+
+func (wp *workerPool) Submit(deviceID, taskType string, params [][]interface{}) {
+	wp.queue <- task{
+		deviceID: deviceID,
+		taskType: taskType,
+		params:   params,
+	}
+}
+
+func (c *deviceCache) get(deviceID string) (map[string]interface{}, bool) {
+	c.RLock()
+	defer c.RUnlock()
+
+	if cached, exists := c.data[deviceID]; exists {
+		if time.Since(cached.timestamp) < c.timeout {
+			return cached.data, true
+		}
+	}
+	return nil, false
+}
+
+func (c *deviceCache) set(deviceID string, data map[string]interface{}) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.data[deviceID] = cachedDeviceData{
+		data:      data,
+		timestamp: time.Now(),
+	}
+}
+
+func (c *deviceCache) clear(deviceID string) {
+	c.Lock()
+	defer c.Unlock()
+	delete(c.data, deviceID)
+}
+
+// Fungsi untuk mendapatkan device data dengan cache
+func getDeviceData(deviceID string) (map[string]interface{}, error) {
+	// Cek cache dulu
+	if cachedData, found := deviceCacheInstance.get(deviceID); found {
+		return cachedData, nil
+	}
+
+	query := fmt.Sprintf(`{"_id":"%s"}`, deviceID)
+	encodedQuery := url.QueryEscape(query)
+	url := fmt.Sprintf("%s/devices/?query=%s", genieacsBaseURL, encodedQuery)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-API-Key", validAPIKey)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no device found with ID: %s", deviceID)
+	}
+
+	deviceData := result[0]
+	deviceCacheInstance.set(deviceID, deviceData)
+
+	return deviceData, nil
 }
 
 // Helper functions untuk response
@@ -88,6 +250,10 @@ func main() {
 	// Load environment variables
 	genieacsBaseURL = getEnv("GENIEACS_BASE_URL", "http://192.168.212.138:6969")
 	validAPIKey = getEnv("VALID_API_KEY", "alhamdulillah")
+
+	// Start worker pool
+	taskWorkerPool.Start()
+	defer taskWorkerPool.Stop()
 
 	log.Printf("Starting server with GenieACS URL: %s", genieacsBaseURL)
 
@@ -130,6 +296,23 @@ func main() {
 		sendResponse(w, http.StatusOK, "OK", map[string]string{"status": "healthy"})
 	})
 
+	http.HandleFunc("/api/v1/genieacs/cache/clear", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			deviceID := r.URL.Query().Get("device_id")
+			if deviceID != "" {
+				deviceCacheInstance.clear(deviceID)
+			} else {
+				deviceCacheInstance = &deviceCache{
+					data:    make(map[string]cachedDeviceData),
+					timeout: 30 * time.Second,
+				}
+			}
+			sendResponse(w, http.StatusOK, "OK", map[string]string{"message": "Cache cleared"})
+		} else {
+			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
+		}
+	}))
+
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -144,7 +327,6 @@ func getEnv(key, defaultValue string) string {
 
 // Function to get device ID by IP
 func getDeviceIDByIP(ip string) (string, error) {
-	// Try both PPPoE connection paths (CData and ZTE)
 	query := fmt.Sprintf(`{"$or":[{"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress._value":"%s"},{"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress._value":"%s"}]}`, ip, ip)
 	encodedQuery := url.QueryEscape(query)
 
@@ -156,8 +338,7 @@ func getDeviceIDByIP(ip string) (string, error) {
 	}
 	req.Header.Set("X-API-Key", validAPIKey)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -220,6 +401,9 @@ func getDeviceIDBySN(serialNumber string) (string, error) {
 }
 
 func refreshWLANConfig(deviceID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	url := fmt.Sprintf("%s/devices/%s/tasks?connection_request", genieacsBaseURL, url.PathEscape(deviceID))
 
 	payload := strings.NewReader(`{
@@ -227,15 +411,14 @@ func refreshWLANConfig(deviceID string) error {
 		"objectName": "InternetGatewayDevice.LANDevice.1.WLANConfiguration"
 	}`)
 
-	req, err := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, payload)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", validAPIKey)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -249,39 +432,10 @@ func refreshWLANConfig(deviceID string) error {
 }
 
 func getWLANData(deviceID string) ([]WLANConfig, error) {
-	query := fmt.Sprintf(`{"_id":"%s"}`, deviceID)
-	encodedQuery := url.QueryEscape(query)
-	url := fmt.Sprintf("%s/devices/?query=%s", genieacsBaseURL, encodedQuery)
-
-	req, err := http.NewRequest("GET", url, nil)
+	deviceData, err := getDeviceData(deviceID)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-API-Key", validAPIKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result) == 0 {
-		return nil, fmt.Errorf("no device found with ID: %s", deviceID)
-	}
-
-	deviceData := result[0]
 
 	// Determine device type based on ID pattern
 	isZTE := strings.Contains(deviceID, "ZTE") || strings.Contains(deviceID, "ZT")
@@ -328,11 +482,9 @@ func getWLANData(deviceID string) ([]WLANConfig, error) {
 	}
 
 	sort.Slice(configs, func(i, j int) bool {
-		// Convert WLAN string to integer for proper numeric sorting
 		numI, errI := strconv.Atoi(configs[i].WLAN)
 		numJ, errJ := strconv.Atoi(configs[j].WLAN)
 
-		// If conversion fails, fall back to string comparison
 		if errI != nil || errJ != nil {
 			return configs[i].WLAN < configs[j].WLAN
 		}
@@ -417,11 +569,16 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refresh WLAN configuration secara synchronous terlebih dahulu
 	err = refreshWLANConfig(deviceID)
 	if err != nil {
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
 		return
 	}
+
+	// Tunggu sebentar untuk memastikan data sudah ter-refresh
+	// (opsional, bisa disesuaikan dengan kebutuhan)
+	time.Sleep(500 * time.Millisecond)
 
 	wlanData, err := getWLANData(deviceID)
 	if err != nil {
@@ -429,43 +586,18 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Submit refresh task ke worker pool untuk refresh berikutnya (non-blocking)
+	taskWorkerPool.Submit(deviceID, "refreshWLAN", nil)
+
 	sendResponse(w, http.StatusOK, "OK", wlanData)
 }
 
 func getDHCPClients(deviceID string) ([]DHCPClient, error) {
-	query := fmt.Sprintf(`{"_id":"%s"}`, deviceID)
-	encodedQuery := url.QueryEscape(query)
-	url := fmt.Sprintf("%s/devices/?query=%s", genieacsBaseURL, encodedQuery)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-API-Key", validAPIKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
+	deviceData, err := getDeviceData(deviceID)
 	if err != nil {
 		return nil, err
 	}
 
-	var result []map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result) == 0 {
-		return nil, fmt.Errorf("no device found with ID: %s", deviceID)
-	}
-
-	deviceData := result[0]
 	internetGateway, ok := deviceData["InternetGatewayDevice"].(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("InternetGatewayDevice data not found")
@@ -560,8 +692,7 @@ func setParameterValues(deviceID string, parameterValues [][]interface{}) error 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", validAPIKey)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -591,8 +722,7 @@ func applyChanges(deviceID string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", validAPIKey)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -615,21 +745,21 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get device ID by IP
 	deviceID, err := getDeviceIDByIP(ip)
 	if err != nil {
 		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
 
-	// Refresh DHCP data
-	err = refreshDHCP(deviceID)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
-		return
+	// Optional: hanya refresh kalau query param refresh=true
+	refresh := r.URL.Query().Get("refresh")
+	if refresh == "true" {
+		if err := refreshDHCP(deviceID); err != nil {
+			sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
+			return
+		}
 	}
 
-	// Get DHCP clients
 	dhcpClients, err := getDHCPClients(deviceID)
 	if err != nil {
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
@@ -640,6 +770,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 7 {
 		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid URL format. Use /api/v1/genieacs/ssid/update/{wlan}/{ip}")
@@ -719,21 +850,15 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 		{parameterPath, updateReq.SSID, "xsd:string"},
 	}
 
-	err = setParameterValues(deviceID, parameterValues)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to update SSID: "+err.Error())
-		return
-	}
+	// Submit both tasks to worker pool concurrently
+	taskWorkerPool.Submit(deviceID, "setParameterValues", parameterValues)
+	taskWorkerPool.Submit(deviceID, "applyChanges", nil)
 
-	// Apply changes
-	err = applyChanges(deviceID)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "SSID updated but apply failed: "+err.Error())
-		return
-	}
+	// Clear cache untuk device ini
+	deviceCacheInstance.clear(deviceID)
 
 	sendResponse(w, http.StatusOK, "OK", map[string]string{
-		"message":   "SSID updated and applied successfully",
+		"message":   "SSID update submitted successfully",
 		"device_id": deviceID,
 		"wlan":      wlan,
 		"ssid":      updateReq.SSID,
@@ -822,21 +947,15 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 		{parameterPath, updateReq.Password, "xsd:string"},
 	}
 
-	err = setParameterValues(deviceID, parameterValues)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to update password: "+err.Error())
-		return
-	}
+	// Submit both tasks to worker pool concurrently
+	taskWorkerPool.Submit(deviceID, "setParameterValues", parameterValues)
+	taskWorkerPool.Submit(deviceID, "applyChanges", nil)
 
-	// Apply changes
-	err = applyChanges(deviceID)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Password updated but apply failed: "+err.Error())
-		return
-	}
+	// Clear cache untuk device ini
+	deviceCacheInstance.clear(deviceID)
 
 	sendResponse(w, http.StatusOK, "OK", map[string]string{
-		"message":   "Password updated and applied successfully",
+		"message":   "Password update submitted successfully",
 		"device_id": deviceID,
 		"wlan":      wlan,
 		"ip":        ip,
@@ -845,39 +964,11 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 
 // New function to check if a specific WLAN is enabled
 func isWLANEnabled(deviceID, wlan string) (bool, error) {
-	query := fmt.Sprintf(`{"_id":"%s"}`, deviceID)
-	encodedQuery := url.QueryEscape(query)
-	url := fmt.Sprintf("%s/devices/?query=%s", genieacsBaseURL, encodedQuery)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("X-API-Key", validAPIKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
+	deviceData, err := getDeviceData(deviceID)
 	if err != nil {
 		return false, err
 	}
 
-	var result []map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return false, err
-	}
-
-	if len(result) == 0 {
-		return false, fmt.Errorf("no device found with ID: %s", deviceID)
-	}
-
-	deviceData := result[0]
 	internetGateway, ok := deviceData["InternetGatewayDevice"].(map[string]interface{})
 	if !ok {
 		return false, fmt.Errorf("InternetGatewayDevice data not found")
