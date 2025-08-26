@@ -1,0 +1,39 @@
+# Ignore everything
+*
+
+# But allow these files and directories
+!Dockerfile
+!docker-compose.yml
+!docker-compose.prod.yml
+!go.mod
+!go.sum
+!main.go
+!.dockerignore
+
+# Allow specific directories if needed
+!bin/
+!bin/api
+
+# Development files to exclude
+.git
+.gitignore
+.dockerignore
+README.md
+LICENSE
+.vscode
+.idea
+*.log
+tmp/
+dist/
+vendor/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Go specific excludes
+*.test
+*.exe
+*.prof
+coverage.html
