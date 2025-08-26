@@ -116,16 +116,8 @@ func main() {
 		}
 	}))
 
-	http.HandleFunc("/api/v1/genieacs/dhcp-client/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			getDHCPClientBySNHandler(w, r) // Ubah nama handler yang existing
-		} else {
-			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
-		}
-	}))
-
 	// New handler for DHCP client by IP
-	http.HandleFunc("/api/v1/genieacs/dhcp-client-by-ip/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/v1/genieacs/dhcp-client/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			getDHCPClientByIPHandler(w, r)
 		} else {
@@ -613,37 +605,6 @@ func applyChanges(deviceID string) error {
 	return nil
 }
 
-// Handler for DHCP client by Serial Number (existing functionality)
-func getDHCPClientBySNHandler(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	sn := parts[len(parts)-1]
-
-	if sn == "" {
-		sendError(w, http.StatusBadRequest, "Bad Request", "Serial Number required")
-		return
-	}
-
-	deviceID, err := getDeviceIDBySN(sn)
-	if err != nil {
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
-		return
-	}
-
-	err = refreshDHCP(deviceID)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
-		return
-	}
-
-	dhcpClients, err := getDHCPClients(deviceID)
-	if err != nil {
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
-	}
-
-	sendResponse(w, http.StatusOK, "OK", dhcpClients)
-}
-
 // New handler for getting DHCP clients by IP address
 func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
@@ -712,6 +673,46 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// First, get current WLAN configuration to validate the WLAN exists and is enabled
+	wlanConfigs, err := getWLANData(deviceID)
+	if err != nil {
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to get WLAN configuration: "+err.Error())
+		return
+	}
+
+	// Check if the specified WLAN exists and is enabled
+	wlanExists := false
+	wlanEnabled := false
+	for _, config := range wlanConfigs {
+		if config.WLAN == wlan {
+			wlanExists = true
+			// For ZTE devices, we can't determine if it's enabled from the password field
+			// So we'll assume it's enabled if it exists in the configuration
+			if strings.Contains(deviceID, "ZTE") || strings.Contains(deviceID, "ZT") {
+				wlanEnabled = true
+			} else {
+				// For non-ZTE devices, check if the WLAN is actually enabled
+				enabled, err := isWLANEnabled(deviceID, wlan)
+				if err != nil {
+					sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to check WLAN status: "+err.Error())
+					return
+				}
+				wlanEnabled = enabled
+			}
+			break
+		}
+	}
+
+	if !wlanExists {
+		sendError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("WLAN %s not found on device", wlan))
+		return
+	}
+
+	if !wlanEnabled {
+		sendError(w, http.StatusBadRequest, "Bad Request", fmt.Sprintf("WLAN %s is not enabled on device", wlan))
+		return
+	}
+
 	// Set parameter values
 	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID", wlan)
 	parameterValues := [][]interface{}{
@@ -774,6 +775,47 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// First, get current WLAN configuration to validate the WLAN exists and is enabled
+	wlanConfigs, err := getWLANData(deviceID)
+	if err != nil {
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to get WLAN configuration: "+err.Error())
+		return
+	}
+
+	// Check if the specified WLAN exists and is enabled
+	wlanExists := false
+	wlanEnabled := false
+	for _, config := range wlanConfigs {
+		if config.WLAN == wlan {
+			wlanExists = true
+			// For ZTE devices, we can't determine if it's enabled from the password field
+			// So we'll assume it's enabled if it exists in the configuration
+			if strings.Contains(deviceID, "ZTE") || strings.Contains(deviceID, "ZT") {
+				wlanEnabled = true
+			} else {
+				// For non-ZTE devices, we need to check if the WLAN is actually enabled
+				// We'll do this by getting the raw device data and checking the Enable parameter
+				enabled, err := isWLANEnabled(deviceID, wlan)
+				if err != nil {
+					sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to check WLAN status: "+err.Error())
+					return
+				}
+				wlanEnabled = enabled
+			}
+			break
+		}
+	}
+
+	if !wlanExists {
+		sendError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("WLAN %s not found on device", wlan))
+		return
+	}
+
+	if !wlanEnabled {
+		sendError(w, http.StatusBadRequest, "Bad Request", fmt.Sprintf("WLAN %s is not enabled on device", wlan))
+		return
+	}
+
 	// Set parameter values
 	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey", wlan)
 	parameterValues := [][]interface{}{
@@ -799,4 +841,69 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 		"wlan":      wlan,
 		"ip":        ip,
 	})
+}
+
+// New function to check if a specific WLAN is enabled
+func isWLANEnabled(deviceID, wlan string) (bool, error) {
+	query := fmt.Sprintf(`{"_id":"%s"}`, deviceID)
+	encodedQuery := url.QueryEscape(query)
+	url := fmt.Sprintf("%s/devices/?query=%s", genieacsBaseURL, encodedQuery)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("X-API-Key", validAPIKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	var result []map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return false, err
+	}
+
+	if len(result) == 0 {
+		return false, fmt.Errorf("no device found with ID: %s", deviceID)
+	}
+
+	deviceData := result[0]
+	internetGateway, ok := deviceData["InternetGatewayDevice"].(map[string]interface{})
+	if !ok {
+		return false, fmt.Errorf("InternetGatewayDevice data not found")
+	}
+
+	lanDevice, ok := internetGateway["LANDevice"].(map[string]interface{})["1"].(map[string]interface{})
+	if !ok {
+		return false, fmt.Errorf("LANDevice data not found")
+	}
+
+	wlanConfigs, ok := lanDevice["WLANConfiguration"].(map[string]interface{})
+	if !ok {
+		return false, fmt.Errorf("WLANConfiguration data not found")
+	}
+
+	// Find the specific WLAN
+	wlanConfig, ok := wlanConfigs[wlan].(map[string]interface{})
+	if !ok {
+		return false, fmt.Errorf("WLAN %s not found", wlan)
+	}
+
+	// Check if the WLAN is enabled
+	enable, ok := wlanConfig["Enable"].(map[string]interface{})["_value"].(bool)
+	if !ok {
+		return false, nil // Default to false if we can't determine
+	}
+
+	return enable, nil
 }
