@@ -7,14 +7,16 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-const (
-	genieacsBaseURL = "http://192.168.212.138:6969"
-	validAPIKey     = "alhamdulillah"
+// Global variables that will be set from environment
+var (
+	genieacsBaseURL string
+	validAPIKey     string
 )
 
 type Device struct {
@@ -42,12 +44,40 @@ type UpdatePasswordRequest struct {
 	Password string `json:"password"`
 }
 
+type Response struct {
+	Code   int         `json:"code"`
+	Status string      `json:"status"`
+	Data   interface{} `json:"data,omitempty"`
+	Error  string      `json:"error,omitempty"`
+}
+
+// Helper functions untuk response
+func sendResponse(w http.ResponseWriter, code int, status string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(Response{
+		Code:   code,
+		Status: status,
+		Data:   data,
+	})
+}
+
+func sendError(w http.ResponseWriter, code int, status string, errorMsg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(Response{
+		Code:   code,
+		Status: status,
+		Error:  errorMsg,
+	})
+}
+
 // Middleware untuk memeriksa API Key
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		apiKey := r.Header.Get("X-API-Key")
 		if apiKey != validAPIKey {
-			http.Error(w, `{"error": "Unauthorized: Invalid API Key"}`, http.StatusUnauthorized)
+			sendError(w, http.StatusUnauthorized, "Unauthorized", "Invalid API Key")
 			return
 		}
 		next(w, r)
@@ -55,11 +85,17 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func main() {
+	// Load environment variables
+	genieacsBaseURL = getEnv("GENIEACS_BASE_URL", "http://192.168.212.138:6969")
+	validAPIKey = getEnv("VALID_API_KEY", "alhamdulillah")
+
+	log.Printf("Starting server with GenieACS URL: %s", genieacsBaseURL)
+
 	http.HandleFunc("/api/v1/genieacs/ssid/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			getSSIDByIPHandler(w, r)
 		} else {
-			http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
 		}
 	}))
 
@@ -67,7 +103,7 @@ func main() {
 		if r.Method == http.MethodPut {
 			updateSSIDByIPHandler(w, r)
 		} else {
-			http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
 		}
 	}))
 
@@ -75,14 +111,27 @@ func main() {
 		if r.Method == http.MethodPut {
 			updatePasswordByIPHandler(w, r)
 		} else {
-			http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+			sendError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed")
 		}
 	}))
 
 	http.HandleFunc("/api/v1/genieacs/dhcp-client/", authMiddleware(getDHCPClientHandler))
 
+	// Health check endpoint
+	http.HandleFunc("/api/v1/genieacs/ssid/health", func(w http.ResponseWriter, r *http.Request) {
+		sendResponse(w, http.StatusOK, "OK", map[string]string{"status": "healthy"})
+	})
+
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+// Helper function to get environment variable with fallback
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // Function to get device ID by IP
@@ -344,35 +393,35 @@ func getBand(wlan map[string]interface{}, wlanKey string) string {
 }
 
 // New handler for getting SSID by IP
+// New handler for getting SSID by IP
 func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 	ip := parts[len(parts)-1]
 
 	if ip == "" {
-		http.Error(w, `{"error": "IP Address required"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "IP Address required")
 		return
 	}
 
 	deviceID, err := getDeviceIDByIP(ip)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusNotFound)
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
 
 	err = refreshWLANConfig(deviceID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Refresh failed: %s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
 		return
 	}
 
 	wlanData, err := getWLANData(deviceID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(wlanData)
+	sendResponse(w, http.StatusOK, "OK", wlanData)
 }
 
 func getDHCPClients(deviceID string) ([]DHCPClient, error) {
@@ -553,69 +602,66 @@ func getDHCPClientHandler(w http.ResponseWriter, r *http.Request) {
 	sn := parts[len(parts)-1]
 
 	if sn == "" {
-		http.Error(w, `{"error": "Serial Number required"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "Serial Number required")
 		return
 	}
 
 	deviceID, err := getDeviceIDBySN(sn)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusNotFound)
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
 
 	err = refreshDHCP(deviceID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Refresh failed: %s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
 		return
 	}
 
 	dhcpClients, err := getDHCPClients(deviceID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(dhcpClients)
+	sendResponse(w, http.StatusOK, "OK", dhcpClients)
 }
 
 func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 7 {
-		http.Error(w, `{"error": "Invalid URL format. Use /api/v1/genieacs/ssid/update/{wlan}/{ip}"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid URL format. Use /api/v1/genieacs/ssid/update/{wlan}/{ip}")
 		return
 	}
 
-	// The URL pattern is /api/v1/genieacs/ssid/update/{wlan}/{ip}
-	// So parts will be: ["", "api", "v1", "genieacs", "ssid", "update", "{wlan}", "{ip}"]
-	wlan := parts[6] // Changed from 5 to 6
-	ip := parts[7]   // Changed from 6 to 7
+	wlan := parts[6]
+	ip := parts[7]
 
 	if wlan == "" || ip == "" {
-		http.Error(w, `{"error": "WLAN and IP Address required"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "WLAN and IP Address required")
 		return
 	}
 
 	var updateReq UpdateSSIDRequest
 	err := json.NewDecoder(r.Body).Decode(&updateReq)
 	if err != nil {
-		http.Error(w, `{"error": "Invalid JSON format"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
 		return
 	}
 
 	if updateReq.SSID == "" {
-		http.Error(w, `{"error": "SSID value required"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "SSID value required")
 		return
 	}
 
 	// Get device ID by IP
 	deviceID, err := getDeviceIDByIP(ip)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusNotFound)
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
 
-	// Set parameter values - this works for both ZTE and CData
+	// Set parameter values
 	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID", wlan)
 	parameterValues := [][]interface{}{
 		{parameterPath, updateReq.SSID, "xsd:string"},
@@ -623,19 +669,18 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = setParameterValues(deviceID, parameterValues)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Failed to update SSID: %s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to update SSID: "+err.Error())
 		return
 	}
 
-	// Apply changes to make them take effect immediately
+	// Apply changes
 	err = applyChanges(deviceID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "SSID updated but apply failed: %s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "SSID updated but apply failed: "+err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	sendResponse(w, http.StatusOK, "OK", map[string]string{
 		"message":   "SSID updated and applied successfully",
 		"device_id": deviceID,
 		"wlan":      wlan,
@@ -647,40 +692,38 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 7 {
-		http.Error(w, `{"error": "Invalid URL format. Use /api/v1/genieacs/password/update/{wlan}/{ip}"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid URL format. Use /api/v1/genieacs/password/update/{wlan}/{ip}")
 		return
 	}
 
-	// The URL pattern is /api/v1/genieacs/password/update/{wlan}/{ip}
-	// So parts will be: ["", "api", "v1", "genieacs", "password", "update", "{wlan}", "{ip}"]
-	wlan := parts[6] // Changed from 5 to 6
-	ip := parts[7]   // Changed from 6 to 7
+	wlan := parts[6]
+	ip := parts[7]
 
 	if wlan == "" || ip == "" {
-		http.Error(w, `{"error": "WLAN and IP Address required"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "WLAN and IP Address required")
 		return
 	}
 
 	var updateReq UpdatePasswordRequest
 	err := json.NewDecoder(r.Body).Decode(&updateReq)
 	if err != nil {
-		http.Error(w, `{"error": "Invalid JSON format"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
 		return
 	}
 
 	if updateReq.Password == "" {
-		http.Error(w, `{"error": "Password value required"}`, http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Bad Request", "Password value required")
 		return
 	}
 
 	// Get device ID by IP
 	deviceID, err := getDeviceIDByIP(ip)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusNotFound)
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
 
-	// Set parameter values - works for both device types
+	// Set parameter values
 	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey", wlan)
 	parameterValues := [][]interface{}{
 		{parameterPath, updateReq.Password, "xsd:string"},
@@ -688,19 +731,18 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = setParameterValues(deviceID, parameterValues)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Failed to update password: %s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to update password: "+err.Error())
 		return
 	}
 
-	// Apply changes to make them take effect immediately
+	// Apply changes
 	err = applyChanges(deviceID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Password updated but apply failed: %s"}`, err.Error()), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Password updated but apply failed: "+err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	sendResponse(w, http.StatusOK, "OK", map[string]string{
 		"message":   "Password updated and applied successfully",
 		"device_id": deviceID,
 		"wlan":      wlan,
