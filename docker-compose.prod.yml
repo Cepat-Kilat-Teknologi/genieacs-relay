@@ -1,0 +1,20 @@
+services:
+  api:
+    build:
+      context: .
+      target: production
+    image: cepatkilatteknologi/acs-api-gateway:1.0
+    container_name: acs-api-gateway-prod
+    environment:
+      - TZ=Asia/Jakarta
+      - GENIEACS_BASE_URL=http://192.168.212.138:6969
+      - VALID_API_KEY=alhamdulillah
+    ports:
+      - "8088:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/genieacs/ssid/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
