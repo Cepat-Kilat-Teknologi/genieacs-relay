@@ -1,39 +1,14 @@
-# Ignore everything
-*
+# .dockerignore
 
-# But allow these files and directories
-!Dockerfile
-!docker-compose.yml
-!docker-compose.prod.yml
-!go.mod
-!go.sum
-!main.go
-!.dockerignore
+# Abaikan direktori build artifact dari Air
+tmp/
 
-# Allow specific directories if needed
-!bin/
-!bin/api
+# Abaikan dependensi Go, karena akan di-download di dalam container
+vendor/
 
-# Development files to exclude
+# Abaikan file/folder umum lainnya
 .git
-.gitignore
-.dockerignore
-README.md
-LICENSE
 .vscode
 .idea
+node_modules
 *.log
-tmp/
-dist/
-vendor/
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Go specific excludes
-*.test
-*.exe
-*.prof
-coverage.html
