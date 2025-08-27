@@ -1,124 +1,159 @@
-.PHONY: build run dev test clean docker-build docker-run docker-dev docker-prod docker-down docker-logs docker-push docker-buildx help
+# Makefile for ACS API Gateway
 
-# Build the binary
+# Variables
+REGISTRY_USER   := cepatkilatteknologi
+IMAGE_NAME      := acs-api-gateway
+TAG             := 1.0
+DOCKER_COMPOSE  := docker compose
+DOCKER_COMPOSE_PROD := docker compose -f docker-compose.prod.yml
+BUILDX_PLATFORMS := linux/amd64,linux/arm64,linux/arm/v7
+
+.PHONY: all setup env-copy build run dev test clean \
+        up down logs \
+        prod-up prod-down logs-prod \
+        docker-build docker-push \
+        docker-buildx docker-pushx \
+        healthcheck help
+
+.DEFAULT_GOAL := help
+
+# Setup
+## setup: Setup environment (copy .env.template to .env)
+setup: env-copy
+	@echo ">> Setup completed. Please edit .env file with your configuration."
+
+## env-copy: Copy .env.template to .env
+env-copy:
+	@if [ ! -f .env ]; then \
+		echo ">> Copying .env.template to .env..."; \
+		cp .env.template .env; \
+		echo ">> Please edit .env file with your configuration."; \
+	else \
+		echo ">> .env file already exists. Skipping copy."; \
+	fi
+
+# Local Development
+## build: Build the binary for local execution
 build:
+	@echo ">> Building binary..."
 	go build -o bin/api main.go
 
-# Run the application
+## run: Build and run the application locally
 run: build
+	@echo ">> Running application locally..."
 	./bin/api
 
-# Development with air
+## dev: Run the application with hot-reload (Air)
 dev:
+	@echo ">> Starting development server with Air hot-reload..."
 	air -c .air.toml
 
-# Run tests
+## test: Run all tests
 test:
-	go test ./...
+	@echo ">> Running tests..."
+	go test -v ./...
 
-# Clean build artifacts
+## clean: Remove build artifacts and temporary files
 clean:
+	@echo ">> Cleaning up..."
 	rm -rf bin/ tmp/
 
-# Build Docker image (single platform)
+# Docker Compose (Development)
+## up: Start development environment with Docker Compose
+up:
+	@echo ">> Starting development environment..."
+	$(DOCKER_COMPOSE) up --build
+
+## down: Stop and remove development containers
+down:
+	@echo ">> Stopping development environment..."
+	$(DOCKER_COMPOSE) down -v
+
+## logs: Follow logs from the development container
+logs:
+	$(DOCKER_COMPOSE) logs -f
+
+# Docker Compose (Production)
+## prod-up: Start production environment in detached mode
+prod-up:
+	@echo ">> Starting production environment..."
+	$(DOCKER_COMPOSE_PROD) up --build -d
+
+## prod-down: Stop and remove production containers
+prod-down:
+	$(DOCKER_COMPOSE_PROD) down -v
+
+## logs-prod: Follow logs from the production container
+logs-prod:
+	$(DOCKER_COMPOSE_PROD) logs -f
+
+# Docker Image Management
+## docker-build: Build a production Docker image
 docker-build:
-	docker build -t acs-api-gateway:latest .
+	@echo ">> Building Docker image: $(REGISTRY_USER)/$(IMAGE_NAME):$(TAG)"
+	docker build -t $(REGISTRY_USER)/$(IMAGE_NAME):$(TAG) .
 
-# Run Docker container
-docker-run: docker-build
-	docker run -p 8080:8080 --name acs-api-gateway acs-api-gateway:latest
+## docker-push: Build and push image to the registry
+docker-push: docker-build
+	@echo ">> Pushing image: $(REGISTRY_USER)/$(IMAGE_NAME):$(TAG)"
+	docker push $(REGISTRY_USER)/$(IMAGE_NAME):$(TAG)
 
-# Development with Docker Compose
-docker-dev:
-	docker-compose up --build
-
-# Production with Docker Compose
-docker-prod:
-	docker-compose -f docker-compose.prod.yml up --build -d
-
-# Stop and remove containers
-docker-down:
-	docker-compose down
-	docker-compose -f docker-compose.prod.yml down
-
-# View logs development
-docker-logs:
-	docker-compose logs -f
-
-# View logs production
-docker-logs-prod:
-	docker-compose -f docker-compose.prod.yml logs -f
-
-# Build and push to registry (single platform)
-docker-push:
-	docker build -t cepatkilatteknologi/acs-api-gateway:1.0 .
-	docker push cepatkilatteknologi/acs-api-gateway:1.0
-
-# Buildx multi-platform build
+## docker-buildx: Build multi-architecture Docker image using Buildx
 docker-buildx:
-	@echo "Building multi-platform image..."
-	docker buildx create --use --name multi-platform-builder || true
-	docker buildx build \
-		--platform linux/amd64,linux/arm64,linux/arm/v7 \
-		-t cepatkilatteknologi/acs-api-gateway:1.0 \
-		-t cepatkilatteknologi/acs-api-gateway:latest \
+	@echo ">> Building multi-architecture Docker image for platforms: $(BUILDX_PLATFORMS)"
+	@if ! docker buildx ls | grep -q multiarch-builder; then \
+		echo ">> Creating multi-architecture builder..."; \
+		docker buildx create --name multiarch-builder --use --bootstrap; \
+	fi
+	docker buildx build --platform $(BUILDX_PLATFORMS) \
+		-t $(REGISTRY_USER)/$(IMAGE_NAME):$(TAG) \
 		--push .
 
-# Buildx multi-platform build without push (for testing)
-docker-buildx-test:
-	@echo "Building multi-platform image (no push)..."
-	docker buildx create --use --name multi-platform-builder || true
-	docker buildx build \
-		--platform linux/amd64,linux/arm64 \
-		-t cepatkilatteknologi/acs-api-gateway:1.0 \
-		-t cepatkilatteknologi/acs-api-gateway:latest .
+## docker-pushx: Build and push multi-architecture image to registry
+docker-pushx: docker-buildx
+	@echo ">> Multi-architecture image built and pushed successfully"
 
-# Buildx multi-platform build and load to local docker
-docker-buildx-load:
-	@echo "Building multi-platform image and loading to local docker..."
-	docker buildx create --use --name multi-platform-builder || true
-	docker buildx build \
-		--platform linux/amd64 \
-		-t acs-api-gateway:multi \
-		--load .
-
-# Inspect multi-platform images
-docker-buildx-inspect:
-	docker buildx imagetools inspect cepatkilatteknologi/acs-api-gateway:latest
-
-# Create builder instance (run once)
-docker-buildx-setup:
-	docker buildx create --name multi-platform-builder --use
-	docker buildx inspect --bootstrap
-
-# List available builders
-docker-buildx-ls:
-	docker buildx ls
-
-# Health check
+# Utilities
+## healthcheck: Check if the local running application is healthy
 healthcheck:
-	curl -f http://localhost:8080/api/v1/genieacs/ssid/health || exit 1
+	@echo ">> Performing healthcheck..."
+	curl --fail http://localhost:8080/health || (echo "Healthcheck failed!" && exit 1)
+	@echo "Healthcheck successful!"
 
-# Help
+## help: Show this help message
 help:
-	@echo "Available commands:"
-	@echo "  build                 - Build the binary"
-	@echo "  run                   - Run the application"
-	@echo "  dev                   - Run with air (hot reload)"
-	@echo "  test                  - Run tests"
-	@echo "  clean                 - Clean build artifacts"
-	@echo "  docker-build          - Build Docker image (single platform)"
-	@echo "  docker-run            - Run Docker container"
-	@echo "  docker-dev            - Run development container with compose"
-	@echo "  docker-prod           - Run production container with compose"
-	@echo "  docker-down           - Stop and remove all containers"
-	@echo "  docker-logs           - View development container logs"
-	@echo "  docker-logs-prod      - View production container logs"
-	@echo "  docker-push           - Build and push to registry (single platform)"
-	@echo "  docker-buildx         - Multi-platform build and push to registry"
-	@echo "  docker-buildx-test    - Multi-platform build without push"
-	@echo "  docker-buildx-load    - Multi-platform build and load to local docker"
-	@echo "  docker-buildx-inspect - Inspect multi-platform images"
-	@echo "  docker-buildx-setup   - Setup multi-platform builder (run once)"
-	@echo "  docker-buildx-ls      - List available builders"
-	@echo "  healthcheck           - Check if API is healthy"
+	@echo "ACS API Gateway Management Makefile"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make [target]"
+	@echo ""
+	@echo "First, setup environment:"
+	@echo "  make setup           Copy .env.template to .env and setup environment"
+	@echo "  make env-copy        Copy .env file only"
+	@echo ""
+	@echo "Local Development:"
+	@echo "  make build           Build binary for local execution"
+	@echo "  make run             Build and run application locally"
+	@echo "  make dev             Run with hot-reload (Air)"
+	@echo "  make test            Run all tests"
+	@echo ""
+	@echo "Docker Development:"
+	@echo "  make up              Start development environment with Docker Compose"
+	@echo "  make down            Stop development environment"
+	@echo "  make logs            View development logs"
+	@echo ""
+	@echo "Docker Production:"
+	@echo "  make prod-up         Start production environment"
+	@echo "  make prod-down       Stop production environment"
+	@echo "  make logs-prod       View production logs"
+	@echo ""
+	@echo "Docker Image Management:"
+	@echo "  make docker-build    Build production Docker image (single arch)"
+	@echo "  make docker-push     Build and push single arch image to registry"
+	@echo "  make docker-buildx   Build multi-architecture Docker image"
+	@echo "  make docker-pushx    Build and push multi-arch image to registry"
+	@echo ""
+	@echo "Utilities:"
+	@echo "  make healthcheck     Check if application is healthy"
+	@echo "  make clean           Remove build artifacts"
+	@echo "  make help            Show this help message"

@@ -4,15 +4,17 @@ services:
       context: .
       target: development
     container_name: acs-api-gateway-dev
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Jakarta
-      - GENIEACS_BASE_URL=http://192.168.212.138:6969
-      - VALID_API_KEY=alhamdulillah
+      - GENIEACS_BASE_URL=${GENIEACS_BASE_URL}
+      - NBI_AUTH_KEY=${NBI_AUTH_KEY}
+      - API_KEY=${API_KEY}
     ports:
       - "8080:8080"
     volumes:
       - .:/app
-      - /app/go/pkg
       - /app/tmp
     restart: unless-stopped
     stdin_open: true

@@ -1,6 +1,8 @@
+
+
 ```bash
-curl -sS -H "X-API-Key: alhamdulillah" \
-"http://192.168.216.10:8088/api/v1/genieacs/ssid/10.90.8.164" | jq
+curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
+"http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
 ```
 
 ```bash
@@ -10,25 +12,25 @@ curl -sS -H "X-API-Key: alhamdulillah" \
   "data": [
     {
       "wlan": "1",
-      "ssid": "SSID_1",
-      "password": "Password_SSID_1",
+      "ssid": "MyHomeWiFi_2.4G",
+      "password": "SuperSecretPassword",
       "band": "2.4GHz"
     },
     {
-      "wlan": "2",
-      "ssid": "SSID_2",
-      "password": "Password_SSID_2",
-      "band": "2.4GHz"
+      "wlan": "5",
+      "ssid": "MyHomeWiFi_5G",
+      "password": "AnotherPassword",
+      "band": "5GHz"
     }
   ]
 }
 ```
 
 ```bash
-curl -sS -H "X-API-Key: alhamdulillah" \
--X PUT "http://192.168.216.10:8088/api/v1/genieacs/ssid/update/1/10.90.8.164" \
+curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
+-X PUT "http://localhost:8080/api/v1/genieacs/ssid/update/1/10.90.8.164" \
 -H "Content-Type: application/json" \
--d '{"ssid": "Update_New_SSID_1"}' | jq
+-d '{"ssid": "New_SSID_Name"}' | jq
 ```
 
 ```bash
@@ -36,20 +38,20 @@ curl -sS -H "X-API-Key: alhamdulillah" \
   "code": 200,
   "status": "OK",
   "data": {
-    "device_id": "D05FAF-FD512XW%2DR460-CDTCAF52FE56",
+    "device_id": "SERIAL-NUMBER-XYZ",
     "ip": "10.90.8.164",
-    "message": "SSID updated and applied successfully",
-    "ssid": "Update_New_SSID_1",
+    "message": "SSID update submitted successfully",
+    "ssid": "New_SSID_Name",
     "wlan": "1"
   }
 }
 ```
 
 ```bash
-curl -sS -H "X-API-Key: alhamdulillah" \
--X PUT "http://192.168.216.10:8088/api/v1/genieacs/password/update/1/10.90.8.164" \
+curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
+-X PUT "http://localhost:8080/api/v1/genieacs/password/update/1/10.90.8.164" \
 -H "Content-Type: application/json" \
--d '{"password": "Update_Password"}' | jq
+-d '{"password": "NewSecurePassword123"}' | jq
 ```
 
 ```bash
@@ -57,11 +59,35 @@ curl -sS -H "X-API-Key: alhamdulillah" \
   "code": 200,
   "status": "OK",
   "data": {
-    "device_id": "D05FAF-FD512XW%2DR460-CDTCAF52FE56",
+    "device_id": "SERIAL-NUMBER-XYZ",
     "ip": "10.90.8.164",
-    "message": "Password updated and applied successfully",
+    "message": "Password update submitted successfully",
     "wlan": "1"
   }
+}
+```
+
+```bash
+curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
+"http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164" | jq
+```
+
+```bash
+{
+  "code": 200,
+  "status": "OK",
+  "data": [
+    {
+      "mac": "AA:BB:CC:11:22:33",
+      "hostname": "Johns-iPhone",
+      "ip": "192.168.1.100"
+    },
+    {
+      "mac": "DD:EE:FF:44:55:66",
+      "hostname": "Living-Room-TV",
+      "ip": "192.168.1.102"
+    }
+  ]
 }
 ```
 
