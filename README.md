@@ -9,6 +9,31 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 {
   "code": 200,
   "status": "OK",
+  "data": null
+}
+```
+
+```bash
+curl -X POST -H "X-API-Key: YourSecretGatewayAPI_Key" \
+"http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164/refresh" | jq
+```
+
+```bash
+{
+  "code": 202,
+  "status": "Accepted",
+  "data": {
+    "message": "Refresh task submitted. Please query the GET endpoint again after a few moments."
+  }
+}
+```
+
+### Re-query after a few moments:
+
+```bash
+{
+  "code": 200,
+  "status": "OK",
   "data": [
     {
       "wlan": "1",
