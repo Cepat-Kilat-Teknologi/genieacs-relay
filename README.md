@@ -1,9 +1,10 @@
-
+## GET SSID
 
 ```bash
 curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
 ```
+### If Results are not yet available:
 
 ```bash
 {
@@ -12,12 +13,14 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
   "data": null
 }
 ```
+### Trigger a refresh:
 
 ```bash
 curl -X POST -H "X-API-Key: YourSecretGatewayAPI_Key" \
 "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164/refresh" | jq
 ```
 
+### Response refresh
 ```bash
 {
   "code": 202,
@@ -28,7 +31,7 @@ curl -X POST -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
-### Re-query after a few moments:
+### Re-query GET SSID after a few moments:
 
 ```bash
 {
@@ -51,12 +54,16 @@ curl -X POST -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
+### Update SSID
+
 ```bash
 curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 -X PUT "http://localhost:8080/api/v1/genieacs/ssid/update/1/10.90.8.164" \
 -H "Content-Type: application/json" \
 -d '{"ssid": "New_SSID_Name"}' | jq
 ```
+
+### Response SSID Update
 
 ```bash
 {
@@ -72,12 +79,16 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
+### Update Password
+
 ```bash
 curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 -X PUT "http://localhost:8080/api/v1/genieacs/password/update/1/10.90.8.164" \
 -H "Content-Type: application/json" \
 -d '{"password": "NewSecurePassword123"}' | jq
 ```
+
+### Response Password Update
 
 ```bash
 {
@@ -92,10 +103,14 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
+## GET DHCP Clients
+
 ```bash
 curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164" | jq
 ```
+
+### Successful Response Get DHCP Clients
 
 ```bash
 {
@@ -116,7 +131,9 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
-### Error
+## Common Error Responses
+- Bad Request (400): The request body is missing a required field or is malformed.
+
 ```bash
 {
   "code": 400,
@@ -124,6 +141,7 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
   "error": "Password value required"
 }
 ```
+- Unauthorized (401): The X-API-Key header is missing or incorrect.
 
 ```bash
 {
@@ -132,6 +150,8 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
   "error": "Invalid API Key"
 }
 ```
+
+- Not Found (404): The device with the specified IP address could not be found in GenieACS.
 
 ```bash
 {
