@@ -430,7 +430,7 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		// Log error and return 404 if device not found
-		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
 		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
@@ -577,7 +577,7 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		// Log error and return 404 if device not found
-		logger.Error("Failed to get device ID for password update", zap.String("ip", ip), zap.Error(err))
+		logger.Info("Failed to get device ID for password update", zap.String("ip", ip), zap.Error(err))
 		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
@@ -585,7 +585,7 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 	valid, err := isWLANValid(r.Context(), deviceID, wlan)
 	if err != nil {
 		// Log error and return 500 if WLAN validation fails
-		logger.Error("Failed to validate WLAN for password update", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		logger.Info("Failed to validate WLAN for password update", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Could not verify WLAN status.")
 		return
 	}
