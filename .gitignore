@@ -69,3 +69,7 @@ coverage.txt
 
 # Development artifacts
 .devcontainer/
+
+# Coverage files
+coverage.html
+*.coverprofile
