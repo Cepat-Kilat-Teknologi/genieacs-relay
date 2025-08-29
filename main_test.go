@@ -1,4 +1,3 @@
-// simpan sebagai main_test.go
 package main
 
 import (
@@ -152,19 +151,22 @@ func TestGetSSIDByIPHandler(t *testing.T) {
 			query := r.URL.Query().Get("query")
 			if strings.Contains(query, mockDeviceIP) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				// PERBAIKAN LINTER: Abaikan return value dari w.Write
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
 				return
 			}
 			if strings.Contains(query, "not-found-ip") {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`[]`))
+				// PERBAIKAN LINTER: Abaikan return value dari w.Write
+				_, _ = w.Write([]byte(`[]`))
 				return
 			}
 		}
 
 		if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+			// PERBAIKAN LINTER: Abaikan return value dari w.Write
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -198,13 +200,13 @@ func TestUpdateSSIDByIPHandler(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" && r.URL.Query().Get("projection") == "_id" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
 			return
 		}
 
 		if r.Method == "GET" && strings.Contains(r.URL.Query().Get("query"), `{"_id":"`+mockDeviceID+`"}`) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
 			return
 		}
 
@@ -232,12 +234,12 @@ func TestGetDHCPClientByIPHandler(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("projection") == "_id" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
 			return
 		}
 		if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -276,7 +278,7 @@ func TestRefreshSSIDHandler(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "GET" {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
 				return
 			}
 			if r.Method == "POST" {
@@ -296,7 +298,7 @@ func TestRefreshSSIDHandler(t *testing.T) {
 	t.Run("Device Not Found", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		})
 		_, router := setupTestServer(t, mockHandler)
 		req := httptest.NewRequest("POST", "/api/v1/genieacs/ssid/not-found-ip/refresh", nil)
@@ -377,9 +379,9 @@ func TestUpdatePasswordByIPHandler(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			if r.Method == "GET" && r.URL.Query().Get("projection") == "_id" {
-				w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
 			} else if r.Method == "GET" {
-				w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+				_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
 			}
 		})
 		_, router := setupTestServer(t, mockHandler)
@@ -406,7 +408,7 @@ func TestUpdatePasswordByIPHandler(t *testing.T) {
 	t.Run("Not Found - Device IP", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("[]"))
+			_, _ = w.Write([]byte("[]"))
 		})
 		_, router := setupTestServer(t, mockHandler)
 		payload := `{"password": "any-password"}`
@@ -422,7 +424,7 @@ func TestUpdatePasswordByIPHandler(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Query().Get("projection") == "_id" {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -465,13 +467,11 @@ func TestRefreshDHCP(t *testing.T) {
 func TestParsingErrors(t *testing.T) {
 	ctx := context.Background()
 
-	// Tes untuk getBand
 	t.Run("getBand Fallback", func(t *testing.T) {
-		// Data wlan tanpa key "1" atau "5"
 		wlanData := map[string]interface{}{
 			"Standard": map[string]interface{}{"_value": "802.11g"},
 		}
-		band := getBand(wlanData, "2") // Gunakan key non-standar
+		band := getBand(wlanData, "2")
 		assert.Equal(t, "2.4GHz", band)
 
 		wlanData = map[string]interface{}{
@@ -487,11 +487,13 @@ func TestParsingErrors(t *testing.T) {
 		assert.Equal(t, "Unknown", band)
 	})
 
-	// Tes untuk kasus-kasus data JSON yang "rusak"
 	t.Run("getDHCPClients with malformed data", func(t *testing.T) {
+		// PERBAIKAN LINTER: Hapus deklarasi err yang tidak digunakan
 		// 1. Tidak ada InternetGatewayDevice
-		_, err := getDHCPClients(ctx, "test")
+		// _, err = getDHCPClients(ctx, "test")
 		// (ini akan gagal di getDeviceData, jadi tidak perlu tes spesifik)
+
+		var err error // Deklarasikan err di luar agar bisa di-reassign
 
 		// 2. Tidak ada LANDevice
 		deviceData := map[string]interface{}{"InternetGatewayDevice": map[string]interface{}{}}
@@ -512,7 +514,7 @@ func TestParsingErrors(t *testing.T) {
 		deviceCacheInstance.set("test-no-hosts", deviceData)
 		clients, err := getDHCPClients(ctx, "test-no-hosts")
 		assert.NoError(t, err)
-		assert.Empty(t, clients) // Harusnya mengembalikan slice kosong
+		assert.Empty(t, clients)
 
 		// 5. Tidak ada Host di dalam Hosts
 		deviceData = map[string]interface{}{"InternetGatewayDevice": map[string]interface{}{"LANDevice": map[string]interface{}{"1": map[string]interface{}{"Hosts": map[string]interface{}{}}}}}
@@ -523,10 +525,12 @@ func TestParsingErrors(t *testing.T) {
 	})
 
 	t.Run("isWLANValid with malformed data", func(t *testing.T) {
+		var err error
+
 		// 1. Tidak ada InternetGatewayDevice
 		deviceData := map[string]interface{}{}
 		deviceCacheInstance.set("test-no-igd", deviceData)
-		_, err := isWLANValid(ctx, "test-no-igd", "1")
+		_, err = isWLANValid(ctx, "test-no-igd", "1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "InternetGatewayDevice data not found")
 
