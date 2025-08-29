@@ -175,6 +175,8 @@ func (wp *workerPool) worker() {
 			err = refreshWLANConfig(ctx, t.deviceID)
 		case taskTypeRefreshWLAN:
 			err = refreshWLANConfig(ctx, t.deviceID)
+		default:
+			err = fmt.Errorf("unknown task type: %s", t.taskType)
 		}
 
 		// Log any errors encountered during task execution
@@ -232,8 +234,10 @@ func (c *deviceCache) clearAll() {
 
 // safeClose safely closes an io.Closer resource and logs any errors
 func safeClose(closer io.Closer) {
-	if err := closer.Close(); err != nil {
-		logger.Warn("Failed to close resource", zap.Error(err))
+	if closer != nil {
+		if err := closer.Close(); err != nil {
+			logger.Warn("Failed to close resource", zap.Error(err))
+		}
 	}
 }
 
@@ -438,7 +442,7 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	wlanData, err := getWLANData(r.Context(), deviceID)
 	if err != nil {
 		// Log error and return 500 if WLAN data retrieval fails
-		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
+		logger.Info("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
@@ -476,7 +480,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		// Log error and return 404 if device not found
-		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
 		sendError(w, http.StatusNotFound, "Not Found", err.Error())
 		return
 	}
@@ -485,7 +489,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 		// Refresh DHCP data from device
 		if err := refreshDHCP(r.Context(), deviceID); err != nil {
 			// Log error and return 500 if refresh fails
-			logger.Error("DHCP refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
+			logger.Info("DHCP refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
 			sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
 			return
 		}
@@ -494,7 +498,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	dhcpClients, err := getDHCPClients(r.Context(), deviceID)
 	if err != nil {
 		// Log error and return 500 if DHCP data retrieval fails
-		logger.Error("Failed to get DHCP clients", zap.String("deviceID", deviceID), zap.Error(err))
+		logger.Info("Failed to get DHCP clients", zap.String("deviceID", deviceID), zap.Error(err))
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
@@ -531,7 +535,7 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	valid, err := isWLANValid(r.Context(), deviceID, wlan)
 	if err != nil {
 		// Log error and return 500 if WLAN validation fails
-		logger.Error("Failed to validate WLAN", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		logger.Info("Failed to validate WLAN", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
 		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Could not verify WLAN status.")
 		return
 	}
