@@ -1,33 +1,29 @@
-# Binaries and build artifacts
-/bin/
-tmp/
-dist/
+# Binaries
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+*.test
+*.out
 
-# Test outputs
+# Go build artifacts
+bin/
+build/
+tmp/
+
+# Coverage and test files
+*.cover
 coverage.out
 test-results/
-*.coverprofile
 *.html
 
-# Dependency directories
-vendor/
-
-# IDE/editor configs
+# IDE/editor stuff
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS files
 .DS_Store
 Thumbs.db
-
-# Env & configs (jangan commit secrets)
-.env
-*.local
-
-# Docker & Compose override
-docker-compose.override.yml
