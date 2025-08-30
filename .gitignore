@@ -1,21 +1,33 @@
-# Binaries
+# Binaries and build artifacts
 /bin/
-/tmp/
-/dist/
-/coverage.out
+tmp/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# Vendor (kalau gak dipakai)
-/vendor/
+# Test outputs
+coverage.out
+test-results/
+*.coverprofile
+*.html
 
-# IDE/editor
+# Dependency directories
+vendor/
+
+# IDE/editor configs
 .vscode/
 .idea/
 
-# Git & env
-.git
-.gitignore
-.env
-docker-compose*.yml
+# OS files
+.DS_Store
+Thumbs.db
 
-# Logs
-*.log
+# Env & configs (jangan commit secrets)
+.env
+*.local
+
+# Docker & Compose override
+docker-compose.override.yml

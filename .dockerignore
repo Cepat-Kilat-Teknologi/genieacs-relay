@@ -1,14 +1,20 @@
-# .dockerignore
-
-# Abaikan direktori build artifact dari Air
+# Build artifacts
+bin/
 tmp/
+dist/
+test-results/
+coverage.out
+*.html
 
-# Abaikan dependensi Go, karena akan di-download di dalam container
-vendor/
-
-# Abaikan file/folder umum lainnya
+# Local dev
+.env
+*.local
 .git
-.vscode
-.idea
-node_modules
-*.log
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node / frontend stuff (jaga2 kalau ada di repo)
+node_modules/
