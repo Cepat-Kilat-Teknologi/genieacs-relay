@@ -90,9 +90,9 @@ var (
 // --- Struct Definitions ---
 // deviceCache provides thread-safe caching mechanism for device data with expiration
 type deviceCache struct {
-	sync.RWMutex                             // Read-write mutex for concurrent access protection
-	data         map[string]cachedDeviceData // Cache storage mapping device IDs to cached data
-	timeout      time.Duration               // Duration after which cached data is considered stale
+	mu      sync.RWMutex                // Read-write mutex for concurrent access
+	data    map[string]cachedDeviceData // Cache storage mapping device IDs to cached data
+	timeout time.Duration               // Duration after which cached data is considered stale
 }
 
 // cachedDeviceData holds the actual cached data and timestamp for expiration tracking
@@ -307,8 +307,8 @@ func (wp *workerPool) Submit(deviceID, taskType string, params [][]interface{}) 
 
 // get retrieves cached data for a device if it exists and hasn't expired
 func (c *deviceCache) get(deviceID string) (map[string]interface{}, bool) {
-	c.RLock()         // Acquire read lock for concurrent access
-	defer c.RUnlock() // Ensure lock is released when function exits
+	c.mu.RLock()         // Acquire read lock for thread safety
+	defer c.mu.RUnlock() // Ensure lock is released when function exits
 	// Check if device exists in cache and data is still fresh
 	if cached, exists := c.data[deviceID]; exists && time.Since(cached.timestamp) < c.timeout {
 		return cached.data, true // Return cached data and success status
@@ -318,23 +318,23 @@ func (c *deviceCache) get(deviceID string) (map[string]interface{}, bool) {
 
 // set stores device data in cache with current timestamp
 func (c *deviceCache) set(deviceID string, data map[string]interface{}) {
-	c.Lock()         // Acquire write lock for thread safety
-	defer c.Unlock() // Ensure lock release
+	c.mu.Lock()         // Acquire write lock for thread safety
+	defer c.mu.Unlock() // Ensure lock release
 	// Store data with current timestamp for expiration tracking
 	c.data[deviceID] = cachedDeviceData{data, time.Now()}
 }
 
 // clear removes cached data for a specific device
 func (c *deviceCache) clear(deviceID string) {
-	c.Lock() // Acquire write lock
-	defer c.Unlock()
+	c.mu.Lock() // Acquire write lock
+	defer c.mu.Unlock()
 	delete(c.data, deviceID) // Remove device entry from cache
 }
 
 // clearAll removes all cached data (complete cache flush)
 func (c *deviceCache) clearAll() {
-	c.Lock() // Acquire write lock
-	defer c.Unlock()
+	c.mu.Lock() // Acquire write lock
+	defer c.mu.Unlock()
 	c.data = make(map[string]cachedDeviceData) // Reinitialize empty cache map
 }
 
