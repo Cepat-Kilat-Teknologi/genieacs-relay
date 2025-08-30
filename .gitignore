@@ -1,24 +1,21 @@
-# Ignore everything
-*
+# Binaries
+/bin/
+/tmp/
+/dist/
+/coverage.out
 
-# But allow these files
-!main.go
-!go.mod
-!go.sum
-!Dockerfile
-!.dockerignore
-!*.toml
-!config/
-!api/
+# Vendor (kalau gak dipakai)
+/vendor/
 
-# Development files to ignore
+# IDE/editor
+.vscode/
+.idea/
+
+# Git & env
 .git
 .gitignore
-README.md
-coverage.out
-tmp/
-dist/
-vendor/
 .env
 docker-compose*.yml
-Makefile
+
+# Logs
+*.log
