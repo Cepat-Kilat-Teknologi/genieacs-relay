@@ -24,6 +24,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// Task types for worker pool operations - constants to identify different task types
+const (
+	taskTypeSetParams    = "setParameterValues" // Task to set parameter values on devices
+	taskTypeApplyChanges = "applyChanges"       // Task to apply configuration changes
+	taskTypeRefreshWLAN  = "refreshWLAN"        // Task to refresh WLAN configuration data
+)
+
 // Global variables for application configuration and shared resources
 var (
 	serverAddr    string
@@ -33,24 +40,51 @@ var (
 	logger        *zap.Logger // Structured logger for application logging
 )
 
-// Task types for worker pool operations - constants to identify different task types
-const (
-	taskTypeSetParams    = "setParameterValues" // Task to set parameter values on devices
-	taskTypeApplyChanges = "applyChanges"       // Task to apply configuration changes
-	taskTypeRefreshWLAN  = "refreshWLAN"        // Task to refresh WLAN configuration data
+// Pre-initialized variables and instances for modularity
+var (
+
+	// Function to initialize logger
+	initLogger = func() (*zap.Logger, error) {
+		return zap.NewProduction() // Use production configuration for logger
+	}
+
+	// Function to create new HTTP server instance
+	serverShutdown = func(ctx context.Context, server *http.Server) error {
+		return server.Shutdown(ctx) // Gracefully shutdown server with context
+	}
+
+	// HTTP client with timeout and connection pooling settings for efficient API calls to GenieACS server
+	httpClient = &http.Client{
+		Timeout: 15 * time.Second, // Set request timeout
+		Transport: &http.Transport{ // Configure transport for connection pooling
+			MaxIdleConns:        100,              // Maximum idle connections across all hosts
+			MaxIdleConnsPerHost: 20,               // Maximum idle connections per host
+			IdleConnTimeout:     30 * time.Second, // Timeout for idle connections
+		},
+	}
+
+	// Device cache instance for caching device data with expiration
+	deviceCacheInstance = &deviceCache{
+		data:    make(map[string]cachedDeviceData), // Initialize empty cache map
+		timeout: 30 * time.Second,                  // Set cache expiration duration
+	}
+
+	// Worker pool instance for handling asynchronous tasks
+	taskWorkerPool = &workerPool{
+		workers: 10,                   // Number of worker goroutines
+		queue:   make(chan task, 100), // Buffered channel for task queue
+	}
+
+	// Function to create new HTTP server instance
+	newHTTPServer = func(addr string, handler http.Handler) *http.Server {
+		return &http.Server{
+			Addr:    addr,    // Server address to listen on
+			Handler: handler, // HTTP handler for incoming requests
+		}
+	}
 )
 
-func init() {
-	var err error
-	logger, err = zap.NewProduction()
-	if err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
-	}
-	_ = logger.Sugar()
-}
-
 // --- Struct Definitions ---
-
 // deviceCache provides thread-safe caching mechanism for device data with expiration
 type deviceCache struct {
 	sync.RWMutex                             // Read-write mutex for concurrent access protection
@@ -64,30 +98,24 @@ type cachedDeviceData struct {
 	timestamp time.Time              // Time when this data was cached for expiration calculation
 }
 
-// Global instances of shared resources
-var (
-	// HTTP client with custom configuration for better performance and reliability
-	httpClient = &http.Client{
-		Timeout: 15 * time.Second, // Maximum time to wait for HTTP response
-		Transport: &http.Transport{
-			MaxIdleConns:        100,              // Maximum number of idle connections pool
-			MaxIdleConnsPerHost: 20,               // Maximum idle connections per host
-			IdleConnTimeout:     30 * time.Second, // Time before idle connections are closed
-		},
-	}
+// --- Worker Pool Implementation ---
 
-	// Singleton device cache instance with 30-second data expiration
-	deviceCacheInstance = &deviceCache{
-		data:    make(map[string]cachedDeviceData), // Initialize empty cache map
-		timeout: 30 * time.Second,                  // Cache entry validity duration
-	}
+// workerPool manages a pool of worker goroutines for asynchronous task processing
+type workerPool struct {
+	workers int            // Number of active workers
+	queue   chan task      // Channel for receiving tasks
+	wg      sync.WaitGroup // WaitGroup for graceful shutdown synchronization
+	once    sync.Once      // Ensure Start is only called once
+}
 
-	// Worker pool for asynchronous task processing with 10 workers and 100-task buffer
-	taskWorkerPool = &workerPool{
-		workers: 10,                   // Number of concurrent worker goroutines
-		queue:   make(chan task, 100), // Buffered channel for task queue
-	}
-)
+// -- Task Definition ---
+
+// task represents a unit of work to be processed by the worker pool
+type task struct {
+	deviceID string          // Target device identifier for the task
+	taskType string          // Type of task to execute (see taskType constants)
+	params   [][]interface{} // Parameters for parameter-setting tasks
+}
 
 // Device represents a network device with its unique identifier
 type Device struct {
@@ -127,21 +155,96 @@ type Response struct {
 	Error  string      `json:"error,omitempty"` // Error description when operation fails
 }
 
-// --- Worker Pool Implementation ---
+// --- HTTP Response Helper Functions ---
 
-// task represents a unit of work to be processed by the worker pool
-type task struct {
-	deviceID string          // Target device identifier for the task
-	taskType string          // Type of task to execute (see taskType constants)
-	params   [][]interface{} // Parameters for parameter-setting tasks
+func runServer(addr string) error {
+	// load config
+	serverAddr = getEnv("SERVER_ADDR", addr)
+	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://localhost:7557")
+	nbiAuthKey = getEnv("NBI_AUTH_KEY", "ThisIsNBIAuthKey")
+	apiKey = getEnv("API_KEY", "ThisIsASecretKey")
+
+	// start worker pool
+	taskWorkerPool.Start()
+	defer taskWorkerPool.Stop()
+
+	logger.Info("Starting server", zap.String("genieacs_url", geniesBaseURL))
+
+	// router
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
+	r.Use(middleware.Timeout(60 * time.Second))
+	r.Get("/health", healthCheckHandler)
+	r.Route("/api/v1/genieacs", func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Get("/ssid/{ip}", getSSIDByIPHandler)
+		r.Post("/ssid/{i"+
+			"p}/refresh", refreshSSIDHandler)
+		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
+		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler)
+		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
+		r.Post("/cache/clear", clearCacheHandler)
+	})
+
+	// server
+	server := newHTTPServer(serverAddr, r)
+
+	// start server
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Info("Server listening", zap.String("address", server.Addr))
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	// graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErr:
+		return err
+	case <-quit:
+		logger.Info("Shutdown signal received, starting graceful shutdown...")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := serverShutdown(ctx, server); err != nil {
+			return err
+		}
+
+		logger.Info("Server exited properly")
+		return nil
+	}
+
 }
 
-// workerPool manages a pool of worker goroutines for asynchronous task processing
-type workerPool struct {
-	workers int            // Number of active workers
-	queue   chan task      // Channel for receiving tasks
-	wg      sync.WaitGroup // WaitGroup for graceful shutdown synchronization
-	once    sync.Once      // Ensure Start is only called once
+// --- Main Application Entry Point ---
+func main() {
+	_ = initLoggerWrapper()
+
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Printf("Failed to sync logger: %v", err)
+		}
+	}()
+
+	if err := runServer(":8080"); err != nil {
+		logger.Info("Server failed", zap.Error(err))
+	}
+}
+
+// initLoggerWrapper handles logger initialization and returns error
+func initLoggerWrapper() error {
+	var err error
+	logger, err = initLogger()
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	_ = logger.Sugar()
+	return nil
 }
 
 // Start initializes the worker pool by launching all worker goroutines
@@ -243,9 +346,82 @@ func safeClose(closer io.Closer) {
 	}
 }
 
+// getEnv retrieves environment variable value with fallback to default if not set
+func getEnv(key, defaultValue string) string {
+	// Check if environment variable exists
+	if value, exists := os.LookupEnv(key); exists {
+		return value // Return environment variable value
+	}
+	return defaultValue // Return default value if environment variable not set
+}
+
+// sendResponse sends a standardized success response with JSON formatting
+func sendResponse(w http.ResponseWriter, code int, status string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json") // Set response content type
+	w.WriteHeader(code)                                // Set HTTP status code
+	// Encode and send JSON response
+	if err := json.NewEncoder(w).Encode(Response{Code: code, Status: status, Data: data}); err != nil {
+		logger.Error("Failed to encode JSON response", zap.Error(err))
+	}
+}
+
+// sendError sends a standardized error response with JSON formatting
+func sendError(w http.ResponseWriter, code int, status string, errorMsg string) {
+	w.Header().Set("Content-Type", "application/json") // Set response content type
+	w.WriteHeader(code)                                // Set HTTP status code
+	// Encode and send JSON error response
+	if err := json.NewEncoder(w).Encode(Response{Code: code, Status: status, Error: errorMsg}); err != nil {
+		logger.Error("Failed to encode JSON error response", zap.Error(err))
+	}
+}
+
+// postJSONRequest sends a POST request with JSON payload to specified URL
+func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*http.Response, error) {
+	var bodyReader io.Reader
+	// Handle different payload types (string or struct)
+	switch v := payload.(type) {
+	case string:
+		// Use string directly as request body
+		bodyReader = strings.NewReader(v)
+	default:
+		// Marshal struct to JSON for request body
+		jsonPayload, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		bodyReader = bytes.NewReader(jsonPayload)
+	}
+	// Create HTTP POST request with context
+	req, err := http.NewRequestWithContext(ctx, "POST", urlQ, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+	// Set content type to JSON
+	req.Header.Set("Content-Type", "application/json")
+	// Add authentication header
+	req.Header.Set("X-API-Key", nbiAuthKey)
+	// Execute HTTP request and return response
+	return httpClient.Do(req)
+}
+
+// --- Middleware Functions ---
+
+// authMiddleware validates API key for protected routes
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if provided API key matches configured key
+		if r.Header.Get("X-API-Key") != apiKey {
+			sendError(w, http.StatusUnauthorized, "Unauthorized", "Invalid API Key")
+			return // Stop request processing if unauthorized
+		}
+		next.ServeHTTP(w, r) // Continue to next handler if authorized
+	})
+}
+
 // --- GenieACS Communication Functions ---
 
 // getDeviceData retrieves device data either from cache or from GenieACS API
+
 func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}, error) {
 	// First try to get data from cache to avoid API call
 	if cachedData, found := deviceCacheInstance.get(deviceID); found {
@@ -292,366 +468,6 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 	deviceData := result[0]                       // Get first (and should be only) device
 	deviceCacheInstance.set(deviceID, deviceData) // Cache the retrieved data
 	return deviceData, nil
-}
-
-// --- HTTP Response Helper Functions ---
-
-// sendResponse sends a standardized success response with JSON formatting
-func sendResponse(w http.ResponseWriter, code int, status string, data interface{}) {
-	w.Header().Set("Content-Type", "application/json") // Set response content type
-	w.WriteHeader(code)                                // Set HTTP status code
-	// Encode and send JSON response
-	if err := json.NewEncoder(w).Encode(Response{Code: code, Status: status, Data: data}); err != nil {
-		logger.Error("Failed to encode JSON response", zap.Error(err))
-	}
-}
-
-// sendError sends a standardized error response with JSON formatting
-func sendError(w http.ResponseWriter, code int, status string, errorMsg string) {
-	w.Header().Set("Content-Type", "application/json") // Set response content type
-	w.WriteHeader(code)                                // Set HTTP status code
-	// Encode and send JSON error response
-	if err := json.NewEncoder(w).Encode(Response{Code: code, Status: status, Error: errorMsg}); err != nil {
-		logger.Error("Failed to encode JSON error response", zap.Error(err))
-	}
-}
-
-// --- Middleware Functions ---
-
-// authMiddleware validates API key for protected routes
-func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if provided API key matches configured key
-		if r.Header.Get("X-API-Key") != apiKey {
-			sendError(w, http.StatusUnauthorized, "Unauthorized", "Invalid API Key")
-			return // Stop request processing if unauthorized
-		}
-		next.ServeHTTP(w, r) // Continue to next handler if authorized
-	})
-}
-
-var newHTTPServer = func(handler http.Handler) *http.Server {
-	addr := os.Getenv("SERVER_ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
-	return &http.Server{
-		Addr:    addr,
-		Handler: handler,
-	}
-}
-
-// --- Main Application Entry Point ---
-func main() {
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Printf("Failed to sync logger: %v", err)
-		}
-	}()
-
-	// load config
-	serverAddr = getEnv("SERVER_ADDR", ":8080")
-	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://localhost:7557")
-	nbiAuthKey = getEnv("NBI_AUTH_KEY", "ThisIsNBIAuthKey")
-	apiKey = getEnv("API_KEY", "ThisIsASecretKey")
-
-	// start worker pool
-	taskWorkerPool.Start()
-	defer taskWorkerPool.Stop()
-
-	logger.Info("Starting server", zap.String("genieacs_url", geniesBaseURL))
-
-	// router
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
-	r.Get("/health", healthCheckHandler)
-	r.Route("/api/v1/genieacs", func(r chi.Router) {
-		r.Use(authMiddleware)
-		r.Get("/ssid/{ip}", getSSIDByIPHandler)
-		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
-		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
-		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler)
-		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
-		r.Post("/cache/clear", clearCacheHandler)
-	})
-
-	// server
-	server := newHTTPServer(r)
-
-	// start server
-	go func() {
-		logger.Info("Server listening", zap.String("address", server.Addr))
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal("Server failed to start", zap.Error(err))
-		}
-	}()
-
-	// graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logger.Info("Shutdown signal received, starting graceful shutdown...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := server.Shutdown(ctx); err != nil {
-		logger.Fatal("Server graceful shutdown failed", zap.Error(err))
-	}
-
-	logger.Info("Server exited properly")
-}
-
-// --- HTTP Request Handlers ---
-
-// healthCheckHandler handles health check requests to verify service status
-func healthCheckHandler(w http.ResponseWriter, _ *http.Request) {
-	// Return simple health status response indicating service is operational
-	sendResponse(w, http.StatusOK, "OK", map[string]string{"status": "healthy"})
-}
-
-// clearCacheHandler handles requests to clear device cache (specific device or all)
-func clearCacheHandler(w http.ResponseWriter, r *http.Request) {
-	// Get device_id query parameter to determine if clearing specific device or all
-	deviceID := r.URL.Query().Get("device_id")
-	if deviceID != "" {
-		// Clear cache for specific device only
-		deviceCacheInstance.clear(deviceID)
-	} else {
-		// Clear entire cache if no specific device specified
-		deviceCacheInstance.clearAll()
-	}
-	// Return success response indicating cache was cleared
-	sendResponse(w, http.StatusOK, "OK", map[string]string{"message": "Cache cleared"})
-}
-
-// getSSIDByIPHandler retrieves WLAN/SSID information for a device by its IP address
-func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract IP address from URL path parameter
-	ip := chi.URLParam(r, "ip")
-	// Find device ID using the provided IP address
-	deviceID, err := getDeviceIDByIP(r.Context(), ip)
-	if err != nil {
-		// Log error and return 404 if device not found
-		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
-		return
-	}
-	// Retrieve WLAN configuration data for the device
-	wlanData, err := getWLANData(r.Context(), deviceID)
-	if err != nil {
-		// Log error and return 500 if WLAN data retrieval fails
-		logger.Info("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
-	}
-	// Return successful response with WLAN data
-	sendResponse(w, http.StatusOK, "OK", wlanData)
-}
-
-// refreshSSIDHandler triggers a refresh of WLAN configuration data for a device
-func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract IP address from URL path parameter
-	ip := chi.URLParam(r, "ip")
-	// Find device ID using the provided IP address
-	deviceID, err := getDeviceIDByIP(r.Context(), ip)
-	if err != nil {
-		// Log error and return 404 if device not found
-		logger.Info("Failed to get device ID by IP for refresh", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
-		return
-	}
-	// Submit refresh task to worker pool for asynchronous processing
-	taskWorkerPool.Submit(deviceID, taskTypeRefreshWLAN, nil)
-	// Clear cached data for this device to force fresh data on next request
-	deviceCacheInstance.clear(deviceID)
-	// Return accepted response indicating task was queued
-	sendResponse(w, http.StatusAccepted, "Accepted", map[string]string{
-		"message": "Refresh task submitted. Please query the GET endpoint again after a few moments.",
-	})
-}
-
-// getDHCPClientByIPHandler retrieves DHCP client information for a device
-func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract IP address from URL path parameter
-	ip := chi.URLParam(r, "ip")
-	// Find device ID using the provided IP address
-	deviceID, err := getDeviceIDByIP(r.Context(), ip)
-	if err != nil {
-		// Log error and return 404 if device not found
-		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
-		return
-	}
-	// Check if refresh parameter is set to true to force data refresh
-	if r.URL.Query().Get("refresh") == "true" {
-		// Refresh DHCP data from device
-		if err := refreshDHCP(r.Context(), deviceID); err != nil {
-			// Log error and return 500 if refresh fails
-			logger.Info("DHCP refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
-			sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
-			return
-		}
-	}
-	// Retrieve DHCP client information from device
-	dhcpClients, err := getDHCPClients(r.Context(), deviceID)
-	if err != nil {
-		// Log error and return 500 if DHCP data retrieval fails
-		logger.Info("Failed to get DHCP clients", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
-	}
-	// Return successful response with DHCP client data
-	sendResponse(w, http.StatusOK, "OK", dhcpClients)
-}
-
-// updateSSIDByIPHandler updates the SSID for a specific WLAN interface on a device
-func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract WLAN interface ID and IP address from URL path parameters
-	wlan := chi.URLParam(r, "wlan")
-	ip := chi.URLParam(r, "ip")
-	// Parse JSON request body containing new SSID value
-	var updateReq UpdateSSIDRequest
-	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
-		// Return 400 if JSON is malformed
-		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
-		return
-	}
-	// Validate that SSID value is provided and not empty
-	if updateReq.SSID == "" {
-		sendError(w, http.StatusBadRequest, "Bad Request", "SSID value required")
-		return
-	}
-	// Find device ID using the provided IP address
-	deviceID, err := getDeviceIDByIP(r.Context(), ip)
-	if err != nil {
-		// Log error and return 404 if device not found
-		logger.Error("Failed to get device ID for SSID update", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
-		return
-	}
-	// Validate that the specified WLAN interface exists and is enabled
-	valid, err := isWLANValid(r.Context(), deviceID, wlan)
-	if err != nil {
-		// Log error and return 500 if WLAN validation fails
-		logger.Info("Failed to validate WLAN", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Could not verify WLAN status.")
-		return
-	}
-	if !valid {
-		// Return 404 if WLAN doesn't exist or is disabled
-		sendError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("WLAN ID %s does not exist or is not enabled on this device.", wlan))
-		return
-	}
-	// Construct parameter path for SSID configuration
-	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID", wlan)
-	// Prepare parameter values for setting operation
-	parameterValues := [][]interface{}{{parameterPath, updateReq.SSID, "xsd:string"}}
-	// Submit set parameter task to worker pool
-	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
-	// Submit apply changes task to make configuration active
-	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
-	// Clear cached data for this device to reflect changes
-	deviceCacheInstance.clear(deviceID)
-	// Return success response with update details
-	sendResponse(w, http.StatusOK, "OK", map[string]string{
-		"message": "SSID update submitted successfully", "device_id": deviceID, "wlan": wlan, "ssid": updateReq.SSID, "ip": ip,
-	})
-}
-
-// updatePasswordByIPHandler updates the password for a specific WLAN interface on a device
-func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract WLAN interface ID and IP address from URL path parameters
-	wlan := chi.URLParam(r, "wlan")
-	ip := chi.URLParam(r, "ip")
-	// Parse JSON request body containing new password value
-	var updateReq UpdatePasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
-		// Return 400 if JSON is malformed
-		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
-		return
-	}
-	// Validate that password value is provided and not empty
-	if updateReq.Password == "" {
-		sendError(w, http.StatusBadRequest, "Bad Request", "Password value required")
-		return
-	}
-	// Find device ID using the provided IP address
-	deviceID, err := getDeviceIDByIP(r.Context(), ip)
-	if err != nil {
-		// Log error and return 404 if device not found
-		logger.Info("Failed to get device ID for password update", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
-		return
-	}
-	// Validate that the specified WLAN interface exists and is enabled
-	valid, err := isWLANValid(r.Context(), deviceID, wlan)
-	if err != nil {
-		// Log error and return 500 if WLAN validation fails
-		logger.Info("Failed to validate WLAN for password update", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Could not verify WLAN status.")
-		return
-	}
-	if !valid {
-		// Return 404 if WLAN doesn't exist or is disabled
-		sendError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("WLAN ID %s does not exist or is not enabled on this device.", wlan))
-		return
-	}
-	// Construct parameter path for PreSharedKey configuration
-	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey", wlan)
-	// Prepare parameter values for setting operation
-	parameterValues := [][]interface{}{{parameterPath, updateReq.Password, "xsd:string"}}
-	// Submit set parameter task to worker pool
-	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
-	// Submit apply changes task to make configuration active
-	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
-	// Clear cached data for this device to reflect changes
-	deviceCacheInstance.clear(deviceID)
-	// Return success response with update details
-	sendResponse(w, http.StatusOK, "OK", map[string]string{
-		"message": "Password update submitted successfully", "device_id": deviceID, "wlan": wlan, "ip": ip,
-	})
-}
-
-// --- Helper & Logic Functions ---
-
-// getEnv retrieves environment variable value with fallback to default if not set
-func getEnv(key, defaultValue string) string {
-	// Check if environment variable exists
-	if value, exists := os.LookupEnv(key); exists {
-		return value // Return environment variable value
-	}
-	return defaultValue // Return default value if environment variable not set
-}
-
-// postJSONRequest sends a POST request with JSON payload to specified URL
-func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*http.Response, error) {
-	var bodyReader io.Reader
-	// Handle different payload types (string or struct)
-	switch v := payload.(type) {
-	case string:
-		// Use string directly as request body
-		bodyReader = strings.NewReader(v)
-	default:
-		// Marshal struct to JSON for request body
-		jsonPayload, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		bodyReader = bytes.NewReader(jsonPayload)
-	}
-	// Create HTTP POST request with context
-	req, err := http.NewRequestWithContext(ctx, "POST", urlQ, bodyReader)
-	if err != nil {
-		return nil, err
-	}
-	// Set content type to JSON
-	req.Header.Set("Content-Type", "application/json")
-	// Add authentication header
-	req.Header.Set("X-API-Key", nbiAuthKey)
-	// Execute HTTP request and return response
-	return httpClient.Do(req)
 }
 
 // getDeviceIDByIP finds device ID by searching for devices with matching IP address
@@ -1042,4 +858,215 @@ func isWLANValid(ctx context.Context, deviceID, wlanID string) (bool, error) {
 	}
 	// Return false if WLAN exists but is disabled or has invalid configuration
 	return false, nil
+}
+
+// --- HTTP Request Handlers ---
+
+// healthCheckHandler handles health check requests to verify service status
+func healthCheckHandler(w http.ResponseWriter, _ *http.Request) {
+	// Return simple health status response indicating service is operational
+	sendResponse(w, http.StatusOK, "OK", map[string]string{"status": "healthy"})
+}
+
+// clearCacheHandler handles requests to clear device cache (specific device or all)
+func clearCacheHandler(w http.ResponseWriter, r *http.Request) {
+	// Get device_id query parameter to determine if clearing specific device or all
+	deviceID := r.URL.Query().Get("device_id")
+	if deviceID != "" {
+		// Clear cache for specific device only
+		deviceCacheInstance.clear(deviceID)
+	} else {
+		// Clear entire cache if no specific device specified
+		deviceCacheInstance.clearAll()
+	}
+	// Return success response indicating cache was cleared
+	sendResponse(w, http.StatusOK, "OK", map[string]string{"message": "Cache cleared"})
+}
+
+// getSSIDByIPHandler retrieves WLAN/SSID information for a device by its IP address
+func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract IP address from URL path parameter
+	ip := chi.URLParam(r, "ip")
+	// Find device ID using the provided IP address
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		// Log error and return 404 if device not found
+		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		return
+	}
+	// Retrieve WLAN configuration data for the device
+	wlanData, err := getWLANData(r.Context(), deviceID)
+	if err != nil {
+		// Log error and return 500 if WLAN data retrieval fails
+		logger.Info("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	// Return successful response with WLAN data
+	sendResponse(w, http.StatusOK, "OK", wlanData)
+}
+
+// refreshSSIDHandler triggers a refresh of WLAN configuration data for a device
+func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract IP address from URL path parameter
+	ip := chi.URLParam(r, "ip")
+	// Find device ID using the provided IP address
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		// Log error and return 404 if device not found
+		logger.Info("Failed to get device ID by IP for refresh", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		return
+	}
+	// Submit refresh task to worker pool for asynchronous processing
+	taskWorkerPool.Submit(deviceID, taskTypeRefreshWLAN, nil)
+	// Clear cached data for this device to force fresh data on next request
+	deviceCacheInstance.clear(deviceID)
+	// Return accepted response indicating task was queued
+	sendResponse(w, http.StatusAccepted, "Accepted", map[string]string{
+		"message": "Refresh task submitted. Please query the GET endpoint again after a few moments.",
+	})
+}
+
+// getDHCPClientByIPHandler retrieves DHCP client information for a device
+func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract IP address from URL path parameter
+	ip := chi.URLParam(r, "ip")
+	// Find device ID using the provided IP address
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		// Log error and return 404 if device not found
+		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		return
+	}
+	// Check if refresh parameter is set to true to force data refresh
+	if r.URL.Query().Get("refresh") == "true" {
+		// Refresh DHCP data from device
+		if err := refreshDHCP(r.Context(), deviceID); err != nil {
+			// Log error and return 500 if refresh fails
+			logger.Info("DHCP refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
+			sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
+			return
+		}
+	}
+	// Retrieve DHCP client information from device
+	dhcpClients, err := getDHCPClients(r.Context(), deviceID)
+	if err != nil {
+		// Log error and return 500 if DHCP data retrieval fails
+		logger.Info("Failed to get DHCP clients", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	// Return successful response with DHCP client data
+	sendResponse(w, http.StatusOK, "OK", dhcpClients)
+}
+
+// updateSSIDByIPHandler updates the SSID for a specific WLAN interface on a device
+func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract WLAN interface ID and IP address from URL path parameters
+	wlan := chi.URLParam(r, "wlan")
+	ip := chi.URLParam(r, "ip")
+	// Parse JSON request body containing new SSID value
+	var updateReq UpdateSSIDRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		// Return 400 if JSON is malformed
+		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
+		return
+	}
+	// Validate that SSID value is provided and not empty
+	if updateReq.SSID == "" {
+		sendError(w, http.StatusBadRequest, "Bad Request", "SSID value required")
+		return
+	}
+	// Find device ID using the provided IP address
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		// Log error and return 404 if device not found
+		logger.Error("Failed to get device ID for SSID update", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		return
+	}
+	// Validate that the specified WLAN interface exists and is enabled
+	valid, err := isWLANValid(r.Context(), deviceID, wlan)
+	if err != nil {
+		// Log error and return 500 if WLAN validation fails
+		logger.Info("Failed to validate WLAN", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Could not verify WLAN status.")
+		return
+	}
+	if !valid {
+		// Return 404 if WLAN doesn't exist or is disabled
+		sendError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("WLAN ID %s does not exist or is not enabled on this device.", wlan))
+		return
+	}
+	// Construct parameter path for SSID configuration
+	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID", wlan)
+	// Prepare parameter values for setting operation
+	parameterValues := [][]interface{}{{parameterPath, updateReq.SSID, "xsd:string"}}
+	// Submit set parameter task to worker pool
+	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
+	// Submit apply changes task to make configuration active
+	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+	// Clear cached data for this device to reflect changes
+	deviceCacheInstance.clear(deviceID)
+	// Return success response with update details
+	sendResponse(w, http.StatusOK, "OK", map[string]string{
+		"message": "SSID update submitted successfully", "device_id": deviceID, "wlan": wlan, "ssid": updateReq.SSID, "ip": ip,
+	})
+}
+
+// updatePasswordByIPHandler updates the password for a specific WLAN interface on a device
+func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract WLAN interface ID and IP address from URL path parameters
+	wlan := chi.URLParam(r, "wlan")
+	ip := chi.URLParam(r, "ip")
+	// Parse JSON request body containing new password value
+	var updateReq UpdatePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		// Return 400 if JSON is malformed
+		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
+		return
+	}
+	// Validate that password value is provided and not empty
+	if updateReq.Password == "" {
+		sendError(w, http.StatusBadRequest, "Bad Request", "Password value required")
+		return
+	}
+	// Find device ID using the provided IP address
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		// Log error and return 404 if device not found
+		logger.Info("Failed to get device ID for password update", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		return
+	}
+	// Validate that the specified WLAN interface exists and is enabled
+	valid, err := isWLANValid(r.Context(), deviceID, wlan)
+	if err != nil {
+		// Log error and return 500 if WLAN validation fails
+		logger.Info("Failed to validate WLAN for password update", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", "Could not verify WLAN status.")
+		return
+	}
+	if !valid {
+		// Return 404 if WLAN doesn't exist or is disabled
+		sendError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("WLAN ID %s does not exist or is not enabled on this device.", wlan))
+		return
+	}
+	// Construct parameter path for PreSharedKey configuration
+	parameterPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey", wlan)
+	// Prepare parameter values for setting operation
+	parameterValues := [][]interface{}{{parameterPath, updateReq.Password, "xsd:string"}}
+	// Submit set parameter task to worker pool
+	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
+	// Submit apply changes task to make configuration active
+	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+	// Clear cached data for this device to reflect changes
+	deviceCacheInstance.clear(deviceID)
+	// Return success response with update details
+	sendResponse(w, http.StatusOK, "OK", map[string]string{
+		"message": "Password update submitted successfully", "device_id": deviceID, "wlan": wlan, "ip": ip,
+	})
 }
