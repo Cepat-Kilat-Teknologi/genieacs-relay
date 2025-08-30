@@ -26,6 +26,7 @@ import (
 
 // Global variables for application configuration and shared resources
 var (
+	serverAddr    string
 	geniesBaseURL string      // Base URL for GenieACS server API endpoints
 	nbiAuthKey    string      // Authentication key for GenieACS Northbound Interface (NBI)
 	apiKey        string      // API key for authenticating requests to this service
@@ -39,15 +40,13 @@ const (
 	taskTypeRefreshWLAN  = "refreshWLAN"        // Task to refresh WLAN configuration data
 )
 
-// init function runs once when package is loaded - initializes application logger
 func init() {
 	var err error
-	// Create a production-ready zap logger with JSON formatting
 	logger, err = zap.NewProduction()
 	if err != nil {
-		// Fallback to standard log if zap initialization fails
-		log.Fatalf("Failed to initialize zap logger: %v", err)
+		log.Fatalf("Failed to initialize logger: %v", err)
 	}
+	_ = logger.Sugar()
 }
 
 // --- Struct Definitions ---
@@ -142,6 +141,7 @@ type workerPool struct {
 	workers int            // Number of active workers
 	queue   chan task      // Channel for receiving tasks
 	wg      sync.WaitGroup // WaitGroup for graceful shutdown synchronization
+	once    sync.Once      // Ensure Start is only called once
 }
 
 // Start initializes the worker pool by launching all worker goroutines
@@ -155,8 +155,10 @@ func (wp *workerPool) Start() {
 
 // Stop gracefully shuts down the worker pool by closing queue and waiting for completion
 func (wp *workerPool) Stop() {
-	close(wp.queue) // Close task channel to prevent new tasks
-	wp.wg.Wait()    // Wait for all workers to finish current tasks
+	wp.once.Do(func() { // Ensure Stop is only executed once
+		close(wp.queue) // Close task queue to signal workers to stop
+		wp.wg.Wait()    // Wait for all workers to finish processing
+	})
 }
 
 // worker is the goroutine that processes tasks from the queue
@@ -328,74 +330,72 @@ func authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+var newHTTPServer = func(handler http.Handler) *http.Server {
+	addr := os.Getenv("SERVER_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	return &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
+}
+
 // --- Main Application Entry Point ---
 func main() {
-	// Ensure logger is properly flushed before application exit
 	defer func() {
 		if err := logger.Sync(); err != nil {
 			log.Printf("Failed to sync logger: %v", err)
 		}
 	}()
 
-	// Load configuration from environment variables with fallback defaults
+	// load config
+	serverAddr = getEnv("SERVER_ADDR", ":8080")
 	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://localhost:7557")
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", "ThisIsNBIAuthKey")
 	apiKey = getEnv("API_KEY", "ThisIsASecretKey")
 
-	taskWorkerPool.Start() // Start the worker pool for background tasks
+	// start worker pool
+	taskWorkerPool.Start()
+	defer taskWorkerPool.Stop()
 
 	logger.Info("Starting server", zap.String("genieacs_url", geniesBaseURL))
 
-	// Initialize Chi router with middleware stack
+	// router
 	r := chi.NewRouter()
-	// Add middleware for request ID, real IP, logging, and panic recovery
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second)) // Set request timeout
-	r.Get("/health", healthCheckHandler)        // Health check endpoint
-
-	// Define API routes with authentication protection
+	r.Use(middleware.Timeout(60 * time.Second))
+	r.Get("/health", healthCheckHandler)
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
-		r.Use(authMiddleware)                                            // Protect all routes in this group with auth
-		r.Get("/ssid/{ip}", getSSIDByIPHandler)                          // Get SSID by device IP
-		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)                 // Refresh SSID data
-		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)         // Update SSID
-		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler) // Update password
-		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)             // Get DHCP clients
-		r.Post("/cache/clear", clearCacheHandler)                        // Clear cache endpoint
+		r.Use(authMiddleware)
+		r.Get("/ssid/{ip}", getSSIDByIPHandler)
+		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
+		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
+		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler)
+		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
+		r.Post("/cache/clear", clearCacheHandler)
 	})
 
-	// Configure HTTP server with graceful shutdown support
-	server := &http.Server{
-		Addr:    ":8080", // Listen on port 8080
-		Handler: r,       // Use Chi router as handler
-	}
+	// server
+	server := newHTTPServer(r)
 
-	// Start server in goroutine to allow graceful shutdown handling
+	// start server
 	go func() {
-		logger.Info("Server listening", zap.String("address", "http://localhost:8080"))
-		// Start HTTP server, handle errors (except graceful shutdown)
+		logger.Info("Server listening", zap.String("address", server.Addr))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("Server failed to start", zap.Error(err))
 		}
 	}()
 
-	// Set up signal channel for graceful shutdown
+	// graceful shutdown
 	quit := make(chan os.Signal, 1)
-	// Register for interrupt and terminate signals
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit // Wait for shutdown signal
+	<-quit
 	logger.Info("Shutdown signal received, starting graceful shutdown...")
 
-	// Create context with timeout for graceful shutdown operations
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel() // Ensure context is canceled
+	defer cancel()
 
-	// Stop worker pool gracefully before shutting down server
-	logger.Info("Stopping worker pool...")
-	taskWorkerPool.Stop()
-	logger.Info("Worker pool stopped.")
-
-	// Shutdown HTTP server gracefully, waiting for existing requests to complete
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Fatal("Server graceful shutdown failed", zap.Error(err))
 	}
@@ -796,11 +796,13 @@ func getWLANData(ctx context.Context, deviceID string) ([]WLANConfig, error) {
 	sort.Slice(configs, func(i, j int) bool {
 		numI, errI := strconv.Atoi(configs[i].WLAN)
 		numJ, errJ := strconv.Atoi(configs[j].WLAN)
-		if errI != nil || errJ != nil {
-			return false // Don't sort if keys are not numeric
+
+		if errI == nil && errJ == nil {
+			return numI < numJ // sort numerically if both are numbers
 		}
-		return numI < numJ // Sort in ascending numerical order
+		return configs[i].WLAN < configs[j].WLAN // fallback to string comparison
 	})
+
 	return configs, nil
 }
 
