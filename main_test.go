@@ -1573,12 +1573,6 @@ type WorkerPool interface {
 	Submit(action, deviceID string, params [][]interface{})
 }
 
-type mockWorkerPool struct{}
-
-func (m *mockWorkerPool) Start()                                                   {}
-func (m *mockWorkerPool) Stop()                                                    {}
-func (m *mockWorkerPool) Submit(deviceID, taskType string, params [][]interface{}) {}
-
 func Test_main(t *testing.T) {
 	// backup instance asli
 	orig := taskWorkerPool
@@ -2202,8 +2196,8 @@ func TestMain(m *testing.M) {
 	// Run tests
 	code := m.Run()
 
-	// Cleanup
-	logger.Sync()
+	// Cleanup - properly handle the error return
+	_ = logger.Sync()
 	os.Exit(code)
 }
 
@@ -2309,4 +2303,17 @@ func TestInitLoggerWrapperSuccess(t *testing.T) {
 	assert.NotNil(t, logger)
 	assert.Equal(t, testLogger, logger)
 
+}
+
+func TestMain_ErrorBranch(t *testing.T) {
+	orig := runServerFunc
+	defer func() { runServerFunc = orig }()
+
+	runServerFunc = func(addr string) error {
+		return fmt.Errorf("forced error")
+	}
+
+	assert.NotPanics(t, func() {
+		main() //
+	})
 }

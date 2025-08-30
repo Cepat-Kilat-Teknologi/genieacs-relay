@@ -82,6 +82,9 @@ var (
 			Handler: handler, // HTTP handler for incoming requests
 		}
 	}
+
+	runServerFunc = runServer // Function to start the HTTP server (for easier testing/mock
+
 )
 
 // --- Struct Definitions ---
@@ -231,7 +234,7 @@ func main() {
 		}
 	}()
 
-	if err := runServer(":8080"); err != nil {
+	if err := runServerFunc(":8080"); err != nil {
 		logger.Info("Server failed", zap.Error(err))
 	}
 }
