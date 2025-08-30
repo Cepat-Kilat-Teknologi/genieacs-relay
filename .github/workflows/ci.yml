@@ -13,17 +13,19 @@ env:
   IMAGE_NAME: cepatkilatteknologi/acs-api-gateway
   GO_VERSION: '1.25'
 
-# BLOK BARU: Memberikan izin yang diperlukan untuk mengunggah hasil scan
-permissions:
-  security-events: write
-  # 'contents: read' juga praktik yang baik untuk keamanan
-  contents: read
+# HAPUS BLOK PERMISSIONS DARI SINI
+# permissions:
+#   security-events: write
+#   contents: read
 
 jobs:
   # Job 1: Linting, Testing, dan Scanning
   test:
     name: Lint, Test, and Scan
     runs-on: ubuntu-latest
+    # Tambahkan izin yang diperlukan untuk job 'test'
+    permissions:
+      contents: read # Hanya butuh izin baca kode
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,11 +66,11 @@ jobs:
     needs: test
     environment: ci
     
-    # Berikan izin langsung pada job ini karena ia menggunakan environment.
+    # POSISI DAN ISI BLOK INI SUDAH BENAR
     permissions:
-      security-events: write
       contents: read
-      packages: write # Izin untuk push Docker image
+      packages: write
+      security-events: write
     
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     outputs:
@@ -78,6 +80,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      # ... sisa langkah di dalam job ini tidak perlu diubah ...
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       
@@ -96,7 +99,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/main' }}
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
