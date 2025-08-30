@@ -2,10 +2,12 @@ name: Go CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    # Ditambahkan 'develop' agar tag 'develop' pada image bisa dibuat
+    branches: [ "main", "develop" ]
     tags: [ 'v*.*.*' ]
   pull_request:
-    branches: [ "main" ]
+    # Ditambahkan 'develop' untuk konsistensi
+    branches: [ "main", "develop" ]
   workflow_dispatch:
 
 env:
@@ -14,7 +16,7 @@ env:
   GO_VERSION: '1.25'
 
 jobs:
-  # Job 1: Linting, Testing, dan Scanning
+  # Job 1: Linting, Testing, dan Scanning (Tidak ada perubahan, sudah bagus)
   test:
     name: Lint, Test, and Scan
     runs-on: ubuntu-latest
@@ -34,10 +36,7 @@ jobs:
       
       - name: Install and Run Linter
         run: |
-          # Install golangci-lint dari source code menggunakan toolchain Go 1.25
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          
-          # Jalankan linter yang baru saja di-install
           golangci-lint run --timeout=5m --verbose
       
       - name: Run vulnerability check
@@ -54,12 +53,16 @@ jobs:
           name: coverage-report
           path: coverage.out
   
-  # Job 2: Build dan Push Docker Image
+  # Job 2: Build dan Push Docker Image (Tidak ada perubahan, sudah bagus)
   build-and-push:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Menambahkan 'outputs' agar job lain bisa menggunakan tag image yang dibuat
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      created-tag: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -114,3 +117,42 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+  
+  # Job 3: Deployment (BARU)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    # Job ini HANYA berjalan jika trigger-nya adalah sebuah tag (e.g., v1.0.0)
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Deploy to Server
+        # Gunakan SSH Action atau tool lain untuk mengakses server Anda
+        # Ganti bagian ini dengan script deployment Anda yang sebenarnya
+        run: |
+          echo "🚀 Deploying version ${{ needs.build-and-push.outputs.created-tag }} to production..."
+          echo "Image tags to be used: ${{ needs.build-and-push.outputs.tags }}"
+          # Contoh script deployment menggunakan SSH:
+          # ssh user@your-server.com "cd /path/to/app && \
+          #   export IMAGE_TAG=${{ needs.build-and-push.outputs.created-tag }} && \
+          #   docker-compose -f docker-compose.prod.yml pull && \
+          #   docker-compose -f docker-compose.prod.yml up -d"
+          echo "✅ Deployment complete."
+  
+  # Job 4: Notifikasi (BARU)
+#  notify:
+#    name: Send Notification
+#    runs-on: ubuntu-latest
+#    # Job ini membutuhkan semua job sebelumnya selesai
+#    needs: [test, build-and-push, deploy]
+#    # 'if: always()' memastikan job ini selalu berjalan, baik workflow sukses maupun gagal
+#    if: always()
+#    steps:
+#      - name: Send Slack Notification
+#        uses: 8398a7/action-slack@v3
+#        with:
+#          status: ${{ job.status }}
+#          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # Informasi yang dikirim
+#        env:
+#          # Simpan URL Webhook Slack Anda di GitHub Secrets
+#          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
