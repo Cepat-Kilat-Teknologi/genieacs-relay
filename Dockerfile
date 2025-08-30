@@ -1,5 +1,5 @@
 # Stage 1: Development (Sudah bagus, tidak perlu diubah)
-FROM golang:1.24-alpine AS development
+FROM golang:1.25-alpine AS development
 RUN apk add --no-cache git build-base
 RUN go install github.com/air-verse/air@latest
 WORKDIR /app
@@ -10,7 +10,7 @@ CMD ["air", "-c", ".air.toml"]
 
 
 # Stage 2: Production Build (Dengan optimisasi cache)
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 # 1. Salin file modul terlebih dahulu
 COPY go.mod go.sum ./
