@@ -11,9 +11,10 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: cepatkilatteknologi/acs-api-gateway
-  GO_VERSION: '1.22'
+  GO_VERSION: '1.25'
 
 jobs:
+  # Job 1: Linting, Testing, dan Scanning
   test:
     name: Lint, Test, and Scan
     runs-on: ubuntu-latest
@@ -28,19 +29,16 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
       
-      # Langkah yang Diperkuat:
-      # 1. Download modul seperti sebelumnya.
-      # 2. Buat direktori vendor untuk memastikan linter menemukan semua package.
-      - name: Prepare Dependencies
-        run: |
-          go mod download
-          go mod vendor
+      - name: Download Go modules
+        run: go mod download
       
-      - name: Run linter
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.59
-          args: --timeout=5m --verbose
+      - name: Install and Run Linter
+        run: |
+          # Install golangci-lint dari source code menggunakan toolchain Go 1.25
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          
+          # Jalankan linter yang baru saja di-install
+          golangci-lint run --timeout=5m --verbose
       
       - name: Run vulnerability check
         run: |
@@ -55,7 +53,6 @@ jobs:
         with:
           name: coverage-report
           path: coverage.out
-
   
   # Job 2: Build dan Push Docker Image
   build-and-push:
