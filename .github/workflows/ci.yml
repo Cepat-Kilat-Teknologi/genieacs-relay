@@ -1,9 +1,9 @@
-name: Go CI/CD Pipeline
+name: Go CI Pipeline
 
 on:
   push:
     branches: [ "main", "develop" ]
-    tags: [ 'v*.*.*' ]
+    tags: [ "v*.*.*" ]
   pull_request:
     branches: [ "main", "develop" ]
   workflow_dispatch:
@@ -13,19 +13,15 @@ env:
   IMAGE_NAME: cepatkilatteknologi/acs-api-gateway
   GO_VERSION: '1.25'
 
-# HAPUS BLOK PERMISSIONS DARI SINI
-# permissions:
-#   security-events: write
-#   contents: read
-
 jobs:
-  # Job 1: Linting, Testing, dan Scanning
+  # ========================
+  # Job 1: Lint, Test & Govulncheck
+  # ========================
   test:
-    name: Lint, Test, and Scan
+    name: Lint, Test & Govulncheck
     runs-on: ubuntu-latest
-    # Tambahkan izin yang diperlukan untuk job 'test'
     permissions:
-      contents: read # Hanya butuh izin baca kode
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,47 +36,41 @@ jobs:
       - name: Download Go modules
         run: go mod download
       
-      - name: Install and Run Linter
+      - name: Run Linter
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           golangci-lint run --timeout=5m --verbose
       
-      - name: Run vulnerability check
+      - name: Run Govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
       
-      - name: Run tests with coverage
+      - name: Run Unit Tests with Coverage
         run: go test -v -race -coverprofile=coverage.out ./...
       
-      - name: Upload coverage report
+      - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.out
   
-  # Job 2: Build dan Push Docker Image
+  # ========================
+  # Job 2: Build, Scan & Push Docker Image
+  # ========================
   build-and-push:
-    name: Build and Push Docker Image
+    name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
     needs: test
     environment: ci
-    
-    # POSISI DAN ISI BLOK INI SUDAH BENAR
     permissions:
       contents: read
       packages: write
       security-events: write
-    
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    outputs:
-      tags: ${{ steps.meta.outputs.tags }}
-      created-tag: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # ... sisa langkah di dalam job ini tidak perlu diubah ...
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       
@@ -99,12 +89,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/main' }}
+            type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
       
-      - name: Build and push Docker image
+      - name: Build & Push Docker Image
         id: build
         uses: docker/build-push-action@v5
         with:
@@ -118,55 +108,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
-      - name: Scan pushed image for vulnerabilities
+      - name: Scan Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'docker.io/${{ env.IMAGE_NAME }}:latest'
+          image-ref: ${{ steps.meta.outputs.tags }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           ignore-unfixed: true
+          exit-code: 1  # Fail jika ada vuln serius
       
-      - name: Upload vulnerability scan results
+      - name: Upload Vulnerability Report
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-  
-  # Job 3: Deployment (BARU)
-#  deploy:
-#    name: Deploy to Production
-#    runs-on: ubuntu-latest
-#    needs: build-and-push
-#    # Job ini HANYA berjalan jika trigger-nya adalah sebuah tag (e.g., v1.0.0)
-#    if: startsWith(github.ref, 'refs/tags/')
-#    steps:
-#      - name: Deploy to Server
-#        # Gunakan SSH Action atau tool lain untuk mengakses server Anda
-#        # Ganti bagian ini dengan script deployment Anda yang sebenarnya
-#        run: |
-#          echo "🚀 Deploying version ${{ needs.build-and-push.outputs.created-tag }} to production..."
-#          echo "Image tags to be used: ${{ needs.build-and-push.outputs.tags }}"
-#          # Contoh script deployment menggunakan SSH:
-#          # ssh user@your-server.com "cd /path/to/app && \
-#          #   export IMAGE_TAG=${{ needs.build-and-push.outputs.created-tag }} && \
-#          #   docker-compose -f docker-compose.prod.yml pull && \
-#          #   docker-compose -f docker-compose.prod.yml up -d"
-#          echo "✅ Deployment complete."
-  
-  # Job 4: Notifikasi (BARU)
-#  notify:
-#    name: Send Notification
-#    runs-on: ubuntu-latest
-#    # Job ini membutuhkan semua job sebelumnya selesai
-#    needs: [test, build-and-push, deploy]
-#    # 'if: always()' memastikan job ini selalu berjalan, baik workflow sukses maupun gagal
-#    if: always()
-#    steps:
-#      - name: Send Slack Notification
-#        uses: 8398a7/action-slack@v3
-#        with:
-#          status: ${{ job.status }}
-#          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # Informasi yang dikirim
-#        env:
-#          # Simpan URL Webhook Slack Anda di GitHub Secrets
-#          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
