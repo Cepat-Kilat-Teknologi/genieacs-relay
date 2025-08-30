@@ -1202,7 +1202,7 @@ func TestGetWLANData_Success(t *testing.T) {
 func TestGetDHCPClients_Success(t *testing.T) {
 	ctx := context.Background()
 
-	// Simulasi cache device data dengan 1 host
+	// Simulate cached device data with DHCP clients
 	deviceData := map[string]interface{}{
 		"InternetGatewayDevice": map[string]interface{}{
 			"LANDevice": map[string]interface{}{
@@ -1359,7 +1359,7 @@ func TestGetDHCPClients_MalformedHosts(t *testing.T) {
 
 	clients, err := getDHCPClients(ctx, "bad-host")
 	assert.NoError(t, err)
-	assert.Empty(t, clients) // hasilnya slice kosong
+	assert.Empty(t, clients)
 }
 
 func TestIsWLANValid_Disabled(t *testing.T) {
@@ -1522,9 +1522,9 @@ func Test_getDeviceIDByIP_Error(t *testing.T) {
 	}
 }
 
-// Test_refreshWLANConfig_Error memaksa postJSONRequest return error
+// Test_refreshWLANConfig_Error forcing error di http.NewRequest
 func Test_refreshWLANConfig_Error(t *testing.T) {
-	// URL invalid supaya postJSONRequest gagal
+	// URL invalid force error
 	geniesBaseURL = "http://[::1]:invalid"
 	err := refreshWLANConfig(context.Background(), "dev123")
 	if err == nil {
@@ -1541,7 +1541,7 @@ func Test_refreshDHCP_Error(t *testing.T) {
 	}
 }
 
-// Test_getWLANData_ErrorCases menguji branch error di getWLANData
+// Test_getWLANData_ErrorCases forcing various error cases
 func Test_getWLANData_ErrorCases(t *testing.T) {
 	// inject data kosong
 	deviceCacheInstance.set("dev1", map[string]interface{}{})
@@ -2014,40 +2014,40 @@ func TestRunServer_StartFail(t *testing.T) {
 	}
 	occupiedPort := listener.Addr().(*net.TCPAddr).Port
 
-	// Override newHTTPServer untuk menggunakan port yang sudah dipakai
+	// Override newHTTPServer forcing it to return server that tries to use occupied port
 	newHTTPServer = func(addr string, handler http.Handler) *http.Server {
 		return &http.Server{
-			Addr:    fmt.Sprintf(":%d", occupiedPort), // Port yang sudah digunakan
+			Addr:    fmt.Sprintf(":%d", occupiedPort),
 			Handler: handler,
 		}
 	}
 
-	// Restore original function setelah test selesai
+	// Restore original function
 	defer func() {
 		newHTTPServer = originalNewHTTPServer
 		listener.Close()
 	}()
 
-	// Test server start failure - harusnya gagal karena port sudah digunakan
+	// Test server start failure
 	err = runServer(":0")
 	if err == nil {
 		t.Fatal("Expected server start to fail due to occupied port, but it didn't")
 	}
 
-	// Pastikan error yang dihasilkan adalah "address already in use"
+	// Check error message
 	if err != nil && !strings.Contains(err.Error(), "address already in use") {
 		t.Errorf("Expected 'address already in use' error, got: %v", err)
 	}
 }
 
 func TestRunServer_ShutdownFail(t *testing.T) {
-	// Simpan original function
+	// Save original function
 	originalNewHTTPServer := newHTTPServer
 
-	// Buat channel untuk sinkronisasi
+	// Create channel for signaling server start
 	serverStarted := make(chan bool, 1)
 
-	// Override newHTTPServer untuk membuat server yang gagal shutdown
+	// Override newHTTPServer forcing it to return server that fails on Shutdown
 	newHTTPServer = func(addr string, handler http.Handler) *http.Server {
 		listener, err := net.Listen("tcp", ":0")
 		if err != nil {
@@ -2059,7 +2059,7 @@ func TestRunServer_ShutdownFail(t *testing.T) {
 			Handler: handler,
 		}
 
-		// Start server di goroutine terpisah
+		// Start server di goroutine
 		go func() {
 			serverStarted <- true
 			if err := s.Serve(listener); err != nil && err != http.ErrServerClosed {
@@ -2067,22 +2067,22 @@ func TestRunServer_ShutdownFail(t *testing.T) {
 			}
 		}()
 
-		// Setelah server started, close listener untuk membuat Shutdown gagal
+		// After server started, close listener to force shutdown error
 		go func() {
 			<-serverStarted
 			time.Sleep(50 * time.Millisecond)
-			listener.Close() // Close listener untuk membuat Shutdown return error
+			listener.Close() // Close listener to cause shutdown error
 		}()
 
 		return s
 	}
 
-	// Restore original function setelah test selesai
+	// Restore original function after doing test
 	defer func() {
 		newHTTPServer = originalNewHTTPServer
 	}()
 
-	// Kirim SIGINT setelah delay
+	// Send SIGINT after short delay
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		p, _ := os.FindProcess(os.Getpid())
@@ -2097,7 +2097,7 @@ func TestRunServer_ShutdownFail(t *testing.T) {
 }
 
 func TestRunServer_NormalOperation(t *testing.T) {
-	// Kirim SIGINT setelah delay pendek
+	// Send SIGINT after short delay
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		p, _ := os.FindProcess(os.Getpid())
@@ -2112,19 +2112,19 @@ func TestRunServer_NormalOperation(t *testing.T) {
 }
 
 func TestRunServer_ServerError(t *testing.T) {
-	// Simpan original function
+	// Save original function
 	originalNewHTTPServer := newHTTPServer
 
-	// Override newHTTPServer untuk membuat server yang return error langsung
+	// Override newHTTPServer forcing it to return server that fails on ListenAndServe
 	newHTTPServer = func(addr string, handler http.Handler) *http.Server {
-		// Return server dengan address yang invalid untuk memaksa error
+		// Return server with invalid address to force error
 		return &http.Server{
 			Addr:    "invalid-address:99999",
 			Handler: handler,
 		}
 	}
 
-	// Restore original function setelah test selesai
+	// Restore original function after test
 	defer func() {
 		newHTTPServer = originalNewHTTPServer
 	}()
@@ -2137,11 +2137,11 @@ func TestRunServer_ServerError(t *testing.T) {
 }
 
 func TestLoggerInitialization_ErrorCase(t *testing.T) {
-	// Simpan original function dan logger
+	// Save original logger and function
 	originalLogger := logger
 	originalNewProduction := newProductionFunc
 
-	// Override zap.NewProduction untuk return error
+	// Override zap.NewProduction forcing it to return error
 	newProductionFunc = func(...zap.Option) (*zap.Logger, error) {
 		return nil, fmt.Errorf("simulated logger error")
 	}
@@ -2154,16 +2154,16 @@ func TestLoggerInitialization_ErrorCase(t *testing.T) {
 		newProductionFunc = originalNewProduction
 		logger = originalLogger
 
-		// Juga restore logger yang asli untuk test lainnya
+		// Restore original logger if it was set
 		if originalLogger != nil {
 			logger = originalLogger
 		} else {
-			// Jika originalLogger juga nil, initialize yang baru
+			// If original was nil, create a default logger
 			logger, _ = zap.NewProduction()
 		}
 	}()
 
-	// Panggil fungsi yang menginisialisasi logger
+	// Call logger initialization
 	initializeLogger()
 
 	// Check if the error was logged
@@ -2171,13 +2171,13 @@ func TestLoggerInitialization_ErrorCase(t *testing.T) {
 		t.Error("Expected logger initialization error to be logged")
 	}
 
-	// Pastikan logger tidak nil (harusnya menggunakan default atau error handling)
+	// Ensure logger is still nil
 	if logger != nil {
 		t.Error("Expected logger to be nil after initialization error")
 	}
 }
 
-// Helper function untuk test logger initialization
+// Helper function for test logger initialization
 func initializeLogger() {
 	var err error
 	logger, err = newProductionFunc()
@@ -2250,10 +2250,10 @@ func TestMainFunctionWithLoggerError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to initialize logger")
 }
 
-// Test untuk mensimulasikan init() error secara indirect
+// Test for logger initialization failure handling
 func TestLoggerInitializationFailure(t *testing.T) {
-	// Test scenario yang menyebabkan logger digunakan sebelum di-init
-	// Ini akan test error path secara tidak langsung
+	// Test scenario where logger initialization fails
+	// Backup original logger
 
 	tempLogger := logger
 	logger = nil // Simulate uninitialized logger
@@ -2271,7 +2271,7 @@ func TestInitLoggerWrapperError(t *testing.T) {
 	originalInitLogger := initLogger
 	defer func() {
 		initLogger = originalInitLogger
-		// Reset logger untuk test berikutnya
+		// Reset logger for other tests
 		logger, _ = zap.NewDevelopment()
 	}()
 
