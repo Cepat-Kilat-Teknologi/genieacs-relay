@@ -108,10 +108,15 @@ jobs:
       - name: Scan pushed image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ steps.build.outputs.digest }}'
+          # DIGANTI: Gunakan nama image dan tag 'latest' (atau tag lain yang Anda dorong)
+          # Ini memberitahu Trivy untuk menarik image dari Docker Hub sebelum memindai.
+          image-ref: 'docker.io/${{ env.IMAGE_NAME }}:latest'
+          
+          # --- Sisa konfigurasi tetap sama ---
           format: 'sarif'
           output: 'trivy-results.sarif'
           ignore-unfixed: true
+
       
       - name: Upload vulnerability scan results
         uses: github/codeql-action/upload-sarif@v3
