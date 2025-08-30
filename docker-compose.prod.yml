@@ -6,6 +6,9 @@ services:
       - .env
     environment:
       - TZ=Asia/Jakarta
+      - GENIEACS_BASE_URL=${GENIEACS_BASE_URL}
+      - NBI_AUTH_KEY=${NBI_AUTH_KEY}
+      - API_KEY=${API_KEY}
     ports:
       - "8080:8080"
     restart: unless-stopped
@@ -15,3 +18,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
