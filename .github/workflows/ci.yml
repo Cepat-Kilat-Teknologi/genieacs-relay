@@ -63,6 +63,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     environment: ci
+    
+    # Berikan izin langsung pada job ini karena ia menggunakan environment.
+    permissions:
+      security-events: write
+      contents: read
+      packages: write # Izin untuk push Docker image
+    
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     outputs:
       tags: ${{ steps.meta.outputs.tags }}
