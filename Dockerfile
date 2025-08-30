@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # Stage 1: Development
 FROM golang:1.25-alpine AS development
 RUN apk add --no-cache git build-base
