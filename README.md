@@ -1,6 +1,7 @@
 # ACS API Gateway
 
 [![ci](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Cepat-Kilat-Teknologi/acs-api-gateway/graph/badge.svg?token=Q0XLKG2ZPE)](https://codecov.io/gh/Cepat-Kilat-Teknologi/acs-api-gateway)
 
 A lightweight **API Gateway** for managing devices via **GenieACS**, built with **Love**.  
 This service provides endpoints for retrieving and updating device SSID, WiFi passwords, and DHCP clients.
