@@ -20,6 +20,7 @@ jobs:
   test:
     name: Lint, Test & Govulncheck
     runs-on: ubuntu-latest
+    environment: ci
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -53,12 +54,14 @@ jobs:
           name: coverage-report
           path: coverage.out
         
-      - name : Upload coverage reports to Codecov
+      - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
-        environment: ci
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-
+          files: coverage.out
+          fail_ci_if_error: true
+  
+  
   
   # ========================
   # Job 2: Build & Push Docker Image
