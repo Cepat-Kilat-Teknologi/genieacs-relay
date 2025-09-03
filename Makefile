@@ -3,7 +3,7 @@
 # Variables
 REGISTRY_USER   := cepatkilatteknologi
 IMAGE_NAME      := acs-api-gateway
-TAG             := 1.0
+TAG             := 1.1
 DOCKER_COMPOSE  := docker compose
 DOCKER_COMPOSE_PROD := docker compose -f docker-compose.prod.yml
 BUILDX_PLATFORMS := linux/amd64,linux/arm64,linux/arm/v7

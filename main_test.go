@@ -86,7 +86,6 @@ func setupTestServer(t *testing.T, mockHandler http.Handler) (*httptest.Server, 
 	t.Cleanup(mockGenieServer.Close)
 
 	geniesBaseURL = mockGenieServer.URL
-	apiKey = mockAPIKey
 	nbiAuthKey = "mock-nbi-key"
 
 	taskWorkerPool = &workerPool{
@@ -104,7 +103,6 @@ func setupTestServer(t *testing.T, mockHandler http.Handler) (*httptest.Server, 
 
 	r := chi.NewRouter()
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
-		r.Use(authMiddleware)
 		r.Get("/ssid/{ip}", getSSIDByIPHandler)
 		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
 		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
@@ -126,33 +124,6 @@ func TestHealthCheckHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"status":"healthy"`)
-}
-
-func TestAuthMiddleware(t *testing.T) {
-	_, router := setupTestServer(t, nil)
-
-	t.Run("Valid API Key", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/some-ip", nil)
-		req.Header.Set("X-API-Key", mockAPIKey)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.NotEqual(t, http.StatusUnauthorized, rr.Code)
-	})
-
-	t.Run("Invalid API Key", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/some-ip", nil)
-		req.Header.Set("X-API-Key", "invalid-key")
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	})
-
-	t.Run("Missing API Key", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/some-ip", nil)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	})
 }
 
 func TestGetSSIDByIPHandler(t *testing.T) {
@@ -976,13 +947,11 @@ func TestRefreshWLANConfig_Success(t *testing.T) {
 func TestMainFunction(t *testing.T) {
 	originalGenieURL := geniesBaseURL
 	originalNBIKey := nbiAuthKey
-	originalAPIKey := apiKey
 	originalLogger := logger
 
 	defer func() {
 		geniesBaseURL = originalGenieURL
 		nbiAuthKey = originalNBIKey
-		apiKey = originalAPIKey
 		logger = originalLogger
 	}()
 
@@ -990,7 +959,6 @@ func TestMainFunction(t *testing.T) {
 		// Test minimal initialization
 		geniesBaseURL = "http://test"
 		nbiAuthKey = "test"
-		apiKey = "test"
 	})
 }
 
@@ -1255,7 +1223,6 @@ func TestUpdatePasswordByIPHandler_WLANNotFound(t *testing.T) {
 func loadConfigFromEnv() {
 	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://127.0.0.1:7557")
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", "mock-nbi-key")
-	apiKey = getEnv("API_KEY", "test-secret-key")
 }
 
 func init() {
@@ -1279,7 +1246,6 @@ func TestInitEnvFallback(t *testing.T) {
 
 	assert.NotEmpty(t, geniesBaseURL)
 	assert.NotEmpty(t, nbiAuthKey)
-	assert.NotEmpty(t, apiKey)
 }
 
 func TestGetDeviceData_Non200(t *testing.T) {
@@ -1386,7 +1352,6 @@ func TestIsWLANValid_Disabled(t *testing.T) {
 func loadEnv() {
 	geniesBaseURL = getEnv("GENIEACS_URL", geniesBaseURL)
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", nbiAuthKey)
-	apiKey = getEnv("API_KEY", apiKey)
 }
 func TestInit_WithEnvVars(t *testing.T) {
 	os.Setenv("GENIEACS_URL", "http://env-url")
@@ -1400,9 +1365,6 @@ func TestInit_WithEnvVars(t *testing.T) {
 	}
 	if nbiAuthKey != "env-nbi" {
 		t.Errorf("expected %q, got %q", "env-nbi", nbiAuthKey)
-	}
-	if apiKey != "env-api" {
-		t.Errorf("expected %q, got %q", "env-api", apiKey)
 	}
 }
 
@@ -1614,21 +1576,6 @@ func Test_sendResponse_sendError(t *testing.T) {
 
 	w2 := httptest.NewRecorder()
 	sendError(w2, 400, "Bad", string([]byte{0x7f})) // tetap bisa di-encode
-}
-
-// Test_authMiddleware_Unauthorized memaksa invalid API Key
-func Test_authMiddleware_Unauthorized(t *testing.T) {
-	apiKey = "secret"
-	h := authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("should not be called")
-	}))
-	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set("X-API-Key", "wrong")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", w.Code)
-	}
 }
 
 // Test_updateSSIDByIPHandler_BadJSON memaksa JSON salah

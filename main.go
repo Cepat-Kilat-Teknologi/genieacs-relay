@@ -36,7 +36,6 @@ var (
 	serverAddr    string
 	geniesBaseURL string      // Base URL for GenieACS server API endpoints
 	nbiAuthKey    string      // Authentication key for GenieACS Northbound Interface (NBI)
-	apiKey        string      // API key for authenticating requests to this service
 	logger        *zap.Logger // Structured logger for application logging
 )
 
@@ -165,7 +164,6 @@ func runServer(addr string) error {
 	serverAddr = getEnv("SERVER_ADDR", addr)
 	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://localhost:7557")
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", "ThisIsNBIAuthKey")
-	apiKey = getEnv("API_KEY", "ThisIsASecretKey")
 
 	// start worker pool
 	taskWorkerPool.Start()
@@ -179,7 +177,6 @@ func runServer(addr string) error {
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Get("/health", healthCheckHandler)
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
-		r.Use(authMiddleware)
 		r.Get("/ssid/{ip}", getSSIDByIPHandler)
 		r.Post("/ssid/{i"+
 			"p}/refresh", refreshSSIDHandler)
@@ -408,18 +405,6 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 }
 
 // --- Middleware Functions ---
-
-// authMiddleware validates API key for protected routes
-func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if provided API key matches configured key
-		if r.Header.Get("X-API-Key") != apiKey {
-			sendError(w, http.StatusUnauthorized, "Unauthorized", "Invalid API Key")
-			return // Stop request processing if unauthorized
-		}
-		next.ServeHTTP(w, r) // Continue to next handler if authorized
-	})
-}
 
 // --- GenieACS Communication Functions ---
 
