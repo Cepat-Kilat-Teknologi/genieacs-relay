@@ -86,8 +86,14 @@ func setupTestServer(t *testing.T, mockHandler http.Handler) (*httptest.Server, 
 	t.Cleanup(mockGenieServer.Close)
 
 	geniesBaseURL = mockGenieServer.URL
-	apiKey = mockAPIKey
 	nbiAuthKey = "mock-nbi-key"
+
+	// Simpan HTTP client asli dan restore setelah test
+	originalHTTPClient := httpClient
+	t.Cleanup(func() { httpClient = originalHTTPClient })
+
+	// Gunakan HTTP client khusus untuk test
+	httpClient = mockGenieServer.Client()
 
 	taskWorkerPool = &workerPool{
 		workers: 1,
@@ -104,8 +110,8 @@ func setupTestServer(t *testing.T, mockHandler http.Handler) (*httptest.Server, 
 
 	r := chi.NewRouter()
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
-		r.Use(authMiddleware)
 		r.Get("/ssid/{ip}", getSSIDByIPHandler)
+		r.Get("/force/ssid/{ip}", getSSIDByIPForceHandler)
 		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
 		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
 		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler)
@@ -126,33 +132,6 @@ func TestHealthCheckHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"status":"healthy"`)
-}
-
-func TestAuthMiddleware(t *testing.T) {
-	_, router := setupTestServer(t, nil)
-
-	t.Run("Valid API Key", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/some-ip", nil)
-		req.Header.Set("X-API-Key", mockAPIKey)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.NotEqual(t, http.StatusUnauthorized, rr.Code)
-	})
-
-	t.Run("Invalid API Key", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/some-ip", nil)
-		req.Header.Set("X-API-Key", "invalid-key")
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	})
-
-	t.Run("Missing API Key", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/some-ip", nil)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	})
 }
 
 func TestGetSSIDByIPHandler(t *testing.T) {
@@ -976,13 +955,11 @@ func TestRefreshWLANConfig_Success(t *testing.T) {
 func TestMainFunction(t *testing.T) {
 	originalGenieURL := geniesBaseURL
 	originalNBIKey := nbiAuthKey
-	originalAPIKey := apiKey
 	originalLogger := logger
 
 	defer func() {
 		geniesBaseURL = originalGenieURL
 		nbiAuthKey = originalNBIKey
-		apiKey = originalAPIKey
 		logger = originalLogger
 	}()
 
@@ -990,7 +967,6 @@ func TestMainFunction(t *testing.T) {
 		// Test minimal initialization
 		geniesBaseURL = "http://test"
 		nbiAuthKey = "test"
-		apiKey = "test"
 	})
 }
 
@@ -1255,7 +1231,6 @@ func TestUpdatePasswordByIPHandler_WLANNotFound(t *testing.T) {
 func loadConfigFromEnv() {
 	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://127.0.0.1:7557")
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", "mock-nbi-key")
-	apiKey = getEnv("API_KEY", "test-secret-key")
 }
 
 func init() {
@@ -1279,7 +1254,6 @@ func TestInitEnvFallback(t *testing.T) {
 
 	assert.NotEmpty(t, geniesBaseURL)
 	assert.NotEmpty(t, nbiAuthKey)
-	assert.NotEmpty(t, apiKey)
 }
 
 func TestGetDeviceData_Non200(t *testing.T) {
@@ -1386,7 +1360,6 @@ func TestIsWLANValid_Disabled(t *testing.T) {
 func loadEnv() {
 	geniesBaseURL = getEnv("GENIEACS_URL", geniesBaseURL)
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", nbiAuthKey)
-	apiKey = getEnv("API_KEY", apiKey)
 }
 func TestInit_WithEnvVars(t *testing.T) {
 	os.Setenv("GENIEACS_URL", "http://env-url")
@@ -1400,9 +1373,6 @@ func TestInit_WithEnvVars(t *testing.T) {
 	}
 	if nbiAuthKey != "env-nbi" {
 		t.Errorf("expected %q, got %q", "env-nbi", nbiAuthKey)
-	}
-	if apiKey != "env-api" {
-		t.Errorf("expected %q, got %q", "env-api", apiKey)
 	}
 }
 
@@ -1614,21 +1584,6 @@ func Test_sendResponse_sendError(t *testing.T) {
 
 	w2 := httptest.NewRecorder()
 	sendError(w2, 400, "Bad", string([]byte{0x7f})) // tetap bisa di-encode
-}
-
-// Test_authMiddleware_Unauthorized memaksa invalid API Key
-func Test_authMiddleware_Unauthorized(t *testing.T) {
-	apiKey = "secret"
-	h := authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("should not be called")
-	}))
-	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set("X-API-Key", "wrong")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", w.Code)
-	}
 }
 
 // Test_updateSSIDByIPHandler_BadJSON memaksa JSON salah
@@ -2316,4 +2271,572 @@ func TestMain_ErrorBranch(t *testing.T) {
 	assert.NotPanics(t, func() {
 		main() //
 	})
+}
+
+// TestGetSSIDByIPForceHandler tests the getSSIDByIPForceHandler function for various scenarios
+func TestGetSSIDByIPForceHandler(t *testing.T) {
+	// Save original httpClient to ensure test isolation
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	// Setup test server with routes, including the force handler
+	setupTestServerWithForce := func(t *testing.T, mockHandler http.Handler) (*httptest.Server, *chi.Mux) {
+		mockGenieServer := httptest.NewServer(mockHandler)
+		t.Cleanup(mockGenieServer.Close)
+
+		// Set mock server URL and auth key
+		geniesBaseURL = mockGenieServer.URL
+		nbiAuthKey = "mock-nbi-key"
+
+		// Initialize worker pool
+		taskWorkerPool = &workerPool{
+			workers: 1,
+			queue:   make(chan task, 10),
+			wg:      sync.WaitGroup{},
+		}
+		taskWorkerPool.Start()
+		t.Cleanup(taskWorkerPool.Stop)
+
+		// Initialize device cache
+		deviceCacheInstance = &deviceCache{
+			data:    make(map[string]cachedDeviceData),
+			timeout: 30 * time.Second,
+		}
+
+		// Reset httpClient to default for consistency
+		httpClient = &http.Client{
+			Timeout: 15 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 20,
+				IdleConnTimeout:     30 * time.Second,
+			},
+		}
+
+		// Setup router with the force handler
+		r := chi.NewRouter()
+		r.Route("/api/v1/genieacs", func(r chi.Router) {
+			r.Get("/force/ssid/{ip}", getSSIDByIPForceHandler)
+		})
+
+		return mockGenieServer, r
+	}
+
+	// Subtest: Success on first attempt
+	t.Run("Success on first attempt", func(t *testing.T) {
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				query := r.URL.Query().Get("query")
+				if strings.Contains(query, mockDeviceIP) {
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[]`)) // No devices found
+				return
+			}
+
+			if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+		// Check for error response
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Unexpected response status %d: %s", rr.Code, resp.Error)
+		}
+
+		require.NotNil(t, resp.Data, "Response data should not be nil")
+
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "Response data should be a map")
+
+		assert.Equal(t, float64(1), data["attempts"]) // JSON numbers are float64
+		assert.Contains(t, data, "wlan_data")
+		assert.Len(t, data["wlan_data"].([]interface{}), 2) // Expect 2 WLAN configs
+	})
+
+	// Subtest: Success after refresh
+	t.Run("Success after refresh", func(t *testing.T) {
+		attemptCount := 0
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+
+			if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
+				attemptCount++
+				if attemptCount == 1 {
+					// First attempt: return empty WLAN data
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `", "InternetGatewayDevice": {"LANDevice": {"1": {}}}}]`))
+					return
+				}
+				// Second attempt: return valid WLAN data
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+				return
+			}
+
+			if strings.Contains(r.URL.Path, "/tasks") && r.Method == "POST" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			w.WriteHeader(http.StatusNotFound)
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Unexpected response status %d: %s", rr.Code, resp.Error)
+		}
+
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "Response data should be a map")
+
+		assert.Equal(t, float64(2), data["attempts"]) // Should take 2 attempts
+		assert.Contains(t, data, "wlan_data")
+		assert.Len(t, data["wlan_data"].([]interface{}), 2) // Expect 2 WLAN configs
+	})
+
+	// Subtest: Device not found
+	t.Run("Device not found", func(t *testing.T) {
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[]`)) // No devices found
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/not-found-ip", nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Contains(t, resp.Error, "device not found with IP")
+	})
+
+	// Subtest: Timeout (covers errors.Is(err, context.DeadlineExceeded))
+	t.Run("Timeout", func(t *testing.T) {
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			// Simulate slow response to trigger timeout in getWLANData
+			time.Sleep(100 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		// Create request with short timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req = req.WithContext(ctx)
+		req.Header.Set("X-API-Key", mockAPIKey)
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusRequestTimeout, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Equal(t, "Operation timed out while retrieving WLAN data", resp.Error)
+	})
+
+	// Subtest: Custom retry parameters
+	t.Run("Custom retry parameters", func(t *testing.T) {
+		attemptCount := 0
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+
+			if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
+				attemptCount++
+				if attemptCount < 4 { // Return empty data for first 3 attempts
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `", "InternetGatewayDevice": {"LANDevice": {"1": {}}}}]`))
+					return
+				}
+				// 4th attempt: return valid data
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+				return
+			}
+
+			if strings.Contains(r.URL.Path, "/tasks") && r.Method == "POST" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			w.WriteHeader(http.StatusNotFound)
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP+"?max_retries=5&retry_delay_ms=5", nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "Response data should be a map")
+
+		assert.Equal(t, float64(4), data["attempts"]) // Should take 4 attempts
+		assert.Contains(t, data, "wlan_data")
+		assert.Len(t, data["wlan_data"].([]interface{}), 2) // Expect 2 WLAN configs
+	})
+
+	// Subtest: Max retries exceeded
+	t.Run("Max retries exceeded", func(t *testing.T) {
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			// Always return empty WLAN data
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `", "InternetGatewayDevice": {"LANDevice": {"1": {}}}}]`))
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP+"?max_retries=2&retry_delay_ms=10", nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Contains(t, resp.Error, "No WLAN data found after 2 attempts")
+	})
+
+	// Subtest: Error getting WLAN data
+	t.Run("Error getting WLAN data", func(t *testing.T) {
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			// Return error for WLAN data
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.NotEmpty(t, resp.Error)
+	})
+
+	// Subtest: Refresh error but eventually succeeds
+	t.Run("Refresh error but eventually succeeds", func(t *testing.T) {
+		attemptCount := 0
+		refreshErrorCount := 0
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+
+			if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
+				attemptCount++
+				if attemptCount <= 2 {
+					// First 2 attempts: return empty data
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `", "InternetGatewayDevice": {"LANDevice": {"1": {}}}}]`))
+					return
+				}
+				// 3rd attempt: return valid data
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+				return
+			}
+
+			if strings.Contains(r.URL.Path, "/tasks") && r.Method == "POST" {
+				refreshErrorCount++
+				if refreshErrorCount == 1 {
+					// First refresh fails
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				// Second refresh succeeds
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			w.WriteHeader(http.StatusNotFound)
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "Response data should be a map")
+
+		assert.Equal(t, float64(3), data["attempts"]) // Should take 3 attempts
+		assert.Contains(t, data, "wlan_data")
+		assert.Len(t, data["wlan_data"].([]interface{}), 2) // Expect 2 WLAN configs
+	})
+
+	// Subtest: Invalid max_retries
+	t.Run("Invalid max_retries", func(t *testing.T) {
+		var logBuffer bytes.Buffer
+		encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		core := zapcore.NewCore(encoder, zapcore.AddSync(&logBuffer), zap.InfoLevel)
+		testLogger := zap.New(core)
+		originalLogger := logger
+		logger = testLogger
+		defer func() { logger = originalLogger }()
+
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP+"?max_retries=invalid", nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "Response data should be a map")
+		assert.Equal(t, float64(1), data["attempts"]) // Should succeed on first attempt
+		assert.Contains(t, data, "wlan_data")
+		assert.Len(t, data["wlan_data"].([]interface{}), 2)
+	})
+
+	// Subtest: Invalid retry_delay_ms
+	t.Run("Invalid retry_delay_ms", func(t *testing.T) {
+		var logBuffer bytes.Buffer
+		encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		core := zapcore.NewCore(encoder, zapcore.AddSync(&logBuffer), zap.InfoLevel)
+		testLogger := zap.New(core)
+		originalLogger := logger
+		logger = testLogger
+		defer func() { logger = originalLogger }()
+
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP+"?retry_delay_ms=invalid", nil)
+		req.Header.Set("X-API-Key", mockAPIKey)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "Response data should be a map")
+		assert.Equal(t, float64(1), data["attempts"]) // Should succeed on first attempt
+		assert.Contains(t, data, "wlan_data")
+		assert.Len(t, data["wlan_data"].([]interface{}), 2)
+	})
+
+	// Subtest: JSON encoding failure
+	t.Run("JSON encoding failure", func(t *testing.T) {
+		var logBuffer bytes.Buffer
+		encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		core := zapcore.NewCore(encoder, zapcore.AddSync(&logBuffer), zap.ErrorLevel)
+		testLogger := zap.New(core)
+		originalLogger := logger
+		logger = testLogger
+		defer func() { logger = originalLogger }()
+
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		// Create a custom ResponseRecorder that fails on Write
+		rr := &errorResponseRecorder{httptest.NewRecorder()}
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req = req.WithContext(context.Background())
+		req.Header.Set("X-API-Key", mockAPIKey)
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusOK, rr.Code) // Status set before encoding
+		assert.Contains(t, logBuffer.String(), "Failed to encode JSON response")
+	})
+
+	// Subtest: Context timeout in retry loop
+	t.Run("Context timeout in retry loop", func(t *testing.T) {
+		var logBuffer bytes.Buffer
+		encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		core := zapcore.NewCore(encoder, zapcore.AddSync(&logBuffer), zap.InfoLevel)
+		testLogger := zap.New(core)
+		originalLogger := logger
+		logger = testLogger
+		defer func() { logger = originalLogger }()
+
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("projection") == "_id" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				return
+			}
+			// Respond instantly with empty WLAN data to enter retry loop
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `", "InternetGatewayDevice": {"LANDevice": {"1": {}}}}]`))
+		})
+
+		_, router := setupTestServerWithForce(t, mockHandler)
+
+		// Create request with short timeout to trigger ctx.Done() in retry loop
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		defer cancel()
+
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req = req.WithContext(ctx)
+		req.Header.Set("X-API-Key", mockAPIKey)
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		t.Logf("Status: %d", rr.Code)
+		t.Logf("Body: %s", rr.Body.String())
+
+		assert.Equal(t, http.StatusRequestTimeout, rr.Code)
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Equal(t, "Operation timed out while retrieving WLAN data", resp.Error)
+	})
+}
+
+// Custom ResponseRecorder to simulate JSON encoding failure
+type errorResponseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (e *errorResponseRecorder) Write([]byte) (int, error) {
+	return 0, errors.New("write error")
 }
