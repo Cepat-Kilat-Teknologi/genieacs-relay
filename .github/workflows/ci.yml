@@ -12,6 +12,7 @@ env:
   REGISTRY: docker.io
   IMAGE_NAME: cepatkilatteknologi/acs-api-gateway
   GO_VERSION: '1.25'
+  IMAGE_VERSION: '1.1'
 
 jobs:
   # ========================
@@ -87,18 +88,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-      
-      - name: Build & Push Docker Image
+      - name: Build & Push with fixed tags
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -106,7 +96,9 @@ jobs:
           target: production
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  
