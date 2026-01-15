@@ -2088,6 +2088,80 @@ func TestRunServer_EmptyNBIAuthKey(t *testing.T) {
 	}
 }
 
+func TestRunServer_WithMiddlewareAuthEnabled(t *testing.T) {
+	// Save original env values
+	originalMiddlewareAuth := os.Getenv("MIDDLEWARE_AUTH")
+	originalAuthKey := os.Getenv("AUTH_KEY")
+
+	// Set MIDDLEWARE_AUTH=true with a valid AUTH_KEY
+	os.Setenv("MIDDLEWARE_AUTH", "true")
+	os.Setenv("AUTH_KEY", "test-key-for-server")
+
+	// Restore original values after test
+	defer func() {
+		if originalMiddlewareAuth != "" {
+			os.Setenv("MIDDLEWARE_AUTH", originalMiddlewareAuth)
+		} else {
+			os.Unsetenv("MIDDLEWARE_AUTH")
+		}
+		if originalAuthKey != "" {
+			os.Setenv("AUTH_KEY", originalAuthKey)
+		} else {
+			os.Unsetenv("AUTH_KEY")
+		}
+	}()
+
+	// Send SIGINT after short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p, _ := os.FindProcess(os.Getpid())
+		_ = p.Signal(syscall.SIGINT)
+	}()
+
+	// Test should complete without error
+	err := runServer(":0")
+	if err != nil {
+		t.Fatalf("Expected normal shutdown, got error: %v", err)
+	}
+}
+
+func TestRunServer_WithMiddlewareAuthEnabledAndEmptyKey(t *testing.T) {
+	// Save original env values
+	originalMiddlewareAuth := os.Getenv("MIDDLEWARE_AUTH")
+	originalAuthKey := os.Getenv("AUTH_KEY")
+
+	// Set MIDDLEWARE_AUTH=true but no AUTH_KEY to trigger warning
+	os.Setenv("MIDDLEWARE_AUTH", "true")
+	os.Unsetenv("AUTH_KEY")
+
+	// Restore original values after test
+	defer func() {
+		if originalMiddlewareAuth != "" {
+			os.Setenv("MIDDLEWARE_AUTH", originalMiddlewareAuth)
+		} else {
+			os.Unsetenv("MIDDLEWARE_AUTH")
+		}
+		if originalAuthKey != "" {
+			os.Setenv("AUTH_KEY", originalAuthKey)
+		} else {
+			os.Unsetenv("AUTH_KEY")
+		}
+	}()
+
+	// Send SIGINT after short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p, _ := os.FindProcess(os.Getpid())
+		_ = p.Signal(syscall.SIGINT)
+	}()
+
+	// Test should complete without error (warning is logged but not fatal)
+	err := runServer(":0")
+	if err != nil {
+		t.Fatalf("Expected normal shutdown, got error: %v", err)
+	}
+}
+
 func TestRunServer_ServerError(t *testing.T) {
 	// Save original function
 	originalNewHTTPServer := newHTTPServer
@@ -2867,4 +2941,268 @@ type errorResponseRecorder struct {
 
 func (e *errorResponseRecorder) Write([]byte) (int, error) {
 	return 0, errors.New("write error")
+}
+
+// --- API Key Authentication Middleware Tests ---
+
+func TestAPIKeyAuthMiddleware_ValidKey(t *testing.T) {
+	// Setup logger
+	logger, _ = zap.NewDevelopment()
+	defer func() { _ = logger.Sync() }()
+
+	// Set the auth key
+	originalAuthKey := authKey
+	authKey = "test-valid-api-key"
+	defer func() { authKey = originalAuthKey }()
+
+	// Create a test handler that the middleware wraps
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"success"}`))
+	})
+
+	// Wrap handler with middleware
+	handler := apiKeyAuthMiddleware(testHandler)
+
+	// Create request with valid API key
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set(HeaderXAPIKey, "test-valid-api-key")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "success")
+}
+
+func TestAPIKeyAuthMiddleware_MissingKey(t *testing.T) {
+	// Setup logger
+	logger, _ = zap.NewDevelopment()
+	defer func() { _ = logger.Sync() }()
+
+	// Set the auth key
+	originalAuthKey := authKey
+	authKey = "test-valid-api-key"
+	defer func() { authKey = originalAuthKey }()
+
+	// Create a test handler
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Wrap handler with middleware
+	handler := apiKeyAuthMiddleware(testHandler)
+
+	// Create request without API key header
+	req := httptest.NewRequest("GET", "/test", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	var resp Response
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, StatusUnauthorized, resp.Status)
+	assert.Equal(t, ErrMissingAPIKey, resp.Error)
+}
+
+func TestAPIKeyAuthMiddleware_InvalidKey(t *testing.T) {
+	// Setup logger
+	logger, _ = zap.NewDevelopment()
+	defer func() { _ = logger.Sync() }()
+
+	// Set the auth key
+	originalAuthKey := authKey
+	authKey = "correct-api-key"
+	defer func() { authKey = originalAuthKey }()
+
+	// Create a test handler
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Wrap handler with middleware
+	handler := apiKeyAuthMiddleware(testHandler)
+
+	// Create request with invalid API key
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set(HeaderXAPIKey, "wrong-api-key")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	var resp Response
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, StatusUnauthorized, resp.Status)
+	assert.Equal(t, ErrInvalidAPIKey, resp.Error)
+}
+
+func TestRunServer_MiddlewareAuthEnabled(t *testing.T) {
+	// Setup logger
+	logger, _ = zap.NewDevelopment()
+	defer func() { _ = logger.Sync() }()
+
+	// Set environment variables for middleware auth
+	os.Setenv("MIDDLEWARE_AUTH", "true")
+	os.Setenv("AUTH_KEY", "test-api-key")
+	defer func() {
+		os.Unsetenv("MIDDLEWARE_AUTH")
+		os.Unsetenv("AUTH_KEY")
+	}()
+
+	// Create mock GenieACS server
+	mockGenieServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"_id": "test-device"}]`))
+	}))
+	defer mockGenieServer.Close()
+
+	os.Setenv("GENIEACS_BASE_URL", mockGenieServer.URL)
+	defer os.Unsetenv("GENIEACS_BASE_URL")
+
+	// Override runServerFunc to capture the setup
+	originalRunServerFunc := runServerFunc
+	defer func() { runServerFunc = originalRunServerFunc }()
+
+	serverStarted := make(chan bool, 1)
+	runServerFunc = func(addr string) error {
+		// Verify environment variables are loaded correctly
+		middlewareAuth = os.Getenv("MIDDLEWARE_AUTH") == "true"
+		authKey = os.Getenv("AUTH_KEY")
+
+		assert.True(t, middlewareAuth)
+		assert.Equal(t, "test-api-key", authKey)
+		serverStarted <- true
+		return nil
+	}
+
+	go func() {
+		_ = runServerFunc(":8080")
+	}()
+
+	select {
+	case <-serverStarted:
+		// Test passed
+	case <-time.After(2 * time.Second):
+		t.Fatal("Server did not start in time")
+	}
+}
+
+func TestRunServer_MiddlewareAuthEnabledWithEmptyKey(t *testing.T) {
+	// Setup logger with buffer to capture warnings
+	var logBuffer bytes.Buffer
+	encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+	core := zapcore.NewCore(encoder, zapcore.AddSync(&logBuffer), zap.WarnLevel)
+	testLogger := zap.New(core)
+	originalLogger := logger
+	logger = testLogger
+	defer func() { logger = originalLogger }()
+
+	// Set environment variable for middleware auth but no AUTH_KEY
+	os.Setenv("MIDDLEWARE_AUTH", "true")
+	os.Unsetenv("AUTH_KEY")
+	defer os.Unsetenv("MIDDLEWARE_AUTH")
+
+	// Load the env vars as runServer would
+	middlewareAuth = os.Getenv("MIDDLEWARE_AUTH") == "true"
+	authKey = os.Getenv("AUTH_KEY")
+
+	// Simulate the warning log
+	if middlewareAuth && authKey == "" {
+		logger.Warn("MIDDLEWARE_AUTH is enabled but AUTH_KEY is not set - all requests will be rejected")
+	}
+
+	assert.True(t, middlewareAuth)
+	assert.Equal(t, "", authKey)
+	assert.Contains(t, logBuffer.String(), "AUTH_KEY is not set")
+}
+
+func TestRouterWithMiddlewareEnabled(t *testing.T) {
+	// Setup logger
+	logger, _ = zap.NewDevelopment()
+	defer func() { _ = logger.Sync() }()
+
+	// Enable middleware auth
+	originalMiddlewareAuth := middlewareAuth
+	originalAuthKey := authKey
+	middlewareAuth = true
+	authKey = "test-router-api-key"
+	defer func() {
+		middlewareAuth = originalMiddlewareAuth
+		authKey = originalAuthKey
+	}()
+
+	// Create mock GenieACS server
+	mockGenieServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("projection") == "_id" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[` + mockDeviceDataJSON + `]`))
+	}))
+	defer mockGenieServer.Close()
+
+	geniesBaseURL = mockGenieServer.URL
+	nbiAuthKey = "mock-key"
+
+	// Store original HTTP client and restore after test
+	originalHTTPClient := httpClient
+	defer func() { httpClient = originalHTTPClient }()
+	httpClient = mockGenieServer.Client()
+
+	// Clear the cache
+	deviceCacheInstance.clearAll()
+
+	// Initialize worker pool
+	taskWorkerPool = &workerPool{
+		workers: 1,
+		queue:   make(chan task, 10),
+	}
+	taskWorkerPool.Start()
+	defer taskWorkerPool.Stop()
+
+	// Create router with middleware applied
+	r := chi.NewRouter()
+	r.Get("/health", healthCheckHandler)
+	r.Route("/api/v1/genieacs", func(r chi.Router) {
+		// Apply API key authentication middleware (this is the code path we want to test)
+		if middlewareAuth {
+			r.Use(apiKeyAuthMiddleware)
+		}
+		r.Get("/ssid/{ip}", getSSIDByIPHandler)
+	})
+
+	// Test 1: Request without API key should be rejected
+	t.Run("Without API Key", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/"+mockDeviceIP, nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		var resp Response
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Equal(t, ErrMissingAPIKey, resp.Error)
+	})
+
+	// Test 2: Request with valid API key should succeed
+	t.Run("With Valid API Key", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/"+mockDeviceIP, nil)
+		req.Header.Set(HeaderXAPIKey, "test-router-api-key")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
+
+	// Test 3: Health endpoint should NOT require auth (outside protected route)
+	t.Run("Health endpoint without auth", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/health", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
 }

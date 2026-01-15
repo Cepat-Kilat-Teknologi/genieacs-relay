@@ -123,3 +123,20 @@ func TestDefaultConfigConstants(t *testing.T) {
 	// DefaultNBIAuthKey should be empty - must be set via environment variable
 	assert.Equal(t, "", DefaultNBIAuthKey)
 }
+
+func TestMiddlewareAuthConstants(t *testing.T) {
+	// Test default middleware auth is disabled
+	assert.False(t, DefaultMiddlewareAuth)
+	// DefaultAuthKey should be empty - must be set via environment variable
+	assert.Equal(t, "", DefaultAuthKey)
+	// Test header and env var names
+	assert.Equal(t, "X-API-Key", HeaderXAPIKey)
+	assert.Equal(t, "MIDDLEWARE_AUTH", EnvMiddlewareAuth)
+	assert.Equal(t, "AUTH_KEY", EnvAuthKey)
+}
+
+func TestAuthErrorConstants(t *testing.T) {
+	assert.Equal(t, "Missing X-API-Key header", ErrMissingAPIKey)
+	assert.Equal(t, "Invalid API key", ErrInvalidAPIKey)
+	assert.Equal(t, "Unauthorized", StatusUnauthorized)
+}

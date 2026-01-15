@@ -59,6 +59,17 @@ const (
 	DefaultQueueSize        = 100
 )
 
+// Authentication middleware configuration
+const (
+	// DefaultMiddlewareAuth controls whether API key authentication is enabled (default: false)
+	DefaultMiddlewareAuth = false
+	// DefaultAuthKey is intentionally empty - MUST be set via AUTH_KEY environment variable when MIDDLEWARE_AUTH=true
+	DefaultAuthKey    = ""
+	HeaderXAPIKey     = "X-API-Key"
+	EnvMiddlewareAuth = "MIDDLEWARE_AUTH"
+	EnvAuthKey        = "AUTH_KEY"
+)
+
 // Retry configurations for force handler
 const (
 	DefaultMaxRetries = 12
@@ -105,6 +116,13 @@ const (
 	ErrPasswordRequired     = "Password value required"
 	ErrWLANValidationFailed = "Could not verify WLAN status."
 	ErrOperationTimeout     = "Operation timed out while retrieving WLAN data"
+	ErrMissingAPIKey        = "Missing X-API-Key header"
+	ErrInvalidAPIKey        = "Invalid API key"
+)
+
+// HTTP status messages for authentication
+const (
+	StatusUnauthorized = "Unauthorized"
 )
 
 // Success messages

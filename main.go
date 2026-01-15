@@ -33,10 +33,12 @@ const (
 
 // Global variables for application configuration and shared resources
 var (
-	serverAddr    string
-	geniesBaseURL string      // Base URL for GenieACS server API endpoints
-	nbiAuthKey    string      // Authentication key for GenieACS Northbound Interface (NBI)
-	logger        *zap.Logger // Structured logger for application logging
+	serverAddr     string
+	geniesBaseURL  string      // Base URL for GenieACS server API endpoints
+	nbiAuthKey     string      // Authentication key for GenieACS Northbound Interface (NBI)
+	logger         *zap.Logger // Structured logger for application logging
+	middlewareAuth bool        // Whether API key authentication middleware is enabled
+	authKey        string      // API key for authenticating incoming requests
 )
 
 // Pre-initialized variables and instances for modularity
@@ -170,6 +172,18 @@ func runServer(addr string) error {
 		logger.Warn("NBI_AUTH_KEY environment variable is not set - API authentication may fail")
 	}
 
+	// Load middleware authentication config
+	middlewareAuth = getEnv(EnvMiddlewareAuth, "false") == "true"
+	authKey = getEnv(EnvAuthKey, DefaultAuthKey)
+
+	// Warn if middleware auth is enabled but AUTH_KEY is not set
+	if middlewareAuth && authKey == "" {
+		logger.Warn("MIDDLEWARE_AUTH is enabled but AUTH_KEY is not set - all requests will be rejected")
+	}
+
+	// Log middleware auth status
+	logger.Info("Middleware authentication", zap.Bool("enabled", middlewareAuth))
+
 	// start worker pool
 	taskWorkerPool.Start()
 	defer taskWorkerPool.Stop()
@@ -182,10 +196,13 @@ func runServer(addr string) error {
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Get("/health", healthCheckHandler)
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
+		// Apply API key authentication middleware if enabled
+		if middlewareAuth {
+			r.Use(apiKeyAuthMiddleware)
+		}
 		r.Get("/ssid/{ip}", getSSIDByIPHandler)
 		r.Get("/force/ssid/{ip}", getSSIDByIPForceHandler)
-		r.Post("/ssid/{i"+
-			"p}/refresh", refreshSSIDHandler)
+		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
 		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
 		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler)
 		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
@@ -411,6 +428,29 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 }
 
 // --- Middleware Functions ---
+
+// apiKeyAuthMiddleware validates X-API-Key header for incoming requests
+func apiKeyAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get API key from header
+		apiKey := r.Header.Get(HeaderXAPIKey)
+
+		// Check if API key is provided
+		if apiKey == "" {
+			sendError(w, http.StatusUnauthorized, StatusUnauthorized, ErrMissingAPIKey)
+			return
+		}
+
+		// Validate API key
+		if apiKey != authKey {
+			sendError(w, http.StatusUnauthorized, StatusUnauthorized, ErrInvalidAPIKey)
+			return
+		}
+
+		// API key is valid, proceed to next handler
+		next.ServeHTTP(w, r)
+	})
+}
 
 // --- GenieACS Communication Functions ---
 

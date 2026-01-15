@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// HandlerContext provides common context for HTTP handlers
+// HandlerContext provides a common context for HTTP handlers
 type HandlerContext struct {
 	IP       string
 	WLAN     string
@@ -16,7 +16,7 @@ type HandlerContext struct {
 }
 
 // ExtractDeviceIDByIP is a helper that extracts device ID from IP and handles common error responses
-// Returns the device ID and true if successful, or sends error response and returns false
+// Returns the device ID and true if successful, or sends an error response and returns false
 func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) {
 	ip := chi.URLParam(r, "ip")
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
@@ -76,7 +76,7 @@ func UpdateWLANParameter(
 		return
 	}
 
-	// Construct full parameter path
+	// Construct a full parameter path
 	fullPath := fmt.Sprintf(parameterPath, wlan)
 
 	// Prepare parameter values for setting operation
@@ -85,7 +85,7 @@ func UpdateWLANParameter(
 	// Submit set parameter task to worker pool
 	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
 
-	// Submit apply changes task to make configuration active
+	// Submit apply change task to make configuration active
 	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
 
 	// Clear cached data for this device to reflect changes
