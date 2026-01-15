@@ -34,11 +34,12 @@ const (
 // Global variables for application configuration and shared resources
 var (
 	serverAddr     string
-	geniesBaseURL  string      // Base URL for GenieACS server API endpoints
-	nbiAuthKey     string      // Authentication key for GenieACS Northbound Interface (NBI)
-	logger         *zap.Logger // Structured logger for application logging
-	middlewareAuth bool        // Whether API key authentication middleware is enabled
-	authKey        string      // API key for authenticating incoming requests
+	geniesBaseURL  string        // Base URL for GenieACS server API endpoints
+	nbiAuthKey     string        // Authentication key for GenieACS Northbound Interface (NBI)
+	logger         *zap.Logger   // Structured logger for application logging
+	middlewareAuth bool          // Whether API key authentication middleware is enabled
+	authKey        string        // API key for authenticating incoming requests
+	staleThreshold time.Duration // Threshold for considering device as stale (default: 10 minutes)
 )
 
 // Pre-initialized variables and instances for modularity
@@ -123,7 +124,8 @@ type task struct {
 
 // Device represents a network device with its unique identifier
 type Device struct {
-	ID string `json:"_id"` // Device unique identifier from GenieACS
+	ID         string `json:"_id"`         // Device unique identifier from GenieACS
+	LastInform *int64 `json:"_lastInform"` // Timestamp of last inform from device (Unix milliseconds)
 }
 
 // WLANConfig represents wireless LAN configuration for a device
@@ -183,6 +185,15 @@ func runServer(addr string) error {
 
 	// Log middleware auth status
 	logger.Info("Middleware authentication", zap.Bool("enabled", middlewareAuth))
+
+	// Load stale threshold config (default: 10 minutes)
+	staleThreshold = DefaultStaleThreshold
+	if staleMinStr := getEnv(EnvStaleThreshold, ""); staleMinStr != "" {
+		if staleMin, err := strconv.Atoi(staleMinStr); err == nil && staleMin > 0 {
+			staleThreshold = time.Duration(staleMin) * time.Minute
+		}
+	}
+	logger.Info("Stale device threshold", zap.Duration("threshold", staleThreshold))
 
 	// start worker pool
 	taskWorkerPool.Start()
@@ -505,6 +516,7 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 }
 
 // getDeviceIDByIP finds device ID by searching for devices with matching IP address
+// It also validates that the device is not stale (last inform within threshold)
 func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	// Construct query to find device by IP address in multiple possible fields
 	query := fmt.Sprintf(`{"$or":[
@@ -512,8 +524,8 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 {"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress._value": "%s"},
 {"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress._value": "%s"}
 ]}`, ip, ip, ip)
-	// Build URL with query parameter
-	urlQ := fmt.Sprintf("%s/devices/?query=%s&projection=_id", geniesBaseURL, url.QueryEscape(query))
+	// Build URL with query parameter - include _lastInform for stale device validation
+	urlQ := fmt.Sprintf("%s/devices/?query=%s&projection=_id,_lastInform", geniesBaseURL, url.QueryEscape(query))
 	// Create HTTP GET request
 	req, err := http.NewRequestWithContext(ctx, "GET", urlQ, nil)
 	if err != nil {
@@ -546,8 +558,37 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	if len(devices) == 0 {
 		return "", fmt.Errorf("device not found with IP: %s", ip)
 	}
-	// Return ID of first matching device
-	return devices[0].ID, nil
+
+	device := devices[0]
+
+	// Validate device is not stale (if staleThreshold is configured and _lastInform is available)
+	if staleThreshold > 0 && device.LastInform != nil {
+		// GenieACS stores _lastInform as Unix timestamp in milliseconds
+		lastInformTime := time.UnixMilli(*device.LastInform)
+		timeSinceLastInform := time.Since(lastInformTime)
+
+		// Check if device is stale
+		if timeSinceLastInform > staleThreshold {
+			return "", fmt.Errorf(ErrDeviceStale, ip, formatDuration(timeSinceLastInform))
+		}
+	}
+
+	// Return ID of matching device
+	return device.ID, nil
+}
+
+// formatDuration formats a duration into a human-readable string
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%d seconds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%.1f hours", d.Hours())
+	}
+	return fmt.Sprintf("%.1f days", d.Hours()/24)
 }
 
 // refreshWLANConfig triggers refresh of WLAN configuration data from device
@@ -656,16 +697,16 @@ func getWLANData(ctx context.Context, deviceID string) ([]WLANConfig, error) {
 	return configs, nil
 }
 
-// getPassword extracts password from WLAN configuration with special handling for ZTE devices
-func getPassword(wlan map[string]interface{}, isZTE bool) string {
-	// Mask password for ZTE devices (security measure)
-	if isZTE {
-		return "********"
-	}
+// getPassword extracts password from WLAN configuration
+func getPassword(wlan map[string]interface{}, _ bool) string {
 	// Try to get password from X_CMS_KeyPassphrase field
 	if passMap, ok := wlan["X_CMS_KeyPassphrase"].(map[string]interface{}); ok {
-		if pass, ok := passMap["_value"].(string); ok && pass != "" {
-			return pass
+		if pass, ok := passMap["_value"].(string); ok {
+			if pass != "" {
+				return pass
+			}
+			// Field exists but empty (encrypted)
+			return "******"
 		}
 	}
 	// Try to get password from PreSharedKey structure
@@ -673,19 +714,27 @@ func getPassword(wlan map[string]interface{}, isZTE bool) string {
 		if psk1, ok := psk["1"].(map[string]interface{}); ok {
 			// Try KeyPassphrase field first
 			if keyPassMap, ok := psk1["KeyPassphrase"].(map[string]interface{}); ok {
-				if keyPass, ok := keyPassMap["_value"].(string); ok && keyPass != "" {
-					return keyPass
+				if keyPass, ok := keyPassMap["_value"].(string); ok {
+					if keyPass != "" {
+						return keyPass
+					}
+					// Field exists but empty (encrypted)
+					return "******"
 				}
 			}
 			// Fall back to PreSharedKey field
 			if preSharedMap, ok := psk1["PreSharedKey"].(map[string]interface{}); ok {
-				if preShared, ok := preSharedMap["_value"].(string); ok && preShared != "" {
-					return preShared
+				if preShared, ok := preSharedMap["_value"].(string); ok {
+					if preShared != "" {
+						return preShared
+					}
+					// Field exists but empty (encrypted)
+					return "******"
 				}
 			}
 		}
 	}
-	// Return "N/A" if no password field found
+	// No password field found at all
 	return "N/A"
 }
 
