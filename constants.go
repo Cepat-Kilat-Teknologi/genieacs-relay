@@ -80,6 +80,17 @@ const (
 	QueryDeviceID     = "device_id"
 )
 
+// Stale device validation configuration
+const (
+	// DefaultStaleThreshold is the default time after which a device is considered stale (30 minutes)
+	// This is approximately 6x the typical TR-069 periodic inform interval (5 minutes)
+	DefaultStaleThreshold = 30 * time.Minute
+	// EnvStaleThreshold is the environment variable name for stale threshold in minutes
+	EnvStaleThreshold = "STALE_THRESHOLD_MINUTES"
+	// FieldLastInform is the GenieACS field for last inform timestamp
+	FieldLastInform = "_lastInform"
+)
+
 // Frequency bands
 const (
 	Band2_4GHz  = "2.4GHz"
@@ -118,6 +129,7 @@ const (
 	ErrOperationTimeout     = "Operation timed out while retrieving WLAN data"
 	ErrMissingAPIKey        = "Missing X-API-Key header"
 	ErrInvalidAPIKey        = "Invalid API key"
+	ErrDeviceStale          = "device with IP %s is stale (last seen: %s ago). The IP may have been reassigned to another device"
 )
 
 // HTTP status messages for authentication
