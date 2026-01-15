@@ -1,6 +1,6 @@
 services:
   api:
-    image: cepatkilatteknologi/acs-api-gateway:1.1
+    image: cepatkilatteknologi/acs-api-gateway:2.0
     container_name: acs-api-gateway-prod
     env_file:
       - .env
