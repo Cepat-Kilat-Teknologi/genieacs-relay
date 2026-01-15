@@ -11,6 +11,7 @@ services:
       - SERVER_ADDR=${SERVER_ADDR:-:8080}
       - MIDDLEWARE_AUTH=${MIDDLEWARE_AUTH:-false}
       - AUTH_KEY=${AUTH_KEY}
+      - STALE_THRESHOLD_MINUTES=${STALE_THRESHOLD_MINUTES:-30}
     ports:
       - "8080:8080"
     restart: unless-stopped
