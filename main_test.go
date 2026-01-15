@@ -2060,6 +2060,34 @@ func TestRunServer_NormalOperation(t *testing.T) {
 	}
 }
 
+func TestRunServer_EmptyNBIAuthKey(t *testing.T) {
+	// Save original env value
+	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
+
+	// Unset NBI_AUTH_KEY to trigger warning
+	os.Unsetenv("NBI_AUTH_KEY")
+
+	// Restore original value after test
+	defer func() {
+		if originalNBIKey != "" {
+			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
+		}
+	}()
+
+	// Send SIGINT after short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p, _ := os.FindProcess(os.Getpid())
+		_ = p.Signal(syscall.SIGINT)
+	}()
+
+	// Test should complete without error (warning is logged but not fatal)
+	err := runServer(":0")
+	if err != nil {
+		t.Fatalf("Expected normal shutdown, got error: %v", err)
+	}
+}
+
 func TestRunServer_ServerError(t *testing.T) {
 	// Save original function
 	originalNewHTTPServer := newHTTPServer

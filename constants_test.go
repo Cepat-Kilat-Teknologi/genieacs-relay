@@ -120,5 +120,6 @@ func TestXSDConstants(t *testing.T) {
 func TestDefaultConfigConstants(t *testing.T) {
 	assert.Equal(t, ":8080", DefaultServerAddr)
 	assert.Equal(t, "http://localhost:7557", DefaultGenieACSURL)
-	assert.Equal(t, "ThisIsNBIAuthKey", DefaultNBIAuthKey)
+	// DefaultNBIAuthKey should be empty - must be set via environment variable
+	assert.Equal(t, "", DefaultNBIAuthKey)
 }
