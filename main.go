@@ -124,8 +124,8 @@ type task struct {
 
 // Device represents a network device with its unique identifier
 type Device struct {
-	ID         string `json:"_id"`         // Device unique identifier from GenieACS
-	LastInform *int64 `json:"_lastInform"` // Timestamp of last inform from device (Unix milliseconds)
+	ID         string     `json:"_id"`         // Device unique identifier from GenieACS
+	LastInform *time.Time `json:"_lastInform"` // Timestamp of last inform from device
 }
 
 // WLANConfig represents wireless LAN configuration for a device
@@ -563,8 +563,8 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 
 	// Validate device is not stale (if staleThreshold is configured and _lastInform is available)
 	if staleThreshold > 0 && device.LastInform != nil {
-		// GenieACS stores _lastInform as Unix timestamp in milliseconds
-		lastInformTime := time.UnixMilli(*device.LastInform)
+		// GenieACS stores _lastInform as ISO 8601 date string (e.g., "2025-01-16T10:30:00.000Z")
+		lastInformTime := *device.LastInform
 		timeSinceLastInform := time.Since(lastInformTime)
 
 		// Check if device is stale
