@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/signal"
 	"reflect"
 	"sort"
 	"strings"
@@ -35,6 +34,20 @@ const (
 	mockDeviceIP = "192.168.1.100"
 	mockAPIKey   = "test-secret-key"
 )
+
+// mockDeviceResponseWithLastInform returns a mock device response with a recent _lastInform timestamp
+func mockDeviceResponseWithLastInform() string {
+	// Use current time in milliseconds for _lastInform (device is active)
+	lastInform := time.Now().UnixMilli()
+	return fmt.Sprintf(`[{"_id": "%s", "_lastInform": %d}]`, mockDeviceID, lastInform)
+}
+
+// mockDeviceResponseStale returns a mock device response with an old _lastInform timestamp (stale device)
+func mockDeviceResponseStale() string {
+	// Use time 1 hour ago (definitely stale with default 10 minute threshold)
+	lastInform := time.Now().Add(-1 * time.Hour).UnixMilli()
+	return fmt.Sprintf(`[{"_id": "%s", "_lastInform": %d}]`, mockDeviceID, lastInform)
+}
 
 var httpListenAndServe = http.ListenAndServe
 
@@ -136,11 +149,11 @@ func TestHealthCheckHandler(t *testing.T) {
 
 func TestGetSSIDByIPHandler(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			query := r.URL.Query().Get("query")
 			if strings.Contains(query, mockDeviceIP) {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			if strings.Contains(query, "not-found-ip") {
@@ -184,9 +197,9 @@ func TestGetSSIDByIPHandler(t *testing.T) {
 
 func TestUpdateSSIDByIPHandler(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" && r.URL.Query().Get("projection") == "_id" {
+		if r.Method == "GET" && strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 			return
 		}
 
@@ -218,9 +231,9 @@ func TestUpdateSSIDByIPHandler(t *testing.T) {
 
 func TestGetDHCPClientByIPHandler(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 			return
 		}
 		if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
@@ -272,7 +285,7 @@ func TestRefreshSSIDHandler(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "GET" {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			if r.Method == "POST" {
@@ -376,8 +389,8 @@ func TestUpdatePasswordByIPHandler(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			if r.Method == "GET" && r.URL.Query().Get("projection") == "_id" {
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			if r.Method == "GET" && strings.Contains(r.URL.Query().Get("projection"), "_id") {
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 			} else if r.Method == "GET" {
 				_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
 			}
@@ -420,9 +433,9 @@ func TestUpdatePasswordByIPHandler(t *testing.T) {
 
 	t.Run("Internal Error - WLAN Validation", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -563,10 +576,22 @@ func TestFullCoverageScenarios(t *testing.T) {
 		}
 		assert.Equal(t, "preshared456", getPassword(wlanData2, false))
 
-		assert.Equal(t, "********", getPassword(wlanData1, true))
+		// ZTE password is no longer masked - returns actual password
+		assert.Equal(t, "keypass123", getPassword(wlanData1, true))
 
+		// No password field at all - returns N/A
 		wlanData3 := map[string]interface{}{}
 		assert.Equal(t, "N/A", getPassword(wlanData3, false))
+
+		// Password field exists but empty (encrypted) - returns ******
+		wlanData4 := map[string]interface{}{
+			"PreSharedKey": map[string]interface{}{
+				"1": map[string]interface{}{
+					"KeyPassphrase": map[string]interface{}{"_value": ""},
+				},
+			},
+		}
+		assert.Equal(t, "******", getPassword(wlanData4, false))
 	})
 
 	t.Run("Communication function errors", func(t *testing.T) {
@@ -653,9 +678,9 @@ func TestFullCoverageScenarios(t *testing.T) {
 func TestGetSSIDByIPHandler_ErrorCases(t *testing.T) {
 	t.Run("Error Getting WLAN Data", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError) // Error saat get device data
@@ -688,9 +713,9 @@ func TestGetDHCPClientByIPHandler_Complete(t *testing.T) {
 
 	t.Run("Error Getting DHCP Clients", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -709,9 +734,9 @@ func TestGetDHCPClientByIPHandler_Complete(t *testing.T) {
 		deviceCacheInstance.clearAll()
 
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			if r.URL.Query().Get("refresh") == "true" {
@@ -758,9 +783,9 @@ func TestUpdateSSIDByIPHandler_ErrorCases(t *testing.T) {
 
 	t.Run("WLAN Validation Error", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -779,9 +804,9 @@ func TestUpdateSSIDByIPHandler_ErrorCases(t *testing.T) {
 
 	t.Run("WLAN Not Found", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusOK)
@@ -832,7 +857,7 @@ func TestEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("getPassword for ZTE devices", func(t *testing.T) {
+	t.Run("getPassword for ZTE devices - no longer masked", func(t *testing.T) {
 		wlanData := map[string]interface{}{
 			"PreSharedKey": map[string]interface{}{
 				"1": map[string]interface{}{
@@ -840,8 +865,8 @@ func TestEdgeCases(t *testing.T) {
 				},
 			},
 		}
-		password := getPassword(wlanData, true) // ZTE device
-		assert.Equal(t, "********", password)
+		password := getPassword(wlanData, true) // ZTE device - password now visible
+		assert.Equal(t, "password123", password)
 	})
 }
 
@@ -1148,8 +1173,8 @@ func TestGetDeviceIDByIP_Success(t *testing.T) {
 	ctx := context.Background()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := `[{"_id":"` + mockDeviceID + `"}]`
-		_, _ = w.Write([]byte(resp))
+		// Include _lastInform with current timestamp (active device)
+		_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 	}))
 	defer server.Close()
 	geniesBaseURL = server.URL
@@ -1157,6 +1182,33 @@ func TestGetDeviceIDByIP_Success(t *testing.T) {
 	id, err := getDeviceIDByIP(ctx, mockDeviceIP)
 	assert.NoError(t, err)
 	assert.Equal(t, mockDeviceID, id)
+}
+
+func TestGetDeviceIDByIP_StaleDevice(t *testing.T) {
+	ctx := context.Background()
+
+	// Save original staleThreshold
+	originalThreshold := staleThreshold
+
+	// Set stale threshold to 10 minutes
+	staleThreshold = 10 * time.Minute
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return device with _lastInform 1 hour ago (stale)
+		_, _ = w.Write([]byte(mockDeviceResponseStale()))
+	}))
+	defer server.Close()
+	geniesBaseURL = server.URL
+
+	// Restore original threshold after test
+	defer func() {
+		staleThreshold = originalThreshold
+	}()
+
+	id, err := getDeviceIDByIP(ctx, mockDeviceIP)
+	assert.Error(t, err)
+	assert.Empty(t, id)
+	assert.Contains(t, err.Error(), "stale")
 }
 
 func TestGetWLANData_Success(t *testing.T) {
@@ -1208,9 +1260,9 @@ func TestGetDHCPClients_Success(t *testing.T) {
 func TestUpdatePasswordByIPHandler_WLANNotFound(t *testing.T) {
 	// Mock server balikin device data valid tapi WLANConfig gak ada index 99
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 			return
 		}
 		_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
@@ -1614,11 +1666,37 @@ func Test_postJSONRequest_BadPayload(t *testing.T) {
 	}
 }
 
-// Test_getPassword_NoField untuk coverage "N/A"
+// Test_getPassword_NoField untuk coverage when password field not found
 func Test_getPassword_NoField(t *testing.T) {
 	pw := getPassword(map[string]interface{}{}, false)
 	if pw != "N/A" {
 		t.Fatalf("expected N/A, got %s", pw)
+	}
+}
+
+// Test_getPassword_EmptyField untuk coverage when password field exists but empty (encrypted)
+func Test_getPassword_EmptyField(t *testing.T) {
+	wlanData := map[string]interface{}{
+		"X_CMS_KeyPassphrase": map[string]interface{}{"_value": ""},
+	}
+	pw := getPassword(wlanData, false)
+	if pw != "******" {
+		t.Fatalf("expected ******, got %s", pw)
+	}
+}
+
+// Test_getPassword_EmptyPreSharedKey untuk coverage when PreSharedKey.1.PreSharedKey exists but empty
+func Test_getPassword_EmptyPreSharedKey(t *testing.T) {
+	wlanData := map[string]interface{}{
+		"PreSharedKey": map[string]interface{}{
+			"1": map[string]interface{}{
+				"PreSharedKey": map[string]interface{}{"_value": ""},
+			},
+		},
+	}
+	pw := getPassword(wlanData, false)
+	if pw != "******" {
+		t.Fatalf("expected ******, got %s", pw)
 	}
 }
 
@@ -1627,6 +1705,27 @@ func Test_getBand_Unknown(t *testing.T) {
 	b := getBand(map[string]interface{}{}, "99")
 	if b != "Unknown" {
 		t.Fatalf("expected Unknown, got %s", b)
+	}
+}
+
+// Test_formatDuration tests all branches of formatDuration function
+func Test_formatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"seconds", 30 * time.Second, "30 seconds"},
+		{"minutes", 45 * time.Minute, "45 minutes"},
+		{"hours", 5 * time.Hour, "5.0 hours"},
+		{"days", 48 * time.Hour, "2.0 days"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatDuration(tt.duration)
+			assert.Equal(t, tt.expected, result)
+		})
 	}
 }
 
@@ -2275,15 +2374,48 @@ func TestRunServerShutdownError(t *testing.T) {
 	// Give server time to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Send shutdown signal
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT)
-	quit <- syscall.SIGINT
+	// Send actual SIGINT signal to the process
+	p, _ := os.FindProcess(os.Getpid())
+	_ = p.Signal(syscall.SIGINT)
 
-	// Wait for result
-	err := <-serverErr
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "shutdown error")
+	// Wait for result with timeout
+	select {
+	case err := <-serverErr:
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "shutdown error")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Test timed out waiting for server shutdown")
+	}
+}
+
+func TestRunServerWithCustomStaleThreshold(t *testing.T) {
+	// Set custom STALE_THRESHOLD_MINUTES environment variable
+	os.Setenv("STALE_THRESHOLD_MINUTES", "60")
+	defer os.Unsetenv("STALE_THRESHOLD_MINUTES")
+
+	// Start server in a goroutine
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- runServer(":0")
+	}()
+
+	// Give server time to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify stale threshold was set correctly (60 minutes)
+	assert.Equal(t, 60*time.Minute, staleThreshold)
+
+	// Send shutdown signal
+	p, _ := os.FindProcess(os.Getpid())
+	_ = p.Signal(syscall.SIGINT)
+
+	// Wait for shutdown
+	select {
+	case <-serverErr:
+		// Server shut down
+	case <-time.After(5 * time.Second):
+		t.Fatal("Test timed out")
+	}
 }
 
 func TestMainFunctionWithLoggerError(t *testing.T) {
@@ -2427,11 +2559,11 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 	// Subtest: Success on first attempt
 	t.Run("Success on first attempt", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				query := r.URL.Query().Get("query")
 				if strings.Contains(query, mockDeviceIP) {
 					w.WriteHeader(http.StatusOK)
-					_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+					_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 					return
 				}
 				w.WriteHeader(http.StatusOK)
@@ -2481,9 +2613,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 	t.Run("Success after refresh", func(t *testing.T) {
 		attemptCount := 0
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 
@@ -2563,9 +2695,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 	// Subtest: Timeout (covers errors.Is(err, context.DeadlineExceeded))
 	t.Run("Timeout", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			// Simulate slow response to trigger timeout in getWLANData
@@ -2601,9 +2733,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 	t.Run("Custom retry parameters", func(t *testing.T) {
 		attemptCount := 0
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 
@@ -2654,9 +2786,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 	// Subtest: Max retries exceeded
 	t.Run("Max retries exceeded", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			// Always return empty WLAN data
@@ -2684,9 +2816,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 	// Subtest: Error getting WLAN data
 	t.Run("Error getting WLAN data", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			// Return error for WLAN data
@@ -2715,9 +2847,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		attemptCount := 0
 		refreshErrorCount := 0
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 
@@ -2784,9 +2916,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		defer func() { logger = originalLogger }()
 
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusOK)
@@ -2824,9 +2956,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		defer func() { logger = originalLogger }()
 
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusOK)
@@ -2864,9 +2996,9 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		defer func() { logger = originalLogger }()
 
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			w.WriteHeader(http.StatusOK)
@@ -2897,13 +3029,14 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		core := zapcore.NewCore(encoder, zapcore.AddSync(&logBuffer), zap.InfoLevel)
 		testLogger := zap.New(core)
 		originalLogger := logger
+
 		logger = testLogger
 		defer func() { logger = originalLogger }()
 
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("projection") == "_id" {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
 			// Respond instantly with empty WLAN data to enter retry loop
@@ -3135,9 +3268,9 @@ func TestRouterWithMiddlewareEnabled(t *testing.T) {
 
 	// Create mock GenieACS server
 	mockGenieServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `"}]`))
+			_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 			return
 		}
 		w.WriteHeader(http.StatusOK)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
+
+// mockDeviceResponseHandlers returns a mock device response with a recent _lastInform timestamp for handlers tests
+func mockDeviceResponseHandlers(deviceID string) string {
+	lastInform := time.Now().UnixMilli()
+	return fmt.Sprintf(`[{"_id": "%s", "_lastInform": %d}]`, deviceID, lastInform)
+}
 
 func TestGetLANDeviceFromDeviceData(t *testing.T) {
 	t.Run("Valid LANDevice", func(t *testing.T) {
@@ -93,11 +100,11 @@ func TestGetWLANConfigurationFromLANDevice(t *testing.T) {
 func TestExtractDeviceIDByIP_Integration(t *testing.T) {
 	// Setup mock server
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			query := r.URL.Query().Get("query")
 			if strings.Contains(query, "192.168.1.100") {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`[{"_id": "test-device-id"}]`))
+				_, _ = w.Write([]byte(mockDeviceResponseHandlers("test-device-id")))
 				return
 			}
 		}
@@ -275,9 +282,9 @@ func TestUpdateWLANParameter_Success(t *testing.T) {
 	}]`
 
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`[{"_id": "test-device"}]`))
+			_, _ = w.Write([]byte(mockDeviceResponseHandlers("test-device")))
 			return
 		}
 		if strings.Contains(r.URL.Path, "/tasks") {
@@ -344,7 +351,7 @@ func TestUpdateWLANParameter_Success(t *testing.T) {
 func TestUpdateWLANParameter_DeviceNotFound(t *testing.T) {
 	// Setup mock server that returns empty device list
 	notFoundHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`[]`))
 			return
@@ -424,9 +431,9 @@ func TestUpdateWLANParameter_WLANValidationFailure(t *testing.T) {
 	}]`
 
 	disabledHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("projection") == "_id" {
+		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`[{"_id": "test-device-disabled"}]`))
+			_, _ = w.Write([]byte(mockDeviceResponseHandlers("test-device-disabled")))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
