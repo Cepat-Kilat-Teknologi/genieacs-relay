@@ -162,8 +162,13 @@ type Response struct {
 func runServer(addr string) error {
 	// load config
 	serverAddr = getEnv("SERVER_ADDR", addr)
-	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://localhost:7557")
-	nbiAuthKey = getEnv("NBI_AUTH_KEY", "ThisIsNBIAuthKey")
+	geniesBaseURL = getEnv("GENIEACS_BASE_URL", DefaultGenieACSURL)
+	nbiAuthKey = getEnv("NBI_AUTH_KEY", DefaultNBIAuthKey)
+
+	// Warn if NBI_AUTH_KEY is not set (security best practice)
+	if nbiAuthKey == "" {
+		logger.Warn("NBI_AUTH_KEY environment variable is not set - API authentication may fail")
+	}
 
 	// start worker pool
 	taskWorkerPool.Start()

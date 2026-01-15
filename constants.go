@@ -44,9 +44,10 @@ const (
 
 // HTTP and timeout configurations
 const (
-	DefaultServerAddr       = ":8080"
-	DefaultGenieACSURL      = "http://localhost:7557"
-	DefaultNBIAuthKey       = "ThisIsNBIAuthKey"
+	DefaultServerAddr  = ":8080"
+	DefaultGenieACSURL = "http://localhost:7557"
+	// DefaultNBIAuthKey is intentionally empty - MUST be set via NBI_AUTH_KEY environment variable
+	DefaultNBIAuthKey       = ""
 	DefaultHTTPTimeout      = 15 * time.Second
 	DefaultCacheTimeout     = 30 * time.Second
 	DefaultShutdownTimeout  = 30 * time.Second
