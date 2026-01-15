@@ -24,11 +24,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// Task types for worker pool operations - constants to identify different task types
+// Legacy task type constants for backward compatibility with existing code
 const (
-	taskTypeSetParams    = "setParameterValues" // Task to set parameter values on devices
-	taskTypeApplyChanges = "applyChanges"       // Task to apply configuration changes
-	taskTypeRefreshWLAN  = "refreshWLAN"        // Task to refresh WLAN configuration data
+	taskTypeSetParams    = TaskTypeSetParams
+	taskTypeApplyChanges = TaskTypeApplyChanges
+	taskTypeRefreshWLAN  = TaskTypeRefreshWLAN
 )
 
 // Global variables for application configuration and shared resources
@@ -880,20 +880,20 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		// Log error and return 404 if device not found
-		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, err.Error())
 		return
 	}
 	// Retrieve WLAN configuration data for the device
 	wlanData, err := getWLANData(r.Context(), deviceID)
 	if err != nil {
 		// Log error and return 500 if WLAN data retrieval fails
-		logger.Info("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, err.Error())
 		return
 	}
 	// Return successful response with WLAN data
-	sendResponse(w, http.StatusOK, "OK", wlanData)
+	sendResponse(w, http.StatusOK, StatusOK, wlanData)
 }
 
 // getSSIDByIPForceHandler retrieves WLAN/SSID information, triggering refresh if needed
@@ -903,8 +903,8 @@ func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
 	// --- Step 1: get device ID ---
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
-		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, err.Error())
 		return
 	}
 
