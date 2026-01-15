@@ -58,8 +58,20 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 | `GENIEACS_BASE_URL` | No | `http://localhost:7557` | GenieACS server URL |
 | `NBI_AUTH_KEY` | **Yes** | *(empty)* | Authentication key for GenieACS NBI |
 | `SERVER_ADDR` | No | `:8080` | Server listen address |
+| `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication for incoming requests |
+| `AUTH_KEY` | Conditional | *(empty)* | API key for authenticating incoming requests (required if `MIDDLEWARE_AUTH=true`) |
 
 > **Security Warning**: Never commit `.env` files with real credentials. Use `.env.example` as a template.
+
+### API Authentication
+
+By default, the API Gateway does **not** require authentication for incoming requests. To enable API key authentication:
+
+1. Set `MIDDLEWARE_AUTH=true` in your `.env` file
+2. Set `AUTH_KEY` to your desired API key value
+3. Include the `X-API-Key` header in all requests to `/api/v1/genieacs/*` endpoints
+
+**Note:** The `/health` endpoint does **not** require authentication, even when `MIDDLEWARE_AUTH=true`.
 
 ---
 
@@ -174,6 +186,8 @@ Utilities:
 
 ## API Usage
 
+> **Note:** The `X-API-Key` header in the examples below is **only required** when `MIDDLEWARE_AUTH=true`. If authentication is disabled (default), you can omit the header.
+
 ### Health Check
 
 ```bash
@@ -196,8 +210,12 @@ curl http://localhost:8080/health | jq
 ### GET SSID
 
 ```bash
+# With authentication enabled (MIDDLEWARE_AUTH=true)
 curl -H "X-API-Key: YourSecretKey" \
   "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
+
+# Without authentication (MIDDLEWARE_AUTH=false, default)
+curl "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
 ```
 
 **Response:**
@@ -398,6 +416,23 @@ curl -X POST -H "X-API-Key: YourSecretKey" \
 ---
 
 ## Common Error Responses
+
+### 401 Unauthorized (when MIDDLEWARE_AUTH=true)
+```json
+{
+  "code": 401,
+  "status": "Unauthorized",
+  "error": "Missing X-API-Key header"
+}
+```
+
+```json
+{
+  "code": 401,
+  "status": "Unauthorized",
+  "error": "Invalid API key"
+}
+```
 
 ### 400 Bad Request
 ```json
