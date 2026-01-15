@@ -16,8 +16,9 @@ import (
 
 // mockDeviceResponseHandlers returns a mock device response with a recent _lastInform timestamp for handlers tests
 func mockDeviceResponseHandlers(deviceID string) string {
-	lastInform := time.Now().UnixMilli()
-	return fmt.Sprintf(`[{"_id": "%s", "_lastInform": %d}]`, deviceID, lastInform)
+	// GenieACS returns _lastInform as ISO 8601 date string (e.g., "2025-01-16T10:30:00.000Z")
+	lastInform := time.Now().UTC().Format(time.RFC3339)
+	return fmt.Sprintf(`[{"_id": "%s", "_lastInform": "%s"}]`, deviceID, lastInform)
 }
 
 func TestGetLANDeviceFromDeviceData(t *testing.T) {
