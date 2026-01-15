@@ -1,6 +1,6 @@
 services:
   api:
-    image: cepatkilatteknologi/acs-api-gateway:1.0
+    image: cepatkilatteknologi/acs-api-gateway:2.0
     container_name: acs-api-gateway-prod
     env_file:
       - .env
@@ -8,7 +8,9 @@ services:
       - TZ=Asia/Jakarta
       - GENIEACS_BASE_URL=${GENIEACS_BASE_URL}
       - NBI_AUTH_KEY=${NBI_AUTH_KEY}
-      - API_KEY=${API_KEY}
+      - SERVER_ADDR=${SERVER_ADDR:-:8080}
+      - MIDDLEWARE_AUTH=${MIDDLEWARE_AUTH:-false}
+      - AUTH_KEY=${AUTH_KEY}
     ports:
       - "8080:8080"
     restart: unless-stopped

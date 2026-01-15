@@ -18,20 +18,20 @@ TEST_DIR        := test-results
         docker-build docker-push \
         docker-buildx docker-pushx \
         healthcheck lint format check-deps \
-        check-deps-intall help
+        check-deps-install help
 
 .DEFAULT_GOAL := help
 
 # Setup
-## setup: Setup environment (copy .env.template to .env and create directories)
+## setup: Setup environment (copy .env.example to .env and create directories)
 setup: env-copy dirs
 	@echo ">> Setup completed. Please edit .env file with your configuration."
 
-## env-copy: Copy .env.template to .env
+## env-copy: Copy .env.example to .env
 env-copy:
 	@if [ ! -f .env ]; then \
-		echo ">> Copying .env.template to .env..."; \
-		cp .env.template .env; \
+		echo ">> Copying .env.example to .env..."; \
+		cp .env.example .env; \
 		echo ">> Please edit .env file with your configuration."; \
 	else \
 		echo ">> .env file already exists. Skipping copy."; \

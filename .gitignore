@@ -13,6 +13,7 @@ tmp/
 
 # Coverage & test
 coverage.out
+coverage.txt
 test-results/
 *.cover
 *.html
@@ -27,7 +28,10 @@ test-results/
 .DS_Store
 Thumbs.db
 
-# Environment files
+# Environment files (NEVER commit these - contain secrets)
 .env
 .env.local
 .env.*.local
+.env_templates
+
+# Keep .env.example as a template (safe to commit)

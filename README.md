@@ -3,45 +3,84 @@
 [![ci](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/Cepat-Kilat-Teknologi/acs-api-gateway/graph/badge.svg?token=Q0XLKG2ZPE)](https://codecov.io/gh/Cepat-Kilat-Teknologi/acs-api-gateway)
 
-A lightweight **API Gateway** for managing devices via **GenieACS**, built with **Love**.  
+A lightweight **API Gateway** for managing devices via **GenieACS**, built with **Go**.
 This service provides endpoints for retrieving and updating device SSID, WiFi passwords, and DHCP clients.
 
 ---
 
-## 🚀 Features
-- Built in **Go (Golang)**
+## Features
+
+- Built in **Go (Golang)** with clean architecture
+- **100% test coverage** with race condition detection
 - Dockerized with **multi-stage builds** (development, builder, production)
 - Supports **Docker Compose** for both development and production
+- **Caching** for device data with configurable TTL
+- **Worker pool** for asynchronous task processing
 - API Endpoints:
     - Get / Update SSID
+    - Get SSID with Force Refresh (retry mechanism)
     - Post / Refresh SSID Data
     - Update WiFi Password
     - Get DHCP Clients
+    - Clear Cache
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```bash
 .
-├── Dockerfile # Multi-stage build (dev, builder, production)
-├── Makefile # Development, testing, Docker, and CI helper
-├── docker-compose.yml # Local development environment
+├── main.go              # Application entry point and core logic
+├── constants.go         # All constants (paths, timeouts, messages)
+├── models.go            # Data structures and navigation helpers
+├── handlers.go          # HTTP handler helper functions
+├── main_test.go         # Unit tests for main
+├── constants_test.go    # Unit tests for constants
+├── models_test.go       # Unit tests for models
+├── handlers_test.go     # Unit tests for handlers
+├── Dockerfile           # Multi-stage build (dev, builder, production)
+├── Makefile             # Development, testing, Docker, and CI helper
+├── docker-compose.yml   # Local development environment
 ├── docker-compose.prod.yml # Production deployment
-├── go.mod # Go module dependencies
+├── go.mod               # Go module dependencies
 ├── go.sum
-├── main.go # Application entry point
-├── main_test.go # Unit tests
-└── README.md # Documentation
+├── .env.example         # Environment variables template
+├── .gitignore           # Git ignore rules
+└── README.md            # Documentation
 ```
+
 ---
-## 🛠️ Development
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GENIEACS_BASE_URL` | No | `http://localhost:7557` | GenieACS server URL |
+| `NBI_AUTH_KEY` | **Yes** | *(empty)* | Authentication key for GenieACS NBI |
+| `SERVER_ADDR` | No | `:8080` | Server listen address |
+| `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication for incoming requests |
+| `AUTH_KEY` | Conditional | *(empty)* | API key for authenticating incoming requests (required if `MIDDLEWARE_AUTH=true`) |
+
+> **Security Warning**: Never commit `.env` files with real credentials. Use `.env.example` as a template.
+
+### API Authentication
+
+By default, the API Gateway does **not** require authentication for incoming requests. To enable API key authentication:
+
+1. Set `MIDDLEWARE_AUTH=true` in your `.env` file
+2. Set `AUTH_KEY` to your desired API key value
+3. Include the `X-API-Key` header in all requests to `/api/v1/genieacs/*` endpoints
+
+**Note:** The `/health` endpoint does **not** require authentication, even when `MIDDLEWARE_AUTH=true`.
+
+---
+
+## Development
 
 ### Prerequisites
-- [Go](https://go.dev/)
+- [Go 1.21+](https://go.dev/)
 - [Docker](https://www.docker.com/)
 - [Docker Compose](https://docs.docker.com/compose/)
-
 
 ### 1. Clone Repository
 ```bash
@@ -49,32 +88,43 @@ git clone https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway.git
 cd acs-api-gateway
 ```
 
-### 2. Setup
+### 2. Setup Environment
 ```bash
 make setup
 ```
 
-#### This will:
-- Copy .env.template to .env
-- Create required directories (bin/, test-results/, tmp/)
+This will:
+- Copy `.env.example` to `.env`
+- Create required directories (`bin/`, `test-results/`, `tmp/`)
 
-### 3. Run Locally
+### 3. Configure Environment
+Edit `.env` file with your configuration:
+```bash
+GENIEACS_BASE_URL=http://your-genieacs-server:7557
+NBI_AUTH_KEY=your-secret-key-here
+```
+
+### 4. Run Locally
 ```bash
 make run
 ```
-or with Docker Compose:
+
+Or with Docker Compose:
 ```bash
 make up
 ```
 
-### 4. Run tests
+### 5. Run Tests
 ```bash
-make test
-make test-coverage
-make test-html
+make test            # Run all tests
+make test-coverage   # Run with coverage analysis
+make test-html       # Generate HTML coverage report
 ```
 
-### For Information on Makefile commands
+---
+
+## Makefile Commands
+
 ```bash
 ACS API Gateway Management Makefile
 
@@ -82,7 +132,7 @@ Usage:
   make [target]
 
 First, setup environment:
-  make setup           Copy .env.template to .env and setup environment
+  make setup           Copy .env.example to .env and setup environment
   make env-copy        Copy .env file only
 
 Local Development:
@@ -131,45 +181,45 @@ Utilities:
   make clean-all       Clean everything including Docker
   make help            Show this help message
 ```
+
 ---
-## 📡 API Usage
 
-## GET SSID
+## API Usage
+
+> **Note:** The `X-API-Key` header in the examples below is **only required** when `MIDDLEWARE_AUTH=true`. If authentication is disabled (default), you can omit the header.
+
+### Health Check
 
 ```bash
-curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
-"http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
+curl http://localhost:8080/health | jq
 ```
-### Response (when not yet available)
 
-```bash
+**Response:**
+```json
 {
   "code": 200,
   "status": "OK",
-  "data": null
-}
-```
-### Trigger SSID Refresh
-
-```bash
-curl -X POST -H "X-API-Key: YourSecretGatewayAPI_Key" \
-"http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164/refresh" | jq
-```
-
-### Refresh Response
-```bash
-{
-  "code": 202,
-  "status": "Accepted",
   "data": {
-    "message": "Refresh task submitted. Please query the GET endpoint again after a few moments."
+    "status": "healthy"
   }
 }
 ```
 
-### Re-query GET SSID
+---
+
+### GET SSID
 
 ```bash
+# With authentication enabled (MIDDLEWARE_AUTH=true)
+curl -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
+
+# Without authentication (MIDDLEWARE_AUTH=false, default)
+curl "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
+```
+
+**Response:**
+```json
 {
   "code": 200,
   "status": "OK",
@@ -190,18 +240,79 @@ curl -X POST -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
+---
+
+### GET SSID with Force Refresh
+
+This endpoint automatically triggers a refresh if WLAN data is not available and retries until data is found or timeout.
+
+```bash
+curl -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/force/ssid/10.90.8.164" | jq
+```
+
+**Optional Query Parameters:**
+- `max_retries` - Maximum number of retry attempts (default: 12)
+- `retry_delay_ms` - Delay between retries in milliseconds (default: 5000)
+
+**Example with custom parameters:**
+```bash
+curl -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/force/ssid/10.90.8.164?max_retries=5&retry_delay_ms=2000" | jq
+```
+
+**Response:**
+```json
+{
+  "code": 200,
+  "status": "OK",
+  "data": {
+    "attempts": 2,
+    "wlan_data": [
+      {
+        "wlan": "1",
+        "ssid": "MyHomeWiFi_2.4G",
+        "password": "SuperSecretPassword",
+        "band": "2.4GHz"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Trigger SSID Refresh
+
+```bash
+curl -X POST -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164/refresh" | jq
+```
+
+**Response:**
+```json
+{
+  "code": 202,
+  "status": "Accepted",
+  "data": {
+    "message": "Refresh task submitted. Please query the GET endpoint again after a few moments."
+  }
+}
+```
+
+---
+
 ### Update SSID
 
 ```bash
-curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
--X PUT "http://localhost:8080/api/v1/genieacs/ssid/update/1/10.90.8.164" \
--H "Content-Type: application/json" \
--d '{"ssid": "New_SSID_Name"}' | jq
+curl -H "X-API-Key: YourSecretKey" \
+  -X PUT "http://localhost:8080/api/v1/genieacs/ssid/update/1/10.90.8.164" \
+  -H "Content-Type: application/json" \
+  -d '{"ssid": "New_SSID_Name"}' | jq
 ```
 
-### Response SSID Update
-
-```bash
+**Response:**
+```json
 {
   "code": 200,
   "status": "OK",
@@ -215,18 +326,19 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
+---
+
 ### Update Password
 
 ```bash
-curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
--X PUT "http://localhost:8080/api/v1/genieacs/password/update/1/10.90.8.164" \
--H "Content-Type: application/json" \
--d '{"password": "NewSecurePassword123"}' | jq
+curl -H "X-API-Key: YourSecretKey" \
+  -X PUT "http://localhost:8080/api/v1/genieacs/password/update/1/10.90.8.164" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "NewSecurePassword123"}' | jq
 ```
 
-### Response Password Update
-
-```bash
+**Response:**
+```json
 {
   "code": 200,
   "status": "OK",
@@ -239,16 +351,23 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
-## GET DHCP Clients
+---
+
+### GET DHCP Clients
 
 ```bash
-curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
-"http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164" | jq
+curl -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164" | jq
 ```
 
-### Successful Response Get DHCP Clients
-
+**With refresh:**
 ```bash
+curl -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164?refresh=true" | jq
+```
+
+**Response:**
+```json
 {
   "code": 200,
   "status": "OK",
@@ -267,29 +386,65 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
-## ❌ Common Error Responses
+---
+
+### Clear Cache
+
+Clear cache for specific device:
+```bash
+curl -X POST -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/cache/clear?device_id=DEVICE-ID-HERE" | jq
+```
+
+Clear all cache:
+```bash
+curl -X POST -H "X-API-Key: YourSecretKey" \
+  "http://localhost:8080/api/v1/genieacs/cache/clear" | jq
+```
+
+**Response:**
+```json
+{
+  "code": 200,
+  "status": "OK",
+  "data": {
+    "message": "Cache cleared"
+  }
+}
+```
+
+---
+
+## Common Error Responses
+
+### 401 Unauthorized (when MIDDLEWARE_AUTH=true)
+```json
+{
+  "code": 401,
+  "status": "Unauthorized",
+  "error": "Missing X-API-Key header"
+}
+```
+
+```json
+{
+  "code": 401,
+  "status": "Unauthorized",
+  "error": "Invalid API key"
+}
+```
 
 ### 400 Bad Request
-
-```bash
+```json
 {
   "code": 400,
   "status": "Bad Request",
   "error": "Password value required"
 }
 ```
-### 401 Unauthorized
 
-```bash
-{
-  "code": 401,
-  "status": "Unauthorized",
-  "error": "Invalid API Key"
-}
-```
 ### 404 Not Found
-
-```bash
+```json
 {
   "code": 404,
   "status": "Not Found",
@@ -297,5 +452,26 @@ curl -H "X-API-Key: YourSecretGatewayAPI_Key" \
 }
 ```
 
-## 📜 License
+### 408 Request Timeout
+```json
+{
+  "code": 408,
+  "status": "Timeout",
+  "error": "Operation timed out while retrieving WLAN data"
+}
+```
+
+### 500 Internal Server Error
+```json
+{
+  "code": 500,
+  "status": "Internal Server Error",
+  "error": "Could not verify WLAN status."
+}
+```
+
+---
+
+## License
+
 This project is licensed under the MIT License. See the [LICENSE](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/blob/main/LICENSE) file for details.
