@@ -60,8 +60,31 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 | `SERVER_ADDR` | No | `:8080` | Server listen address |
 | `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication for incoming requests |
 | `AUTH_KEY` | Conditional | *(empty)* | API key for authenticating incoming requests (required if `MIDDLEWARE_AUTH=true`) |
+| `STALE_THRESHOLD_MINUTES` | No | `30` | Time in minutes after which a device is considered stale |
 
 > **Security Warning**: Never commit `.env` files with real credentials. Use `.env.example` as a template.
+
+### Stale Device Validation
+
+When querying devices by IP address, the API validates whether the device has recently reported to GenieACS using the `_lastInform` timestamp. This helps prevent returning data for devices that may have been disconnected and their IP reassigned to another device.
+
+**How it works:**
+1. When a device is queried by IP, the API checks the `_lastInform` timestamp from GenieACS
+2. If the device hasn't reported within the threshold (default: 30 minutes), it's considered "stale"
+3. Stale devices return an error with details about when the device was last seen
+
+**Configuration:**
+- Set `STALE_THRESHOLD_MINUTES` to adjust the threshold (in minutes)
+- Set to `0` to disable stale device validation
+
+**Example error response for stale device:**
+```json
+{
+  "code": 404,
+  "status": "Not Found",
+  "error": "device with IP 10.90.14.41 is stale (last seen: 45 minutes ago). The IP may have been reassigned to another device"
+}
+```
 
 ### API Authentication
 
@@ -239,6 +262,13 @@ curl "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
   ]
 }
 ```
+
+**Password Display Behavior:**
+| Condition | Display Value |
+|-----------|---------------|
+| Password available | Actual password (e.g., `SuperSecretPassword`) |
+| Password encrypted (field exists but empty) | `******` |
+| Password field not found | `N/A` |
 
 ---
 
