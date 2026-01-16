@@ -1,7 +1,7 @@
 services:
   api:
-    image: cepatkilatteknologi/acs-api-gateway:2.0
-    container_name: acs-api-gateway-prod
+    image: cepatkilatteknologi/genieacs-relay:2.0
+    container_name: genieacs-relay-prod
     env_file:
       - .env
     environment:
