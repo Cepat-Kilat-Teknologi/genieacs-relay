@@ -2,9 +2,9 @@
 # Use with VS Code REST Client extension or IntelliJ HTTP Client
 #
 # Configuration:
-# - Change @baseUrl to your server address
-# - Change @apiKey to your API key (if MIDDLEWARE_AUTH=true)
-# - Change @deviceIP to target device IP address
+# - Change baseUrl to your server address
+# - Change apiKey to your API key (if MIDDLEWARE_AUTH=true)
+# - Change deviceIP to target device IP address
 
 ### Variables
 @baseUrl = http://localhost:8080
