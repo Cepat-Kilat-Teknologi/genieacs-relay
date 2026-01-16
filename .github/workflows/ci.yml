@@ -10,9 +10,9 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: cepatkilatteknologi/acs-api-gateway
+  IMAGE_NAME: cepatkilatteknologi/genieacs-relay
   GO_VERSION: '1.25'
-  IMAGE_VERSION: '2.0'
+  IMAGE_VERSION: '1.0'
 
 jobs:
   # ========================
