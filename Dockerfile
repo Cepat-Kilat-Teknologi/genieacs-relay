@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 
 # Stage 3: Final image
 FROM alpine:3.19 AS production
-LABEL org.opencontainers.image.source="https://github.com/cepatkilatteknologi/acs-api-gateway"
+LABEL org.opencontainers.image.source="https://github.com/Cepat-Kilat-Teknologi/genieacs-relay"
 RUN apk add --no-cache tzdata ca-certificates curl \
     && cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime \
     && echo "Asia/Jakarta" > /etc/timezone \
