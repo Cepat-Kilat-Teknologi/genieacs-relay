@@ -36,4 +36,4 @@ Thumbs.db
 
 # Keep .env.example as a template (safe to commit)
 
-acs-api-gateway
+genieacs-relay
