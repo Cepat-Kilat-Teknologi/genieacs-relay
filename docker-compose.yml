@@ -3,7 +3,7 @@ services:
     build:
       context: .
       target: development
-    container_name: acs-api-gateway-dev
+    container_name: genieacs-relay-dev
     env_file:
       - .env
     environment:
