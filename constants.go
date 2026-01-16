@@ -120,16 +120,42 @@ const (
 	StatusTimeout       = "Timeout"
 )
 
+// Input validation constraints
+const (
+	// MinPasswordLength is the minimum required password length for WLAN security
+	MinPasswordLength = 8
+	// MaxPasswordLength is the maximum allowed password length
+	MaxPasswordLength = 63
+	// MinSSIDLength is the minimum required SSID length
+	MinSSIDLength = 1
+	// MaxSSIDLength is the maximum allowed SSID length (per IEEE 802.11 standard)
+	MaxSSIDLength = 32
+	// MaxRequestBodySize is the maximum allowed request body size (1KB - sufficient for SSID/password updates)
+	MaxRequestBodySize = 1024
+)
+
 // Error messages
 const (
 	ErrInvalidJSON          = "Invalid JSON format"
 	ErrSSIDRequired         = "SSID value required"
+	ErrSSIDTooLong          = "SSID must be at most 32 characters"
+	ErrSSIDInvalidSpaces    = "The beginning and end cannot be Spaces"
 	ErrPasswordRequired     = "Password value required"
+	ErrPasswordTooShort     = "Password must be at least 8 characters"
+	ErrPasswordTooLong      = "Password must be at most 63 characters"
 	ErrWLANValidationFailed = "Could not verify WLAN status."
 	ErrOperationTimeout     = "Operation timed out while retrieving WLAN data"
 	ErrMissingAPIKey        = "Missing X-API-Key header"
 	ErrInvalidAPIKey        = "Invalid API key"
 	ErrDeviceStale          = "device with IP %s is stale (last seen: %s ago). The IP may have been reassigned to another device"
+	ErrInvalidIPAddress     = "invalid IP address format: %s"
+	ErrInvalidWLANID        = "WLAN ID must be a number between 1 and 99"
+	ErrRequestBodyTooLarge  = "Request body too large"
+	ErrSSIDInvalidChars     = "SSID contains invalid characters"
+	ErrInvalidAuthMode      = "Invalid authentication mode. Valid values: Open, WPA, WPA2, WPA/WPA2"
+	ErrInvalidEncryption    = "Invalid encryption mode. Valid values: AES, TKIP, TKIP+AES"
+	ErrInvalidMaxClients    = "Max clients must be between 1 and 64"
+	ErrPasswordRequiredAuth = "Password is required for WPA, WPA2, or WPA/WPA2 authentication"
 )
 
 // HTTP status messages for authentication
@@ -147,5 +173,135 @@ const (
 
 // XSD types for GenieACS
 const (
-	XSDString = "xsd:string"
+	XSDString      = "xsd:string"
+	XSDBoolean     = "xsd:boolean"
+	XSDUnsignedInt = "xsd:unsignedInt"
+)
+
+// WLAN configuration parameter paths (TR-069)
+const (
+	PathWLANEnableFormat             = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.Enable"
+	PathWLANSSIDAdvertisementFormat  = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSIDAdvertisementEnabled"
+	PathWLANMaxAssocDevicesFormat    = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.MaxAssociatedDevices"
+	PathWLANBeaconTypeFormat         = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.BeaconType"
+	PathWLANWPAEncryptionModesFormat = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.WPAEncryptionModes"
+	PathWLAN11iEncryptionModesFormat = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.IEEE11iEncryptionModes"
+	PathWLANWPAAuthModeFormat        = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.WPAAuthenticationMode"
+	PathWLAN11iAuthModeFormat        = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.IEEE11iAuthenticationMode"
+)
+
+// WLAN Authentication modes (BeaconType values in TR-069)
+const (
+	AuthModeOpen    = "Open"      // No security
+	AuthModeWPA     = "WPA"       // WPA only
+	AuthModeWPA2    = "11i"       // WPA2 (IEEE 802.11i)
+	AuthModeWPAWPA2 = "WPAand11i" // WPA/WPA2 mixed mode
+)
+
+// WLAN Encryption modes
+const (
+	EncryptionAES     = "AESEncryption"        // AES (CCMP) - recommended
+	EncryptionTKIP    = "TKIPEncryption"       // TKIP - legacy
+	EncryptionTKIPAES = "TKIPandAESEncryption" // TKIP+AES mixed
+)
+
+// WLAN Authentication mode for PSK
+const (
+	WPAAuthModePSK = "PSKAuthentication"
+)
+
+// Default WLAN configuration values
+const (
+	DefaultMaxClients = 32    // Default maximum associated devices
+	MinMaxClients     = 1     // Minimum allowed max clients
+	MaxMaxClients     = 64    // Maximum allowed max clients
+	DefaultHiddenSSID = false // SSID is visible by default
+	DefaultAuthMode   = AuthModeWPA2
+	DefaultEncryption = EncryptionAES
+)
+
+// WLAN Radio optimization parameter paths (TR-069)
+const (
+	PathWLANChannelFormat           = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.Channel"
+	PathWLANAutoChannelEnableFormat = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.AutoChannelEnable"
+	PathWLANOperatingStandardFormat = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.Standard"
+	PathWLANChannelBandwidthFormat  = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.OperatingChannelBandwidth"
+	PathWLANTransmitPowerFormat     = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.TransmitPower"
+)
+
+// Channel constants
+const (
+	ChannelAuto = "Auto"
+)
+
+// Valid channels for 2.4GHz band (1-13)
+var ValidChannels24GHz = map[string]bool{
+	"Auto": true,
+	"1":    true, "2": true, "3": true, "4": true, "5": true,
+	"6": true, "7": true, "8": true, "9": true, "10": true,
+	"11": true, "12": true, "13": true,
+}
+
+// Valid channels for 5GHz band
+var ValidChannels5GHz = map[string]bool{
+	"Auto": true,
+	"36":   true, "40": true, "44": true, "48": true,
+	"52": true, "56": true, "60": true, "64": true,
+	"149": true, "153": true, "157": true, "161": true,
+}
+
+// Valid WiFi modes for 2.4GHz band
+var ValidModes24GHz = map[string]string{
+	"b":     "b",
+	"g":     "g",
+	"n":     "n",
+	"b/g":   "b,g",
+	"g/n":   "g,n",
+	"b/g/n": "b,g,n",
+}
+
+// Valid WiFi modes for 5GHz band
+var ValidModes5GHz = map[string]string{
+	"a":      "a",
+	"n":      "n",
+	"ac":     "ac",
+	"a/n":    "a,n",
+	"a/n/ac": "a,n,ac",
+}
+
+// Valid bandwidth options for 2.4GHz band
+var ValidBandwidth24GHz = map[string]bool{
+	"20MHz": true,
+	"40MHz": true,
+	"Auto":  true,
+}
+
+// Valid bandwidth options for 5GHz band
+var ValidBandwidth5GHz = map[string]bool{
+	"20MHz": true,
+	"40MHz": true,
+	"80MHz": true,
+	"Auto":  true,
+}
+
+// Valid transmit power values (percentage)
+var ValidTransmitPower = map[int]bool{
+	0: true, 20: true, 40: true, 60: true, 80: true, 100: true,
+}
+
+// Error messages for WLAN optimization
+const (
+	ErrInvalidChannel24GHz   = "invalid channel '%s' for 2.4GHz band. Valid channels: Auto, 1-13"
+	ErrInvalidChannel5GHz    = "invalid channel '%s' for 5GHz band. Valid channels: Auto, 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161"
+	ErrInvalidMode24GHz      = "invalid mode '%s' for 2.4GHz band. Valid modes: b, g, n, b/g, g/n, b/g/n"
+	ErrInvalidMode5GHz       = "invalid mode '%s' for 5GHz band. Valid modes: a, n, ac, a/n, a/n/ac"
+	ErrInvalidBandwidth24GHz = "invalid bandwidth '%s' for 2.4GHz band. Valid values: 20MHz, 40MHz, Auto"
+	ErrInvalidBandwidth5GHz  = "invalid bandwidth '%s' for 5GHz band. Valid values: 20MHz, 40MHz, 80MHz, Auto"
+	ErrInvalidTransmitPower  = "invalid transmit power '%d'. Valid values: 0, 20, 40, 60, 80, 100 (percentage)"
+	ErrNoOptimizeFields      = "at least one optimization field must be provided (channel, mode, bandwidth, or transmit_power)"
+)
+
+// Success message for WLAN optimization
+const (
+	MsgWLANOptimizeSubmitted = "WLAN optimization submitted successfully"
 )
