@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// mockDeviceResponseHandlers returns a mock device response with a recent _lastInform timestamp for handlers tests
+// mockDeviceResponseHandlers returns a mock device response with a recent _lastInform timestamp for handler tests
 func mockDeviceResponseHandlers(deviceID string) string {
 	// GenieACS returns _lastInform as ISO 8601 date string (e.g., "2025-01-16T10:30:00.000Z")
 	lastInform := time.Now().UTC().Format(time.RFC3339)
@@ -155,7 +155,8 @@ func TestExtractDeviceIDByIP_Integration(t *testing.T) {
 			assert.False(t, ok)
 		})
 
-		req := httptest.NewRequest("GET", "/test/not-found-ip", nil)
+		// Use valid IP format for the "not found" scenario
+		req := httptest.NewRequest("GET", "/test/192.168.255.255", nil)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)
@@ -250,7 +251,7 @@ func TestValidateWLANAndRespond_Integration(t *testing.T) {
 		errorMockServer := httptest.NewServer(errorMockHandler)
 		defer errorMockServer.Close()
 
-		// Temporarily change base URL to error server
+		// Temporarily change base URL to the error server
 		geniesBaseURL = errorMockServer.URL
 		httpClient = errorMockServer.Client()
 		deviceCacheInstance.clearAll()
@@ -296,6 +297,7 @@ func TestUpdateWLANParameter_Success(t *testing.T) {
 		_, _ = w.Write([]byte(mockDeviceData))
 	})
 
+	// Setup mock server
 	mockServer := httptest.NewServer(mockHandler)
 	defer mockServer.Close()
 
@@ -350,7 +352,7 @@ func TestUpdateWLANParameter_Success(t *testing.T) {
 }
 
 func TestUpdateWLANParameter_DeviceNotFound(t *testing.T) {
-	// Setup mock server that returns empty device list
+	// Setup mock server that returns an empty device list
 	notFoundHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
@@ -406,7 +408,8 @@ func TestUpdateWLANParameter_DeviceNotFound(t *testing.T) {
 		)
 	})
 
-	req := httptest.NewRequest("PUT", "/test/1/not-found-ip", nil)
+	// Use valid IP format for the "not found" scenario
+	req := httptest.NewRequest("PUT", "/test/1/192.168.255.255", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
@@ -414,7 +417,7 @@ func TestUpdateWLANParameter_DeviceNotFound(t *testing.T) {
 }
 
 func TestUpdateWLANParameter_WLANValidationFailure(t *testing.T) {
-	// Setup mock server that returns device with disabled WLAN
+	// Setup mock server that returns a device with disabled WLAN
 	disabledWLANData := `[{
 		"_id": "test-device-disabled",
 		"InternetGatewayDevice": {
@@ -441,6 +444,7 @@ func TestUpdateWLANParameter_WLANValidationFailure(t *testing.T) {
 		_, _ = w.Write([]byte(disabledWLANData))
 	})
 
+	// Setup mock server that returns error for device data
 	disabledServer := httptest.NewServer(disabledHandler)
 	defer disabledServer.Close()
 
@@ -503,4 +507,88 @@ func TestHandlerContext(t *testing.T) {
 	assert.Equal(t, "192.168.1.100", ctx.IP)
 	assert.Equal(t, "1", ctx.WLAN)
 	assert.Equal(t, "test-device-123", ctx.DeviceID)
+}
+
+// TestExtractDeviceIDByIP_ErrorSanitization verifies that error messages are sanitized
+func TestExtractDeviceIDByIP_ErrorSanitization(t *testing.T) {
+	// Setup mock server that returns empty array (device not found)
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer mockServer.Close()
+
+	// Save and restore original values
+	originalURL := geniesBaseURL
+	geniesBaseURL = mockServer.URL
+	defer func() { geniesBaseURL = originalURL }()
+
+	// Initialize logger if needed
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+	}
+
+	r := chi.NewRouter()
+	r.Get("/test/{ip}", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = ExtractDeviceIDByIP(w, r)
+	})
+
+	// Test with valid IP but device not found
+	req := httptest.NewRequest("GET", "/test/192.168.1.100", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	// Verify that error message is sanitized and doesn't contain internal details
+	responseBody := rr.Body.String()
+	assert.NotContains(t, responseBody, "device not found with IP: 192.168.1.100")
+	assert.Contains(t, responseBody, "Device not found")
+}
+
+// TestUpdateWLANParameter_ErrorSanitization verifies that error messages are sanitized
+func TestUpdateWLANParameter_ErrorSanitization(t *testing.T) {
+	// Setup mock server that returns stale device
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a stale device (last inform 2 hours ago)
+		staleTime := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(fmt.Sprintf(`[{"_id": "test-device", "_lastInform": "%s"}]`, staleTime)))
+	}))
+	defer mockServer.Close()
+
+	// Save and restore original values
+	originalURL := geniesBaseURL
+	originalStaleThreshold := staleThreshold
+	geniesBaseURL = mockServer.URL
+	staleThreshold = 30 * time.Minute // Set stale threshold to 30 minutes
+	defer func() {
+		geniesBaseURL = originalURL
+		staleThreshold = originalStaleThreshold
+	}()
+
+	// Initialize logger if needed
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+	}
+
+	r := chi.NewRouter()
+	r.Put("/test/{wlan}/{ip}", func(w http.ResponseWriter, r *http.Request) {
+		UpdateWLANParameter(
+			w, r,
+			PathWLANSSIDFormat,
+			"NewSSID",
+			MsgSSIDUpdateSubmitted,
+			nil,
+		)
+	})
+
+	req := httptest.NewRequest("PUT", "/test/1/192.168.1.100", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	// Verify that error message is sanitized and doesn't contain internal stale details
+	responseBody := rr.Body.String()
+	assert.NotContains(t, responseBody, "is stale")
+	assert.Contains(t, responseBody, "Device is offline or unresponsive")
 }
