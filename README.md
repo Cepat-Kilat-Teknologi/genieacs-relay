@@ -1,9 +1,9 @@
-# ACS API Gateway
+# GenieACS Relay
 
-[![ci](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/Cepat-Kilat-Teknologi/acs-api-gateway/graph/badge.svg?token=Q0XLKG2ZPE)](https://codecov.io/gh/Cepat-Kilat-Teknologi/acs-api-gateway)
+[![ci](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Cepat-Kilat-Teknologi/genieacs-relay/graph/badge.svg?token=Q0XLKG2ZPE)](https://codecov.io/gh/Cepat-Kilat-Teknologi/genieacs-relay)
 
-A lightweight **API Gateway** for managing devices via **GenieACS**, built with **Go**.
+A lightweight **Relay** for managing devices via **GenieACS**, built with **Go**.
 This service provides endpoints for retrieving and updating device SSID, WiFi passwords, and DHCP clients.
 
 ---
@@ -119,8 +119,8 @@ By default, the API Gateway does **not** require authentication for incoming req
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway.git
-cd acs-api-gateway
+git clone https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+cd genieacs-relay
 ```
 
 ### 2. Setup Environment
@@ -161,7 +161,7 @@ make test-html       # Generate HTML coverage report
 ## Makefile Commands
 
 ```bash
-ACS API Gateway Management Makefile
+GenieACS Relay Management Makefile
 
 Usage:
   make [target]
@@ -990,4 +990,4 @@ curl -H "X-API-Key: YourSecretKey" \
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/Cepat-Kilat-Teknologi/acs-api-gateway/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/blob/main/LICENSE) file for details.
