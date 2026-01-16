@@ -235,10 +235,10 @@ curl http://localhost:8080/health | jq
 ```bash
 # With authentication enabled (MIDDLEWARE_AUTH=true)
 curl -H "X-API-Key: YourSecretKey" \
-  "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
+  "http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41" | jq
 
 # Without authentication (MIDDLEWARE_AUTH=false, default)
-curl "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
+curl "http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41" | jq
 ```
 
 **Response:**
@@ -246,20 +246,23 @@ curl "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164" | jq
 {
   "code": 200,
   "status": "OK",
-  "data": [
-    {
-      "wlan": "1",
-      "ssid": "MyHomeWiFi_2.4G",
-      "password": "SuperSecretPassword",
-      "band": "2.4GHz"
-    },
-    {
-      "wlan": "5",
-      "ssid": "MyHomeWiFi_5G",
-      "password": "AnotherPassword",
-      "band": "5GHz"
-    }
-  ]
+  "data": {
+    "attempts": 1,
+    "wlan_data": [
+      {
+        "wlan": "1",
+        "ssid": "5abib7",
+        "password": "******",
+        "band": "2.4GHz"
+      },
+      {
+        "wlan": "5",
+        "ssid": "5abib7-5G",
+        "password": "******",
+        "band": "5GHz"
+      }
+    ]
+  }
 }
 ```
 
@@ -278,7 +281,7 @@ This endpoint automatically triggers a refresh if WLAN data is not available and
 
 ```bash
 curl -H "X-API-Key: YourSecretKey" \
-  "http://localhost:8080/api/v1/genieacs/force/ssid/10.90.8.164" | jq
+  "http://localhost:8080/api/v1/genieacs/force/ssid/10.90.14.41" | jq
 ```
 
 **Optional Query Parameters:**
@@ -288,7 +291,7 @@ curl -H "X-API-Key: YourSecretKey" \
 **Example with custom parameters:**
 ```bash
 curl -H "X-API-Key: YourSecretKey" \
-  "http://localhost:8080/api/v1/genieacs/force/ssid/10.90.8.164?max_retries=5&retry_delay_ms=2000" | jq
+  "http://localhost:8080/api/v1/genieacs/force/ssid/10.90.14.41?max_retries=5&retry_delay_ms=2000" | jq
 ```
 
 **Response:**
@@ -297,13 +300,19 @@ curl -H "X-API-Key: YourSecretKey" \
   "code": 200,
   "status": "OK",
   "data": {
-    "attempts": 2,
+    "attempts": 1,
     "wlan_data": [
       {
         "wlan": "1",
-        "ssid": "MyHomeWiFi_2.4G",
-        "password": "SuperSecretPassword",
+        "ssid": "5abib7",
+        "password": "******",
         "band": "2.4GHz"
+      },
+      {
+        "wlan": "5",
+        "ssid": "5abib7-5G",
+        "password": "******",
+        "band": "5GHz"
       }
     ]
   }
@@ -316,7 +325,7 @@ curl -H "X-API-Key: YourSecretKey" \
 
 ```bash
 curl -X POST -H "X-API-Key: YourSecretKey" \
-  "http://localhost:8080/api/v1/genieacs/ssid/10.90.8.164/refresh" | jq
+  "http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41/refresh" | jq
 ```
 
 **Response:**
@@ -336,7 +345,7 @@ curl -X POST -H "X-API-Key: YourSecretKey" \
 
 ```bash
 curl -H "X-API-Key: YourSecretKey" \
-  -X PUT "http://localhost:8080/api/v1/genieacs/ssid/update/1/10.90.8.164" \
+  -X PUT "http://localhost:8080/api/v1/genieacs/ssid/update/1/10.90.14.41" \
   -H "Content-Type: application/json" \
   -d '{"ssid": "New_SSID_Name"}' | jq
 ```
@@ -347,8 +356,8 @@ curl -H "X-API-Key: YourSecretKey" \
   "code": 200,
   "status": "OK",
   "data": {
-    "device_id": "SERIAL-NUMBER-XYZ",
-    "ip": "10.90.8.164",
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "ip": "10.90.14.41",
     "message": "SSID update submitted successfully",
     "ssid": "New_SSID_Name",
     "wlan": "1"
@@ -362,7 +371,7 @@ curl -H "X-API-Key: YourSecretKey" \
 
 ```bash
 curl -H "X-API-Key: YourSecretKey" \
-  -X PUT "http://localhost:8080/api/v1/genieacs/password/update/1/10.90.8.164" \
+  -X PUT "http://localhost:8080/api/v1/genieacs/password/update/1/10.90.14.41" \
   -H "Content-Type: application/json" \
   -d '{"password": "NewSecurePassword123"}' | jq
 ```
@@ -373,8 +382,8 @@ curl -H "X-API-Key: YourSecretKey" \
   "code": 200,
   "status": "OK",
   "data": {
-    "device_id": "SERIAL-NUMBER-XYZ",
-    "ip": "10.90.8.164",
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "ip": "10.90.14.41",
     "message": "Password update submitted successfully",
     "wlan": "1"
   }
@@ -387,13 +396,13 @@ curl -H "X-API-Key: YourSecretKey" \
 
 ```bash
 curl -H "X-API-Key: YourSecretKey" \
-  "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164" | jq
+  "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.14.41" | jq
 ```
 
 **With refresh:**
 ```bash
 curl -H "X-API-Key: YourSecretKey" \
-  "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.8.164?refresh=true" | jq
+  "http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.14.41?refresh=true" | jq
 ```
 
 **Response:**
