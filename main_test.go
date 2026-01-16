@@ -2471,6 +2471,61 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 		assert.Equal(t, DefaultStaleThreshold, result)
 	})
 
+	// Test case 6: Integration test - runServer with custom stale threshold
+	// This test covers lines 191-194 in main.go
+	t.Run("runServer_with_env_var", func(t *testing.T) {
+		// Save original values
+		originalStaleThreshold := staleThreshold
+		originalNewHTTPServer := newHTTPServer
+		defer func() {
+			staleThreshold = originalStaleThreshold
+			newHTTPServer = originalNewHTTPServer
+		}()
+
+		// Set custom stale threshold via environment variable
+		_ = os.Setenv("STALE_THRESHOLD_MINUTES", "45")
+		defer func() { _ = os.Unsetenv("STALE_THRESHOLD_MINUTES") }()
+
+		// Create a channel to signal server creation
+		serverCreated := make(chan struct{})
+
+		// Mock newHTTPServer to create a server that fails immediately
+		newHTTPServer = func(addr string, handler http.Handler) *http.Server {
+			close(serverCreated) // Signal that we've reached this point
+			// Return a server with invalid address to cause immediate failure
+			return &http.Server{
+				Addr:    ":::invalid:::address:::",
+				Handler: handler,
+			}
+		}
+
+		// Run server synchronously - it will fail immediately due to invalid address
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- runServer(":0")
+		}()
+
+		// Wait for server to be created (staleThreshold is set before newHTTPServer is called)
+		select {
+		case <-serverCreated:
+			// Server was created, staleThreshold should be set now
+		case <-time.After(2 * time.Second):
+			t.Fatal("Timeout waiting for server creation")
+		}
+
+		// Wait a bit for the server to fail and runServer to finish
+		select {
+		case <-errChan:
+			// runServer finished
+		case <-time.After(2 * time.Second):
+			// Timeout is ok, main thing is staleThreshold was set
+		}
+
+		// Verify staleThreshold was set correctly (45 minutes from env var)
+		// This read is safe because newHTTPServer has already been called,
+		// meaning staleThreshold was already set
+		assert.Equal(t, 45*time.Minute, staleThreshold)
+	})
 }
 
 func TestMainFunctionWithLoggerError(t *testing.T) {
