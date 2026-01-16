@@ -1,8 +1,8 @@
-# Makefile for ACS API Gateway
+# Makefile for GenieACS Relay
 
 # Variables
 REGISTRY_USER   := cepatkilatteknologi
-IMAGE_NAME      := acs-api-gateway
+IMAGE_NAME      := genieacs-relay
 TAG             := 1.1
 DOCKER_COMPOSE  := docker compose
 DOCKER_COMPOSE_PROD := docker compose -f docker-compose.prod.yml
@@ -237,7 +237,7 @@ clean-all: clean docker-clean
 
 ## help: Show this help message
 help:
-	@echo "ACS API Gateway Management Makefile"
+	@echo "GenieACS Relay Management Makefile"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make [target]"
