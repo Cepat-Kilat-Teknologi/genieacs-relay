@@ -9,7 +9,7 @@
 ### Variables
 @baseUrl = http://localhost:8080
 @apiKey = YourSecretKey
-@deviceIP = 10.90.14.41
+@deviceIP = 192.168.1.100
 
 ###############################################################################
 # HEALTH CHECK
