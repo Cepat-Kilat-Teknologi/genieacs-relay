@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -44,6 +46,8 @@ var (
 
 // Pre-initialized variables and instances for modularity
 var (
+	// jsonMarshal is a package-level variable for JSON marshaling (allows test mocking)
+	jsonMarshal = json.Marshal
 
 	// Function to initialize logger
 	initLogger = func() (*zap.Logger, error) {
@@ -78,10 +82,15 @@ var (
 	}
 
 	// Function to create new HTTP server instance
+	// Configured with timeouts to prevent Slowloris and SlowPOST DoS attacks
 	newHTTPServer = func(addr string, handler http.Handler) *http.Server {
 		return &http.Server{
-			Addr:    addr,    // Server address to listen on
-			Handler: handler, // HTTP handler for incoming requests
+			Addr:              addr,             // Server address to listen on
+			Handler:           handler,          // HTTP handler for incoming requests
+			ReadTimeout:       15 * time.Second, // Max time to read entire request including body
+			WriteTimeout:      15 * time.Second, // Max time to write response
+			IdleTimeout:       60 * time.Second, // Max time for keep-alive connections
+			ReadHeaderTimeout: 5 * time.Second,  // Max time to read request headers (prevents Slowloris)
 		}
 	}
 
@@ -92,9 +101,11 @@ var (
 // --- Struct Definitions ---
 // deviceCache provides thread-safe caching mechanism for device data with expiration
 type deviceCache struct {
-	mu      sync.RWMutex                // Read-write mutex for concurrent access
-	data    map[string]cachedDeviceData // Cache storage mapping device IDs to cached data
-	timeout time.Duration               // Duration after which cached data is considered stale
+	mu       sync.RWMutex                // Read-write mutex for concurrent access
+	data     map[string]cachedDeviceData // Cache storage mapping device IDs to cached data
+	timeout  time.Duration               // Duration after which cached data is considered stale
+	stopCh   chan struct{}               // Channel to signal eviction goroutine to stop
+	stopOnce sync.Once                   // Ensure StopEviction is only called once
 }
 
 // cachedDeviceData holds the actual cached data and timestamp for expiration tracking
@@ -111,6 +122,21 @@ type workerPool struct {
 	queue   chan task      // Channel for receiving tasks
 	wg      sync.WaitGroup // WaitGroup for graceful shutdown synchronization
 	once    sync.Once      // Ensure Start is only called once
+}
+
+// rateLimiter implements a simple token bucket rate limiter per IP
+type rateLimiter struct {
+	mu       sync.RWMutex
+	requests map[string]*tokenBucket
+	rate     int           // requests per window
+	window   time.Duration // time window
+	stopCh   chan struct{} // channel to signal cleanup goroutine to stop
+}
+
+// tokenBucket tracks request counts for rate limiting
+type tokenBucket struct {
+	tokens    int
+	lastReset time.Time
 }
 
 // -- Task Definition ---
@@ -205,6 +231,12 @@ func runServer(addr string) error {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+	// Apply rate limiting middleware (100 requests per minute per IP)
+	rl := newRateLimiter(100, time.Minute)
+	rl.StartCleanup() // Start background cleanup to prevent memory leaks
+	defer rl.StopCleanup()
+	r.Use(rateLimitMiddleware(rl))
+	r.Use(securityHeadersMiddleware)
 	r.Get("/health", healthCheckHandler)
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
 		// Apply API key authentication middleware if enabled
@@ -212,12 +244,19 @@ func runServer(addr string) error {
 			r.Use(apiKeyAuthMiddleware)
 		}
 		r.Get("/ssid/{ip}", getSSIDByIPHandler)
-		r.Get("/force/ssid/{ip}", getSSIDByIPForceHandler)
+		r.Get("/force"+"/ssid/{ip}", getSSIDByIPForceHandler)
 		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
 		r.Put("/ssid/update/{wlan}/{ip}", updateSSIDByIPHandler)
 		r.Put("/password/update/{wlan}/{ip}", updatePasswordByIPHandler)
 		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
 		r.Post("/cache/clear", clearCacheHandler)
+		// Device capability and WLAN management endpoints
+		r.Get("/capability/{ip}", getDeviceCapabilityHandler)
+		r.Get("/wlan/available/{ip}", getAvailableWLANHandler)
+		r.Post("/wlan/create/{wlan}/{ip}", createWLANHandler)
+		r.Put("/wlan/update/{wlan}/{ip}", updateWLANHandler)
+		r.Delete("/wlan/delete/{wlan}/{ip}", deleteWLANHandler)
+		r.Put("/wlan/optimize/{wlan}/{ip}", optimizeWLANHandler)
 	})
 
 	// server
@@ -283,17 +322,17 @@ func initLoggerWrapper() error {
 
 // Start initializes the worker pool by launching all worker goroutines
 func (wp *workerPool) Start() {
-	// Create specified number of worker goroutines
+	// Create a specified number of worker goroutines
 	for i := 0; i < wp.workers; i++ {
 		wp.wg.Add(1)   // Increment WaitGroup counter
-		go wp.worker() // Start worker goroutine
+		go wp.worker() // Start a worker goroutine
 	}
 }
 
 // Stop gracefully shuts down the worker pool by closing queue and waiting for completion
 func (wp *workerPool) Stop() {
 	wp.once.Do(func() { // Ensure Stop is only executed once
-		close(wp.queue) // Close task queue to signal workers to stop
+		close(wp.queue) // Close the task queue to signal workers to stop
 		wp.wg.Wait()    // Wait for all workers to finish processing
 	})
 }
@@ -330,8 +369,29 @@ func (wp *workerPool) worker() {
 }
 
 // Submit adds a new task to the worker pool queue for asynchronous processing
+// This version uses non-blocking send to prevent deadlocks when queue is full
 func (wp *workerPool) Submit(deviceID, taskType string, params [][]interface{}) {
-	wp.queue <- task{deviceID, taskType, params} // Send task to queue channel
+	select {
+	case wp.queue <- task{deviceID, taskType, params}:
+		// Task successfully queued
+	default:
+		// Queue is full, log warning
+		logger.Warn("Worker pool queue full, task dropped",
+			zap.String("deviceID", deviceID),
+			zap.String("taskType", taskType),
+		)
+	}
+}
+
+// TrySubmit attempts to add a task to the worker pool queue
+// Returns true if task was queued, false if queue is full
+func (wp *workerPool) TrySubmit(deviceID, taskType string, params [][]interface{}) bool {
+	select {
+	case wp.queue <- task{deviceID, taskType, params}:
+		return true
+	default:
+		return false
+	}
 }
 
 // --- Cache Methods ---
@@ -367,6 +427,52 @@ func (c *deviceCache) clearAll() {
 	c.mu.Lock() // Acquire write lock
 	defer c.mu.Unlock()
 	c.data = make(map[string]cachedDeviceData) // Reinitialize empty cache map
+}
+
+// StartEviction starts a background goroutine that periodically removes expired cache entries
+// The eviction interval is set to half the cache timeout to ensure timely cleanup
+func (c *deviceCache) StartEviction() {
+	c.stopCh = make(chan struct{})
+	evictionInterval := c.timeout / 2 // Run eviction at half the timeout interval
+	if evictionInterval < time.Second {
+		evictionInterval = time.Second // Minimum 1 second interval
+	}
+
+	go func() {
+		ticker := time.NewTicker(evictionInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				c.evictExpired()
+			case <-c.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// StopEviction stops the background eviction goroutine
+func (c *deviceCache) StopEviction() {
+	c.stopOnce.Do(func() {
+		if c.stopCh != nil {
+			close(c.stopCh)
+		}
+	})
+}
+
+// evictExpired removes all expired entries from the cache
+func (c *deviceCache) evictExpired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	for deviceID, cached := range c.data {
+		if now.Sub(cached.timestamp) >= c.timeout {
+			delete(c.data, deviceID)
+		}
+	}
 }
 
 // --- Helper Functions ---
@@ -441,6 +547,7 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 // --- Middleware Functions ---
 
 // apiKeyAuthMiddleware validates X-API-Key header for incoming requests
+// Uses constant-time comparison to prevent timing attacks
 func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get API key from header
@@ -452,8 +559,8 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Validate API key
-		if apiKey != authKey {
+		// Validate API key using constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(apiKey), []byte(authKey)) != 1 {
 			sendError(w, http.StatusUnauthorized, StatusUnauthorized, ErrInvalidAPIKey)
 			return
 		}
@@ -461,6 +568,166 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 		// API key is valid, proceed to next handler
 		next.ServeHTTP(w, r)
 	})
+}
+
+// newRateLimiter creates a new rate limiter with specified rate and window
+func newRateLimiter(rate int, window time.Duration) *rateLimiter {
+	return &rateLimiter{
+		requests: make(map[string]*tokenBucket),
+		rate:     rate,
+		window:   window,
+	}
+}
+
+// Allow checks if a request from the given IP is allowed
+func (rl *rateLimiter) Allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	bucket, exists := rl.requests[ip]
+
+	if !exists {
+		// Create new bucket for this IP
+		rl.requests[ip] = &tokenBucket{
+			tokens:    rl.rate - 1, // Use one token
+			lastReset: now,
+		}
+		return true
+	}
+
+	// Check if window has passed, reset tokens
+	if now.Sub(bucket.lastReset) >= rl.window {
+		bucket.tokens = rl.rate - 1
+		bucket.lastReset = now
+		return true
+	}
+
+	// Check if tokens available
+	if bucket.tokens > 0 {
+		bucket.tokens--
+		return true
+	}
+
+	return false
+}
+
+// StartCleanup starts a background goroutine that periodically removes stale IP entries
+// to prevent memory leaks from accumulating IP addresses that no longer make requests
+func (rl *rateLimiter) StartCleanup() {
+	rl.stopCh = make(chan struct{})
+	cleanupInterval := rl.window * 2 // Run cleanup at 2x the window interval
+
+	go func() {
+		ticker := time.NewTicker(cleanupInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				rl.cleanup()
+			case <-rl.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// StopCleanup stops the background cleanup goroutine
+func (rl *rateLimiter) StopCleanup() {
+	if rl.stopCh != nil {
+		close(rl.stopCh)
+	}
+}
+
+// cleanup removes stale entries from the rate limiter map
+func (rl *rateLimiter) cleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	for ip, bucket := range rl.requests {
+		// Remove entries that haven't been accessed in 2x the window period
+		if now.Sub(bucket.lastReset) >= rl.window*2 {
+			delete(rl.requests, ip)
+		}
+	}
+}
+
+// rateLimitMiddleware creates a middleware that limits requests per IP
+func rateLimitMiddleware(rl *rateLimiter) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get client IP
+			ip := r.RemoteAddr
+			if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+				ip = realIP
+			}
+
+			// Check rate limit
+			if !rl.Allow(ip) {
+				sendError(w, http.StatusTooManyRequests, "Too Many Requests", "Rate limit exceeded. Please try again later.")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// securityHeadersMiddleware adds security headers to all responses
+// to protect against common web vulnerabilities like XSS, clickjacking, etc.
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent MIME type sniffing
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Prevent clickjacking by denying iframe embedding
+		w.Header().Set("X-Frame-Options", "DENY")
+		// Enable XSS filter in browsers (legacy browsers)
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		// Prevent caching of sensitive API responses
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+		// Content Security Policy - restrict resource loading
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		// Referrer Policy - don't leak referrer information
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		// Permissions Policy - disable unnecessary browser features
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// sanitizeErrorMessage removes potentially sensitive information from error messages
+func sanitizeErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	errMsg := err.Error()
+
+	// List of patterns that might contain sensitive info
+	// Remove device IDs from error messages
+	if strings.Contains(errMsg, "device not found with IP") {
+		return "Device not found"
+	}
+	if strings.Contains(errMsg, "no device found with ID") {
+		return "Device not found"
+	}
+	if strings.Contains(errMsg, "device with IP") && strings.Contains(errMsg, "is stale") {
+		return "Device is offline or unresponsive"
+	}
+	if strings.Contains(errMsg, "invalid IP address format") {
+		return "Invalid IP address format"
+	}
+	if strings.Contains(errMsg, "GenieACS returned non-OK status") {
+		return "Backend service error"
+	}
+	if strings.Contains(errMsg, "HTTP error") {
+		return "Backend service error"
+	}
+
+	// Return generic message for unknown errors to prevent info leakage
+	return "An error occurred processing your request"
 }
 
 // --- GenieACS Communication Functions ---
@@ -515,15 +782,71 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 	return deviceData, nil
 }
 
+// validateIP validates that the provided string is a valid IP address
+func validateIP(ip string) error {
+	if net.ParseIP(ip) == nil {
+		return fmt.Errorf(ErrInvalidIPAddress, ip)
+	}
+	return nil
+}
+
+// validateWLANID validates that the WLAN ID is a numeric value between 1 and 99
+// This prevents path injection and ensures the WLAN ID is in a valid range
+func validateWLANID(wlanID string) error {
+	// Check if it's a valid number
+	num, err := strconv.Atoi(wlanID)
+	if err != nil {
+		return fmt.Errorf(ErrInvalidWLANID)
+	}
+	// Check if it's in valid range (1-99)
+	if num < 1 || num > 99 {
+		return fmt.Errorf(ErrInvalidWLANID)
+	}
+	return nil
+}
+
+// validateSSIDCharacters validates that the SSID contains only allowed characters
+// SSIDs should only contain printable ASCII characters (0x20-0x7E) to prevent
+// control character injection and display issues on various devices
+func validateSSIDCharacters(ssid string) error {
+	for _, r := range ssid {
+		// Allow only printable ASCII characters (space to tilde)
+		// This excludes control characters (0x00-0x1F) and DEL (0x7F)
+		// as well as non-ASCII characters that may cause compatibility issues
+		if r < 0x20 || r > 0x7E {
+			return fmt.Errorf(ErrSSIDInvalidChars)
+		}
+	}
+	return nil
+}
+
+// ipQuery represents the MongoDB query structure for IP-based device lookup
+type ipQuery struct {
+	Or []map[string]string `json:"$or"`
+}
+
 // getDeviceIDByIP finds device ID by searching for devices with matching IP address
 // It also validates that the device is not stale (last inform within threshold)
 func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
-	// Construct query to find device by IP address in multiple possible fields
-	query := fmt.Sprintf(`{"$or":[
-{"summary.ip": "%s"},
-{"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress._value": "%s"},
-{"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress._value": "%s"}
-]}`, ip, ip, ip)
+	// Validate IP address format to prevent query injection
+	if err := validateIP(ip); err != nil {
+		return "", err
+	}
+
+	// Construct query using proper JSON marshaling to prevent injection
+	queryStruct := ipQuery{
+		Or: []map[string]string{
+			{FieldSummaryIP: ip},
+			{FieldWANPPPConn1: ip},
+			{FieldWANPPPConn2: ip},
+		},
+	}
+
+	queryBytes, err := jsonMarshal(queryStruct)
+	if err != nil {
+		return "", err
+	}
+	query := string(queryBytes)
 	// Build URL with query parameter - include _lastInform for stale device validation
 	urlQ := fmt.Sprintf("%s/devices/?query=%s&projection=_id,_lastInform", geniesBaseURL, url.QueryEscape(query))
 	// Create HTTP GET request
@@ -878,7 +1201,10 @@ func setParameterValues(ctx context.Context, deviceID string, parameterValues []
 	// Check for successful or accepted HTTP response
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		// Read response body for detailed error information
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("set parameter values failed with status: %s (failed to read response body: %v)", resp.Status, readErr)
+		}
 		return fmt.Errorf("set parameter values failed with status: %s, response: %s", resp.Status, string(body))
 	}
 	return nil
@@ -975,7 +1301,7 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 404 if device not found
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, StatusNotFound, err.Error())
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
 		return
 	}
 	// Retrieve WLAN configuration data for the device
@@ -983,7 +1309,7 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 500 if WLAN data retrieval fails
 		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, err.Error())
+		sendError(w, http.StatusInternalServerError, StatusInternalError, sanitizeErrorMessage(err))
 		return
 	}
 	// Return successful response with WLAN data
@@ -998,7 +1324,7 @@ func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, StatusNotFound, err.Error())
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
 		return
 	}
 
@@ -1056,7 +1382,7 @@ func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
 				zap.String("deviceID", deviceID),
 				zap.Int("attempt", attempt+1),
 				zap.Error(err))
-			sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			sendError(w, http.StatusInternalServerError, "Internal Server Error", sanitizeErrorMessage(err))
 			return
 		}
 
@@ -1100,7 +1426,7 @@ func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 404 if device not found
 		logger.Info("Failed to get device ID by IP for refresh", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		sendError(w, http.StatusNotFound, "Not Found", sanitizeErrorMessage(err))
 		return
 	}
 	// Submit refresh task to worker pool for asynchronous processing
@@ -1122,7 +1448,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 404 if device not found
 		logger.Info("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		sendError(w, http.StatusNotFound, "Not Found", sanitizeErrorMessage(err))
 		return
 	}
 	// Check if refresh parameter is set to true to force data refresh
@@ -1131,7 +1457,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 		if err := refreshDHCP(r.Context(), deviceID); err != nil {
 			// Log error and return 500 if refresh fails
 			logger.Info("DHCP refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
-			sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed: "+err.Error())
+			sendError(w, http.StatusInternalServerError, "Internal Server Error", "Refresh failed")
 			return
 		}
 	}
@@ -1140,7 +1466,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 500 if DHCP data retrieval fails
 		logger.Info("Failed to get DHCP clients", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		sendError(w, http.StatusInternalServerError, "Internal Server Error", sanitizeErrorMessage(err))
 		return
 	}
 	// Return successful response with DHCP client data
@@ -1152,16 +1478,46 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract WLAN interface ID and IP address from URL path parameters
 	wlan := chi.URLParam(r, "wlan")
 	ip := chi.URLParam(r, "ip")
+
+	// Validate WLAN ID is a valid numeric value (prevents path injection)
+	if err := validateWLANID(wlan); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		return
+	}
+
+	// Limit request body size to prevent DoS attacks
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
 	// Parse JSON request body containing new SSID value
 	var updateReq UpdateSSIDRequest
 	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		// Check if the error is due to body size limit
+		if err.Error() == "http: request body too large" {
+			sendError(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", ErrRequestBodyTooLarge)
+			return
+		}
 		// Return 400 if JSON is malformed
 		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
 		return
 	}
 	// Validate that SSID value is provided and not empty
 	if updateReq.SSID == "" {
-		sendError(w, http.StatusBadRequest, "Bad Request", "SSID value required")
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDRequired)
+		return
+	}
+	// Validate SSID has no leading or trailing spaces
+	if strings.TrimSpace(updateReq.SSID) != updateReq.SSID {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDInvalidSpaces)
+		return
+	}
+	// Validate SSID length (max 32 characters per IEEE 802.11)
+	if len(updateReq.SSID) > MaxSSIDLength {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDTooLong)
+		return
+	}
+	// Validate SSID contains only printable ASCII characters (prevents control char injection)
+	if err := validateSSIDCharacters(updateReq.SSID); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDInvalidChars)
 		return
 	}
 	// Find device ID using the provided IP address
@@ -1169,7 +1525,7 @@ func updateSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 404 if device not found
 		logger.Error("Failed to get device ID for SSID update", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		sendError(w, http.StatusNotFound, "Not Found", sanitizeErrorMessage(err))
 		return
 	}
 	// Validate that the specified WLAN interface exists and is enabled
@@ -1206,16 +1562,40 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract WLAN interface ID and IP address from URL path parameters
 	wlan := chi.URLParam(r, "wlan")
 	ip := chi.URLParam(r, "ip")
+
+	// Validate WLAN ID is a valid numeric value (prevents path injection)
+	if err := validateWLANID(wlan); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		return
+	}
+
+	// Limit request body size to prevent DoS attacks
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
 	// Parse JSON request body containing new password value
 	var updateReq UpdatePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		// Check if the error is due to body size limit
+		if err.Error() == "http: request body too large" {
+			sendError(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", ErrRequestBodyTooLarge)
+			return
+		}
 		// Return 400 if JSON is malformed
 		sendError(w, http.StatusBadRequest, "Bad Request", "Invalid JSON format")
 		return
 	}
 	// Validate that password value is provided and not empty
 	if updateReq.Password == "" {
-		sendError(w, http.StatusBadRequest, "Bad Request", "Password value required")
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordRequired)
+		return
+	}
+	// Validate password length (min 8, max 63 characters per WPA2 standard)
+	if len(updateReq.Password) < MinPasswordLength {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooShort)
+		return
+	}
+	if len(updateReq.Password) > MaxPasswordLength {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooLong)
 		return
 	}
 	// Find device ID using the provided IP address
@@ -1223,7 +1603,7 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 404 if device not found
 		logger.Info("Failed to get device ID for password update", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, "Not Found", err.Error())
+		sendError(w, http.StatusNotFound, "Not Found", sanitizeErrorMessage(err))
 		return
 	}
 	// Validate that the specified WLAN interface exists and is enabled
@@ -1253,4 +1633,886 @@ func updatePasswordByIPHandler(w http.ResponseWriter, r *http.Request) {
 	sendResponse(w, http.StatusOK, "OK", map[string]string{
 		"message": "Password update submitted successfully", "device_id": deviceID, "wlan": wlan, "ip": ip,
 	})
+}
+
+// getDeviceCapabilityHandler retrieves the wireless capability of a device (single-band or dual-band)
+func getDeviceCapabilityHandler(w http.ResponseWriter, r *http.Request) {
+	ip := chi.URLParam(r, "ip")
+
+	// Get device ID from IP
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		logger.Error("Failed to get device ID for capability check", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Get device capability
+	capability, err := getDeviceCapability(r.Context(), deviceID)
+	if err != nil {
+		logger.Error("Failed to get device capability", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to determine device capability")
+		return
+	}
+
+	sendResponse(w, http.StatusOK, StatusOK, capability)
+}
+
+// CreateWLANRequest represents JSON payload for creating a new WLAN
+type CreateWLANRequest struct {
+	SSID       string `json:"ssid"`                  // SSID for the new WLAN
+	Password   string `json:"password,omitempty"`    // Password for the new WLAN (required for WPA/WPA2)
+	Hidden     *bool  `json:"hidden,omitempty"`      // Hide SSID (SSIDAdvertisementEnabled = false)
+	MaxClients *int   `json:"max_clients,omitempty"` // Maximum number of associated devices (1-64)
+	AuthMode   string `json:"auth_mode,omitempty"`   // Authentication mode: Open, WPA, WPA2, WPA/WPA2
+	Encryption string `json:"encryption,omitempty"`  // Encryption mode: AES, TKIP, TKIP+AES
+}
+
+// createWLANHandler creates a new WLAN on a device with band capability validation
+func createWLANHandler(w http.ResponseWriter, r *http.Request) {
+	wlan := chi.URLParam(r, "wlan")
+	ip := chi.URLParam(r, "ip")
+
+	// Validate WLAN ID format (1-9)
+	if err := validateWLANID(wlan); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		return
+	}
+
+	// Parse WLAN ID as integer for band validation
+	wlanID, _ := strconv.Atoi(wlan) // Already validated above
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
+	// Parse request body
+	var createReq CreateWLANRequest
+	if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+		if err.Error() == "http: request body too large" {
+			sendError(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", ErrRequestBodyTooLarge)
+			return
+		}
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidJSON)
+		return
+	}
+
+	// Validate SSID
+	if createReq.SSID == "" {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDRequired)
+		return
+	}
+	if strings.TrimSpace(createReq.SSID) != createReq.SSID {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDInvalidSpaces)
+		return
+	}
+	if len(createReq.SSID) > MaxSSIDLength {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDTooLong)
+		return
+	}
+	if err := validateSSIDCharacters(createReq.SSID); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDInvalidChars)
+		return
+	}
+
+	// Apply defaults for optional fields
+	authMode := createReq.AuthMode
+	if authMode == "" {
+		authMode = "WPA2" // Default to WPA2
+	}
+
+	encryption := createReq.Encryption
+	if encryption == "" {
+		encryption = "AES" // Default to AES
+	}
+
+	hidden := DefaultHiddenSSID
+	if createReq.Hidden != nil {
+		hidden = *createReq.Hidden
+	}
+
+	maxClients := DefaultMaxClients
+	if createReq.MaxClients != nil {
+		maxClients = *createReq.MaxClients
+	}
+
+	// Validate authentication mode
+	validAuthModes := map[string]string{
+		"Open":     AuthModeOpen,
+		"WPA":      AuthModeWPA,
+		"WPA2":     AuthModeWPA2,
+		"WPA/WPA2": AuthModeWPAWPA2,
+	}
+	beaconType, validAuth := validAuthModes[authMode]
+	if !validAuth {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidAuthMode)
+		return
+	}
+
+	// Validate encryption mode
+	validEncryptions := map[string]string{
+		"AES":      EncryptionAES,
+		"TKIP":     EncryptionTKIP,
+		"TKIP+AES": EncryptionTKIPAES,
+	}
+	encryptionValue, validEnc := validEncryptions[encryption]
+	if !validEnc {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidEncryption)
+		return
+	}
+
+	// Validate max clients
+	if maxClients < MinMaxClients || maxClients > MaxMaxClients {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidMaxClients)
+		return
+	}
+
+	// Validate password - required for non-Open authentication
+	if authMode != "Open" {
+		if createReq.Password == "" {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordRequiredAuth)
+			return
+		}
+		if len(createReq.Password) < MinPasswordLength {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooShort)
+			return
+		}
+		if len(createReq.Password) > MaxPasswordLength {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooLong)
+			return
+		}
+	}
+
+	// Get device ID from IP
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		logger.Error("Failed to get device ID for WLAN creation", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Validate WLAN ID against device capability (band validation)
+	if err := validateWLANIDForDevice(r.Context(), deviceID, wlanID); err != nil {
+		logger.Info("WLAN ID not supported by device",
+			zap.String("deviceID", deviceID),
+			zap.Int("wlanID", wlanID),
+			zap.Error(err))
+		sendError(w, http.StatusBadRequest, StatusBadRequest, err.Error())
+		return
+	}
+
+	// Check if WLAN already exists and is enabled
+	valid, err := isWLANValid(r.Context(), deviceID, wlan)
+	if err != nil {
+		logger.Error("Failed to check WLAN status", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to check WLAN status")
+		return
+	}
+	if valid {
+		// WLAN already exists and is enabled
+		sendError(w, http.StatusConflict, "Conflict",
+			fmt.Sprintf("WLAN %s already exists and is enabled on this device. Use the update endpoint to modify it.", wlan))
+		return
+	}
+
+	// Build parameter values for creating WLAN
+	enablePath := fmt.Sprintf(PathWLANEnableFormat, wlan)
+	ssidPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID", wlan)
+	ssidAdvertisementPath := fmt.Sprintf(PathWLANSSIDAdvertisementFormat, wlan)
+	maxAssocDevicesPath := fmt.Sprintf(PathWLANMaxAssocDevicesFormat, wlan)
+	beaconTypePath := fmt.Sprintf(PathWLANBeaconTypeFormat, wlan)
+
+	parameterValues := [][]interface{}{
+		{enablePath, true, XSDBoolean},
+		{ssidPath, createReq.SSID, XSDString},
+		{ssidAdvertisementPath, !hidden, XSDBoolean}, // SSIDAdvertisementEnabled = true means visible (not hidden)
+		{maxAssocDevicesPath, maxClients, XSDUnsignedInt},
+		{beaconTypePath, beaconType, XSDString},
+	}
+
+	// Add password and encryption settings for non-Open authentication
+	if authMode != "Open" {
+		passwordPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey", wlan)
+		parameterValues = append(parameterValues, []interface{}{passwordPath, createReq.Password, XSDString})
+
+		// Set encryption based on authentication mode
+		if authMode == "WPA" {
+			// WPA only - set WPAEncryptionModes
+			wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
+			wpaAuthModePath := fmt.Sprintf(PathWLANWPAAuthModeFormat, wlan)
+			parameterValues = append(parameterValues,
+				[]interface{}{wpaEncryptionPath, encryptionValue, XSDString},
+				[]interface{}{wpaAuthModePath, "PSKAuthentication", XSDString},
+			)
+		} else if authMode == "WPA2" {
+			// WPA2 only (11i) - set IEEE11iEncryptionModes
+			ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
+			ieee11iAuthModePath := fmt.Sprintf(PathWLAN11iAuthModeFormat, wlan)
+			parameterValues = append(parameterValues,
+				[]interface{}{ieee11iEncryptionPath, encryptionValue, XSDString},
+				[]interface{}{ieee11iAuthModePath, "PSKAuthentication", XSDString},
+			)
+		} else if authMode == "WPA/WPA2" {
+			// WPA and WPA2 - set both encryption modes
+			wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
+			wpaAuthModePath := fmt.Sprintf(PathWLANWPAAuthModeFormat, wlan)
+			ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
+			ieee11iAuthModePath := fmt.Sprintf(PathWLAN11iAuthModeFormat, wlan)
+			parameterValues = append(parameterValues,
+				[]interface{}{wpaEncryptionPath, encryptionValue, XSDString},
+				[]interface{}{wpaAuthModePath, "PSKAuthentication", XSDString},
+				[]interface{}{ieee11iEncryptionPath, encryptionValue, XSDString},
+				[]interface{}{ieee11iAuthModePath, "PSKAuthentication", XSDString},
+			)
+		}
+	}
+
+	// Submit set parameter task
+	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
+	// Submit apply changes task
+	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+	// Clear cache
+	deviceCacheInstance.clear(deviceID)
+
+	// Determine the band for this WLAN
+	band := getWLANBandByID(wlanID)
+
+	// Build response with applied settings
+	responseData := map[string]interface{}{
+		"message":     "WLAN creation submitted successfully",
+		"device_id":   deviceID,
+		"wlan":        wlan,
+		"ssid":        createReq.SSID,
+		"band":        band,
+		"ip":          ip,
+		"hidden":      hidden,
+		"max_clients": maxClients,
+		"auth_mode":   authMode,
+		"encryption":  encryption,
+	}
+
+	sendResponse(w, http.StatusOK, StatusOK, responseData)
+}
+
+// UsedWLANInfo contains information about a WLAN slot that is in use
+type UsedWLANInfo struct {
+	WLANID int    `json:"wlan_id"`
+	SSID   string `json:"ssid"`
+	Band   string `json:"band"`
+}
+
+// AvailableWLANResponse contains the response for available WLAN slots endpoint
+type AvailableWLANResponse struct {
+	DeviceID   string `json:"device_id"`
+	Model      string `json:"model"`
+	BandType   string `json:"band_type"`
+	TotalSlots struct {
+		Band24GHz []int `json:"2_4ghz"`
+		Band5GHz  []int `json:"5ghz"`
+	} `json:"total_slots"`
+	UsedWLAN      []UsedWLANInfo `json:"used_wlan"`
+	AvailableWLAN struct {
+		Band24GHz []int `json:"2_4ghz"`
+		Band5GHz  []int `json:"5ghz"`
+	} `json:"available_wlan"`
+	ConfigOptions struct {
+		AuthModes   []string `json:"auth_modes"`
+		Encryptions []string `json:"encryptions"`
+		MaxClients  struct {
+			Min     int `json:"min"`
+			Max     int `json:"max"`
+			Default int `json:"default"`
+		} `json:"max_clients"`
+	} `json:"config_options"`
+}
+
+// getAvailableWLANHandler returns available WLAN slots for a device
+func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
+	ip := chi.URLParam(r, "ip")
+
+	// Get device ID from IP
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		logger.Error("Failed to get device ID for available WLAN check", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Get device capability
+	capability, err := getDeviceCapability(r.Context(), deviceID)
+	if err != nil {
+		logger.Error("Failed to get device capability", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to get device capability")
+		return
+	}
+
+	// Get current WLAN configurations (enabled ones)
+	wlanConfigs, err := getWLANData(r.Context(), deviceID)
+	if err != nil {
+		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to get WLAN data")
+		return
+	}
+
+	// Build used WLAN info and track used IDs
+	usedWLANIDs := make(map[int]bool)
+	var usedWLAN []UsedWLANInfo
+	for _, wlan := range wlanConfigs {
+		wlanID, err := strconv.Atoi(wlan.WLAN)
+		if err != nil {
+			continue // Skip invalid WLAN IDs
+		}
+		usedWLANIDs[wlanID] = true
+		usedWLAN = append(usedWLAN, UsedWLANInfo{
+			WLANID: wlanID,
+			SSID:   wlan.SSID,
+			Band:   wlan.Band,
+		})
+	}
+
+	// Calculate total slots based on band type
+	var total24GHz, total5GHz []int
+	for i := WLAN24GHzMin; i <= WLAN24GHzMax; i++ {
+		total24GHz = append(total24GHz, i)
+	}
+	if capability.IsDualBand {
+		for i := WLAN5GHzMin; i <= WLAN5GHzMax; i++ {
+			total5GHz = append(total5GHz, i)
+		}
+	}
+
+	// Calculate available slots
+	var available24GHz, available5GHz []int
+	for i := WLAN24GHzMin; i <= WLAN24GHzMax; i++ {
+		if !usedWLANIDs[i] {
+			available24GHz = append(available24GHz, i)
+		}
+	}
+	if capability.IsDualBand {
+		for i := WLAN5GHzMin; i <= WLAN5GHzMax; i++ {
+			if !usedWLANIDs[i] {
+				available5GHz = append(available5GHz, i)
+			}
+		}
+	}
+
+	// Build response
+	response := AvailableWLANResponse{
+		DeviceID: deviceID,
+		Model:    capability.Model,
+		BandType: string(capability.BandType),
+	}
+	response.TotalSlots.Band24GHz = total24GHz
+	response.TotalSlots.Band5GHz = total5GHz
+	if response.TotalSlots.Band5GHz == nil {
+		response.TotalSlots.Band5GHz = []int{}
+	}
+
+	response.UsedWLAN = usedWLAN
+	if response.UsedWLAN == nil {
+		response.UsedWLAN = []UsedWLANInfo{}
+	}
+
+	response.AvailableWLAN.Band24GHz = available24GHz
+	if response.AvailableWLAN.Band24GHz == nil {
+		response.AvailableWLAN.Band24GHz = []int{}
+	}
+	response.AvailableWLAN.Band5GHz = available5GHz
+	if response.AvailableWLAN.Band5GHz == nil {
+		response.AvailableWLAN.Band5GHz = []int{}
+	}
+
+	// Add configuration options for frontend
+	response.ConfigOptions.AuthModes = []string{"Open", "WPA", "WPA2", "WPA/WPA2"}
+	response.ConfigOptions.Encryptions = []string{"AES", "TKIP", "TKIP+AES"}
+	response.ConfigOptions.MaxClients.Min = MinMaxClients
+	response.ConfigOptions.MaxClients.Max = MaxMaxClients
+	response.ConfigOptions.MaxClients.Default = DefaultMaxClients
+
+	sendResponse(w, http.StatusOK, StatusOK, response)
+}
+
+// UpdateWLANRequest contains the request body for updating a WLAN
+type UpdateWLANRequest struct {
+	SSID       *string `json:"ssid,omitempty"`        // New SSID (optional)
+	Password   *string `json:"password,omitempty"`    // New password (optional)
+	Hidden     *bool   `json:"hidden,omitempty"`      // Hide SSID (optional)
+	MaxClients *int    `json:"max_clients,omitempty"` // Maximum clients (optional)
+	AuthMode   *string `json:"auth_mode,omitempty"`   // Authentication mode (optional)
+	Encryption *string `json:"encryption,omitempty"`  // Encryption mode (optional)
+}
+
+// OptimizeWLANRequest contains the request body for optimizing WLAN radio settings
+type OptimizeWLANRequest struct {
+	Channel       *string `json:"channel,omitempty"`        // Channel: Auto, or channel number
+	Mode          *string `json:"mode,omitempty"`           // WiFi standard mode (b, g, n, b/g, g/n, b/g/n for 2.4GHz; a, n, ac, a/n, a/n/ac for 5GHz)
+	Bandwidth     *string `json:"bandwidth,omitempty"`      // Bandwidth: 20MHz, 40MHz, 80MHz (5GHz only), Auto
+	TransmitPower *int    `json:"transmit_power,omitempty"` // Transmit power percentage: 0, 20, 40, 60, 80, 100
+}
+
+// updateWLANHandler updates an existing WLAN configuration
+func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
+	wlan := chi.URLParam(r, "wlan")
+	ip := chi.URLParam(r, "ip")
+
+	// Validate WLAN ID format (1-9)
+	if err := validateWLANID(wlan); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		return
+	}
+
+	// Parse WLAN ID as integer for band validation
+	wlanID, _ := strconv.Atoi(wlan)
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
+	// Parse request body
+	var updateReq UpdateWLANRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		if err.Error() == "http: request body too large" {
+			sendError(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", ErrRequestBodyTooLarge)
+			return
+		}
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidJSON)
+		return
+	}
+
+	// Check if at least one field is provided
+	if updateReq.SSID == nil && updateReq.Password == nil && updateReq.Hidden == nil &&
+		updateReq.MaxClients == nil && updateReq.AuthMode == nil && updateReq.Encryption == nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, "At least one field must be provided for update")
+		return
+	}
+
+	// Get device ID from IP
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		logger.Error("Failed to get device ID for WLAN update", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Validate WLAN ID against device capability (band validation)
+	if err := validateWLANIDForDevice(r.Context(), deviceID, wlanID); err != nil {
+		logger.Info("WLAN ID not supported by device",
+			zap.String("deviceID", deviceID),
+			zap.Int("wlanID", wlanID),
+			zap.Error(err))
+		sendError(w, http.StatusBadRequest, StatusBadRequest, err.Error())
+		return
+	}
+
+	// Check if WLAN exists and is enabled
+	valid, err := isWLANValid(r.Context(), deviceID, wlan)
+	if err != nil {
+		logger.Error("Failed to check WLAN status", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to check WLAN status")
+		return
+	}
+	if !valid {
+		sendError(w, http.StatusNotFound, StatusNotFound,
+			fmt.Sprintf("WLAN %s does not exist or is not enabled on this device. Use the create endpoint to create it first.", wlan))
+		return
+	}
+
+	// Build parameter values for updating WLAN
+	var parameterValues [][]interface{}
+	updatedFields := make(map[string]interface{})
+
+	// Validate and add SSID if provided
+	if updateReq.SSID != nil {
+		ssid := *updateReq.SSID
+		if ssid == "" {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDRequired)
+			return
+		}
+		if strings.TrimSpace(ssid) != ssid {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDInvalidSpaces)
+			return
+		}
+		if len(ssid) > MaxSSIDLength {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDTooLong)
+			return
+		}
+		if err := validateSSIDCharacters(ssid); err != nil {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrSSIDInvalidChars)
+			return
+		}
+		ssidPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID", wlan)
+		parameterValues = append(parameterValues, []interface{}{ssidPath, ssid, XSDString})
+		updatedFields["ssid"] = ssid
+	}
+
+	// Validate and add password if provided
+	if updateReq.Password != nil {
+		password := *updateReq.Password
+		if len(password) < MinPasswordLength {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooShort)
+			return
+		}
+		if len(password) > MaxPasswordLength {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooLong)
+			return
+		}
+		passwordPath := fmt.Sprintf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey", wlan)
+		parameterValues = append(parameterValues, []interface{}{passwordPath, password, XSDString})
+		updatedFields["password"] = "********" // Mask password in response
+	}
+
+	// Add hidden SSID setting if provided
+	if updateReq.Hidden != nil {
+		hidden := *updateReq.Hidden
+		ssidAdvertisementPath := fmt.Sprintf(PathWLANSSIDAdvertisementFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{ssidAdvertisementPath, !hidden, XSDBoolean})
+		updatedFields["hidden"] = hidden
+	}
+
+	// Validate and add max clients if provided
+	if updateReq.MaxClients != nil {
+		maxClients := *updateReq.MaxClients
+		if maxClients < MinMaxClients || maxClients > MaxMaxClients {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidMaxClients)
+			return
+		}
+		maxAssocDevicesPath := fmt.Sprintf(PathWLANMaxAssocDevicesFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{maxAssocDevicesPath, maxClients, XSDUnsignedInt})
+		updatedFields["max_clients"] = maxClients
+	}
+
+	// Validate and add auth mode if provided
+	if updateReq.AuthMode != nil {
+		authMode := *updateReq.AuthMode
+		validAuthModes := map[string]string{
+			"Open":     AuthModeOpen,
+			"WPA":      AuthModeWPA,
+			"WPA2":     AuthModeWPA2,
+			"WPA/WPA2": AuthModeWPAWPA2,
+		}
+		beaconType, validAuth := validAuthModes[authMode]
+		if !validAuth {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidAuthMode)
+			return
+		}
+		beaconTypePath := fmt.Sprintf(PathWLANBeaconTypeFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{beaconTypePath, beaconType, XSDString})
+		updatedFields["auth_mode"] = authMode
+
+		// Set authentication mode parameters based on type
+		if authMode == "WPA" {
+			wpaAuthModePath := fmt.Sprintf(PathWLANWPAAuthModeFormat, wlan)
+			parameterValues = append(parameterValues, []interface{}{wpaAuthModePath, "PSKAuthentication", XSDString})
+		} else if authMode == "WPA2" {
+			ieee11iAuthModePath := fmt.Sprintf(PathWLAN11iAuthModeFormat, wlan)
+			parameterValues = append(parameterValues, []interface{}{ieee11iAuthModePath, "PSKAuthentication", XSDString})
+		} else if authMode == "WPA/WPA2" {
+			wpaAuthModePath := fmt.Sprintf(PathWLANWPAAuthModeFormat, wlan)
+			ieee11iAuthModePath := fmt.Sprintf(PathWLAN11iAuthModeFormat, wlan)
+			parameterValues = append(parameterValues,
+				[]interface{}{wpaAuthModePath, "PSKAuthentication", XSDString},
+				[]interface{}{ieee11iAuthModePath, "PSKAuthentication", XSDString},
+			)
+		}
+	}
+
+	// Validate and add encryption if provided
+	if updateReq.Encryption != nil {
+		encryption := *updateReq.Encryption
+		validEncryptions := map[string]string{
+			"AES":      EncryptionAES,
+			"TKIP":     EncryptionTKIP,
+			"TKIP+AES": EncryptionTKIPAES,
+		}
+		encryptionValue, validEnc := validEncryptions[encryption]
+		if !validEnc {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidEncryption)
+			return
+		}
+
+		// Set encryption for both WPA and WPA2 paths to cover all cases
+		wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
+		ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
+		parameterValues = append(parameterValues,
+			[]interface{}{wpaEncryptionPath, encryptionValue, XSDString},
+			[]interface{}{ieee11iEncryptionPath, encryptionValue, XSDString},
+		)
+		updatedFields["encryption"] = encryption
+	}
+
+	// Submit set parameter task
+	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
+	// Submit apply changes task
+	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+	// Clear cache
+	deviceCacheInstance.clear(deviceID)
+
+	// Determine the band for this WLAN
+	band := getWLANBandByID(wlanID)
+
+	// Build response
+	responseData := map[string]interface{}{
+		"message":        "WLAN update submitted successfully",
+		"device_id":      deviceID,
+		"wlan":           wlan,
+		"band":           band,
+		"ip":             ip,
+		"updated_fields": updatedFields,
+	}
+
+	sendResponse(w, http.StatusOK, StatusOK, responseData)
+}
+
+// deleteWLANHandler disables/deletes a WLAN configuration
+func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
+	wlan := chi.URLParam(r, "wlan")
+	ip := chi.URLParam(r, "ip")
+
+	// Validate WLAN ID format (1-9)
+	if err := validateWLANID(wlan); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		return
+	}
+
+	// Parse WLAN ID as integer for band validation
+	wlanID, _ := strconv.Atoi(wlan)
+
+	// Get device ID from IP
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		logger.Error("Failed to get device ID for WLAN deletion", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Validate WLAN ID against device capability (band validation)
+	if err := validateWLANIDForDevice(r.Context(), deviceID, wlanID); err != nil {
+		logger.Info("WLAN ID not supported by device",
+			zap.String("deviceID", deviceID),
+			zap.Int("wlanID", wlanID),
+			zap.Error(err))
+		sendError(w, http.StatusBadRequest, StatusBadRequest, err.Error())
+		return
+	}
+
+	// Check if WLAN exists and is enabled
+	valid, err := isWLANValid(r.Context(), deviceID, wlan)
+	if err != nil {
+		logger.Error("Failed to check WLAN status", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to check WLAN status")
+		return
+	}
+	if !valid {
+		sendError(w, http.StatusNotFound, StatusNotFound,
+			fmt.Sprintf("WLAN %s does not exist or is already disabled on this device.", wlan))
+		return
+	}
+
+	// Build parameter values for disabling WLAN
+	enablePath := fmt.Sprintf(PathWLANEnableFormat, wlan)
+	parameterValues := [][]interface{}{
+		{enablePath, false, XSDBoolean},
+	}
+
+	// Submit set parameter task
+	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
+	// Submit apply changes task
+	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+	// Clear cache
+	deviceCacheInstance.clear(deviceID)
+
+	// Determine the band for this WLAN
+	band := getWLANBandByID(wlanID)
+
+	sendResponse(w, http.StatusOK, StatusOK, map[string]string{
+		"message":   "WLAN deletion submitted successfully",
+		"device_id": deviceID,
+		"wlan":      wlan,
+		"band":      band,
+		"ip":        ip,
+	})
+}
+
+// optimizeWLANHandler optimizes WLAN radio settings (channel, mode, bandwidth, transmit power)
+func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
+	wlan := chi.URLParam(r, "wlan")
+	ip := chi.URLParam(r, "ip")
+
+	// Validate WLAN ID format (1-8)
+	if err := validateWLANID(wlan); err != nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		return
+	}
+
+	// Parse WLAN ID as integer for band validation
+	wlanID, _ := strconv.Atoi(wlan)
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
+	// Parse request body
+	var optimizeReq OptimizeWLANRequest
+	if err := json.NewDecoder(r.Body).Decode(&optimizeReq); err != nil {
+		if err.Error() == "http: request body too large" {
+			sendError(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", ErrRequestBodyTooLarge)
+			return
+		}
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidJSON)
+		return
+	}
+
+	// Check if at least one field is provided
+	if optimizeReq.Channel == nil && optimizeReq.Mode == nil &&
+		optimizeReq.Bandwidth == nil && optimizeReq.TransmitPower == nil {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrNoOptimizeFields)
+		return
+	}
+
+	// Get device ID from IP
+	deviceID, err := getDeviceIDByIP(r.Context(), ip)
+	if err != nil {
+		logger.Error("Failed to get device ID for WLAN optimization", zap.String("ip", ip), zap.Error(err))
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Validate WLAN ID against device capability (band validation)
+	if err := validateWLANIDForDevice(r.Context(), deviceID, wlanID); err != nil {
+		logger.Info("WLAN ID not supported by device",
+			zap.String("deviceID", deviceID),
+			zap.Int("wlanID", wlanID),
+			zap.Error(err))
+		sendError(w, http.StatusBadRequest, StatusBadRequest, err.Error())
+		return
+	}
+
+	// Check if WLAN exists and is enabled
+	valid, err := isWLANValid(r.Context(), deviceID, wlan)
+	if err != nil {
+		logger.Error("Failed to check WLAN status", zap.String("deviceID", deviceID), zap.String("wlan", wlan), zap.Error(err))
+		sendError(w, http.StatusInternalServerError, StatusInternalError, "Failed to check WLAN status")
+		return
+	}
+	if !valid {
+		sendError(w, http.StatusNotFound, StatusNotFound,
+			fmt.Sprintf("WLAN %s does not exist or is not enabled on this device.", wlan))
+		return
+	}
+
+	// Determine band based on WLAN ID
+	is5GHz := wlanID >= WLAN5GHzMin && wlanID <= WLAN5GHzMax
+	band := Band2_4GHz
+	if is5GHz {
+		band = Band5GHz
+	}
+
+	// Build parameter values for optimization
+	var parameterValues [][]interface{}
+	updatedSettings := make(map[string]interface{})
+
+	// Validate and add channel if provided
+	if optimizeReq.Channel != nil {
+		channel := *optimizeReq.Channel
+		if is5GHz {
+			if !ValidChannels5GHz[channel] {
+				sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidChannel5GHz, channel))
+				return
+			}
+		} else {
+			if !ValidChannels24GHz[channel] {
+				sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidChannel24GHz, channel))
+				return
+			}
+		}
+
+		// Handle Auto channel setting
+		autoChannelPath := fmt.Sprintf(PathWLANAutoChannelEnableFormat, wlan)
+		if channel == ChannelAuto {
+			parameterValues = append(parameterValues, []interface{}{autoChannelPath, true, XSDBoolean})
+		} else {
+			// Set specific channel and disable auto channel
+			channelPath := fmt.Sprintf(PathWLANChannelFormat, wlan)
+			channelNum, _ := strconv.Atoi(channel)
+			parameterValues = append(parameterValues,
+				[]interface{}{autoChannelPath, false, XSDBoolean},
+				[]interface{}{channelPath, channelNum, XSDUnsignedInt},
+			)
+		}
+		updatedSettings["channel"] = channel
+	}
+
+	// Validate and add mode if provided
+	if optimizeReq.Mode != nil {
+		mode := *optimizeReq.Mode
+		var tr069Mode string
+		var validMode bool
+
+		if is5GHz {
+			tr069Mode, validMode = ValidModes5GHz[mode]
+			if !validMode {
+				sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidMode5GHz, mode))
+				return
+			}
+		} else {
+			tr069Mode, validMode = ValidModes24GHz[mode]
+			if !validMode {
+				sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidMode24GHz, mode))
+				return
+			}
+		}
+
+		modePath := fmt.Sprintf(PathWLANOperatingStandardFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{modePath, tr069Mode, XSDString})
+		updatedSettings["mode"] = mode
+	}
+
+	// Validate and add bandwidth if provided
+	if optimizeReq.Bandwidth != nil {
+		bandwidth := *optimizeReq.Bandwidth
+		if is5GHz {
+			if !ValidBandwidth5GHz[bandwidth] {
+				sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidBandwidth5GHz, bandwidth))
+				return
+			}
+		} else {
+			if !ValidBandwidth24GHz[bandwidth] {
+				sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidBandwidth24GHz, bandwidth))
+				return
+			}
+		}
+
+		bandwidthPath := fmt.Sprintf(PathWLANChannelBandwidthFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{bandwidthPath, bandwidth, XSDString})
+		updatedSettings["bandwidth"] = bandwidth
+	}
+
+	// Validate and add transmit power if provided
+	if optimizeReq.TransmitPower != nil {
+		power := *optimizeReq.TransmitPower
+		if !ValidTransmitPower[power] {
+			sendError(w, http.StatusBadRequest, StatusBadRequest, fmt.Sprintf(ErrInvalidTransmitPower, power))
+			return
+		}
+
+		powerPath := fmt.Sprintf(PathWLANTransmitPowerFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{powerPath, power, XSDUnsignedInt})
+		updatedSettings["transmit_power"] = power
+	}
+
+	// Submit set parameter task
+	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
+	// Submit apply changes task
+	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+	// Clear cache
+	deviceCacheInstance.clear(deviceID)
+
+	// Build response
+	responseData := map[string]interface{}{
+		"message":          MsgWLANOptimizeSubmitted,
+		"device_id":        deviceID,
+		"wlan":             wlan,
+		"band":             band,
+		"ip":               ip,
+		"updated_settings": updatedSettings,
+	}
+
+	sendResponse(w, http.StatusOK, StatusOK, responseData)
 }

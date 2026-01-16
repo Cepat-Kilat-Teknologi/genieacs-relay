@@ -22,7 +22,7 @@ func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) 
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, StatusNotFound, err.Error())
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
 		return "", false
 	}
 	return deviceID, true
@@ -67,7 +67,7 @@ func UpdateWLANParameter(
 		logger.Error("Failed to get device ID for parameter update",
 			zap.String("ip", ip),
 			zap.Error(err))
-		sendError(w, http.StatusNotFound, StatusNotFound, err.Error())
+		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
 		return
 	}
 
@@ -85,7 +85,7 @@ func UpdateWLANParameter(
 	// Submit set parameter task to worker pool
 	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
 
-	// Submit apply change task to make configuration active
+	// Submit apply a change task to make configuration active
 	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
 
 	// Clear cached data for this device to reflect changes
