@@ -1,4 +1,4 @@
-module github.com/Cepat-Kilat-Teknologi/acs-api-gateway
+module github.com/Cepat-Kilat-Teknologi/genieacs-relay
 
 go 1.24.2
 
