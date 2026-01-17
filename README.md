@@ -18,19 +18,31 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - **Worker pool** for asynchronous task processing
 - **ONU/ONT Band Detection** - Automatic detection of single-band (2.4GHz) and dual-band (2.4GHz + 5GHz) devices
 - **WLAN Slot Management** - Track available and used WLAN slots per device
-- API Endpoints:
-    - Get / Update SSID
-    - Get SSID with Force Refresh (retry mechanism)
-    - Post / Refresh SSID Data
-    - Update WiFi Password
-    - Get DHCP Clients
-    - Clear Cache
-    - **Get Device Capability** (single-band/dual-band detection)
-    - **Get Available WLAN Slots** (with configuration options)
-    - **Create New WLAN** (with advanced options: hidden SSID, max clients, auth mode, encryption)
-    - **Update Existing WLAN** (partial update support for SSID, password, visibility, etc.)
-    - **Delete/Disable WLAN** (disable existing WLAN configuration)
-    - **Optimize WLAN Radio** (channel, mode, bandwidth, transmit power settings)
+
+### Security Features
+
+- **Brute Force Protection** - Automatic IP lockout after failed authentication attempts
+- **Rate Limiting** - Configurable request rate limiting per IP with memory protection
+- **Audit Logging** - Comprehensive logging for security-relevant events
+- **CORS Support** - Configurable Cross-Origin Resource Sharing
+- **Security Headers** - HSTS, CSP, X-Frame-Options, and more
+- **Input Validation** - Strict validation for IP addresses, SSID, passwords, and WLAN IDs
+- **Constant-time Comparison** - Timing attack protection for API key validation
+
+### API Endpoints
+
+- Get / Update SSID
+- Get SSID with Force Refresh (retry mechanism)
+- Post / Refresh SSID Data
+- Update WiFi Password
+- Get DHCP Clients
+- Clear Cache
+- **Get Device Capability** (single-band/dual-band detection)
+- **Get Available WLAN Slots** (with configuration options)
+- **Create New WLAN** (with advanced options: hidden SSID, max clients, auth mode, encryption)
+- **Update Existing WLAN** (partial update support for SSID, password, visibility, etc.)
+- **Delete/Disable WLAN** (disable existing WLAN configuration)
+- **Optimize WLAN Radio** (channel, mode, bandwidth, transmit power settings)
 
 ---
 
@@ -38,45 +50,198 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 
 ```bash
 .
-├── main.go              # Application entry point and core logic
-├── constants.go         # All constants (paths, timeouts, messages)
-├── models.go            # Data structures and navigation helpers
-├── handlers.go          # HTTP handler helper functions
-├── onu_models.go        # ONU/ONT model database (single-band/dual-band)
-├── main_test.go         # Unit tests for main
-├── constants_test.go    # Unit tests for constants
-├── models_test.go       # Unit tests for models
-├── handlers_test.go     # Unit tests for handlers
-├── onu_models_test.go   # Unit tests for ONU models
-├── test.http            # HTTP test file for API testing (VS Code REST Client)
-├── ONU.md               # ONU/ONT model reference documentation
-├── Dockerfile           # Multi-stage build (dev, builder, production)
-├── Makefile             # Development, testing, Docker, and CI helper
-├── docker-compose.yml   # Local development environment
+├── main.go                 # Application entry point
+├── server.go               # HTTP server setup and configuration
+├── routes.go               # Route definitions
+├── config.go               # Configuration loading
+├── constants.go            # All constants (paths, timeouts, messages)
+├── models.go               # Data structures and navigation helpers
+├── http_helpers.go         # HTTP handler helper functions
+├── middleware.go           # Authentication, rate limiting, CORS, security headers
+├── handlers_device.go      # Device-related handlers
+├── handlers_ssid.go        # SSID-related handlers
+├── handlers_wlan.go        # WLAN management handlers
+├── validation.go           # Input validation functions
+├── cache.go                # Device data caching
+├── client.go               # GenieACS API client
+├── worker.go               # Worker pool for async tasks
+├── capability.go           # ONU/ONT model database (single-band/dual-band)
+├── wlan.go                 # WLAN data extraction
+├── dhcp.go                 # DHCP client extraction
+├── utils.go                # Utility functions
+├── response.go             # Response helpers
+├── *_test.go               # Unit tests
+├── test.http               # HTTP test file for API testing (VS Code REST Client)
+├── ONU.md                  # ONU/ONT model reference documentation
+├── Dockerfile              # Multi-stage build (dev, builder, production)
+├── Makefile                # Development, testing, Docker, and CI helper
+├── docker-compose.yml      # Local development environment
 ├── docker-compose.prod.yml # Production deployment
-├── go.mod               # Go module dependencies
+├── go.mod                  # Go module dependencies
 ├── go.sum
-├── .env.example         # Environment variables template
-├── .gitignore           # Git ignore rules
-└── README.md            # Documentation
+├── .env.example            # Environment variables template
+├── .gitignore              # Git ignore rules
+└── README.md               # Documentation
 ```
 
 ---
 
 ## Environment Variables
 
+### Server Configuration
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `SERVER_ADDR` | No | `:8080` | Server listen address |
 | `GENIEACS_BASE_URL` | No | `http://localhost:7557` | GenieACS server URL |
 | `NBI_AUTH_KEY` | **Yes** | *(empty)* | Authentication key for GenieACS NBI |
-| `SERVER_ADDR` | No | `:8080` | Server listen address |
-| `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication for incoming requests |
-| `AUTH_KEY` | Conditional | *(empty)* | API key for authenticating incoming requests (required if `MIDDLEWARE_AUTH=true`) |
+
+### Authentication
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication |
+| `AUTH_KEY` | Conditional | *(empty)* | API key for incoming requests (required if `MIDDLEWARE_AUTH=true`) |
+
+### CORS Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CORS_ALLOWED_ORIGINS` | No | `*` | Allowed origins (`*` for all, or comma-separated list) |
+| `CORS_MAX_AGE` | No | `86400` | Preflight cache duration in seconds (24 hours) |
+
+### Rate Limiting
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `RATE_LIMIT_REQUESTS` | No | `100` | Maximum requests per window |
+| `RATE_LIMIT_WINDOW` | No | `60` | Rate limit window in seconds |
+
+### Device Validation
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
 | `STALE_THRESHOLD_MINUTES` | No | `30` | Time in minutes after which a device is considered stale |
 
 > **Security Warning**: Never commit `.env` files with real credentials. Use `.env.example` as a template.
 
-### Stale Device Validation
+---
+
+## Security Features
+
+### Brute Force Protection
+
+The API includes automatic brute force protection for authentication:
+
+- **Max Failed Attempts**: 5 attempts within 5 minutes
+- **Lockout Duration**: 15 minutes after max failed attempts
+- **Automatic Cleanup**: Expired lockouts are automatically cleaned up
+
+When an IP is locked out, the API returns:
+```json
+{
+  "code": 429,
+  "status": "Too Many Requests",
+  "error": "Too many failed authentication attempts. Please try again later."
+}
+```
+
+The response includes a `Retry-After` header indicating when the lockout expires.
+
+### Rate Limiting
+
+Configurable per-IP rate limiting to prevent abuse:
+
+- Default: 100 requests per 60-second window
+- Memory protection: Maximum 10,000 tracked IPs to prevent memory exhaustion
+- Automatic cleanup of stale entries
+
+### Audit Logging
+
+Security-relevant events are logged for audit purposes:
+
+| Event | Description |
+|-------|-------------|
+| `AUTH_SUCCESS` | Successful authentication |
+| `AUTH_FAILURE` | Failed authentication attempt |
+| `AUTH_BLOCKED` | Request blocked due to brute force protection |
+| `WLAN_CREATE` | New WLAN created |
+| `WLAN_UPDATE` | WLAN configuration updated |
+| `WLAN_DELETE` | WLAN deleted/disabled |
+| `WLAN_OPTIMIZE` | WLAN radio settings optimized |
+| `SSID_UPDATE` | SSID updated |
+| `PASSWORD_UPDATE` | Password updated |
+
+Example audit log entry:
+```json
+{
+  "level": "info",
+  "msg": "AUDIT",
+  "event": "WLAN_CREATE",
+  "client_ip": "192.168.1.10",
+  "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+  "wlan": "2",
+  "ssid": "GuestNetwork",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### Security Headers
+
+All responses include security headers:
+
+| Header | Value | Purpose |
+|--------|-------|---------|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | Enforce HTTPS |
+| `X-Content-Type-Options` | `nosniff` | Prevent MIME sniffing |
+| `X-Frame-Options` | `DENY` | Prevent clickjacking |
+| `X-XSS-Protection` | `1; mode=block` | XSS filter (legacy) |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` | Restrict resources |
+| `Referrer-Policy` | `no-referrer` | Prevent referrer leakage |
+| `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` | Disable browser features |
+| `Cache-Control` | `no-store, no-cache, must-revalidate, private` | Prevent caching |
+
+### Input Validation
+
+Strict input validation for security:
+
+- **IP Addresses**: Rejects loopback (`127.0.0.1`, `::1`), multicast, and unspecified addresses
+- **SSID**: 1-32 characters, printable ASCII only, no leading/trailing spaces
+- **Password**: 8-63 characters
+- **WLAN ID**: 1-99, numeric only
+- **Request Body**: Limited to 1KB to prevent DoS
+
+---
+
+## Configuration Examples
+
+### Development (Permissive)
+
+```bash
+# .env
+GENIEACS_BASE_URL=http://localhost:7557
+NBI_AUTH_KEY=your-genieacs-key
+CORS_ALLOWED_ORIGINS=*
+MIDDLEWARE_AUTH=false
+```
+
+### Production (Restrictive)
+
+```bash
+# .env
+GENIEACS_BASE_URL=http://genieacs:7557
+NBI_AUTH_KEY=your-secure-genieacs-key
+CORS_ALLOWED_ORIGINS=https://myapp.com,https://admin.myapp.com
+MIDDLEWARE_AUTH=true
+AUTH_KEY=your-secure-api-key
+RATE_LIMIT_REQUESTS=50
+RATE_LIMIT_WINDOW=30
+STALE_THRESHOLD_MINUTES=15
+```
+
+---
+
+## Stale Device Validation
 
 When querying devices by IP address, the API validates whether the device has recently reported to GenieACS using the `_lastInform` timestamp. This helps prevent returning data for devices that may have been disconnected and their IP reassigned to another device.
 
@@ -98,7 +263,9 @@ When querying devices by IP address, the API validates whether the device has re
 }
 ```
 
-### API Authentication
+---
+
+## API Authentication
 
 By default, the API Gateway does **not** require authentication for incoming requests. To enable API key authentication:
 
@@ -947,6 +1114,23 @@ curl -H "X-API-Key: YourSecretKey" \
   "code": 401,
   "status": "Unauthorized",
   "error": "Invalid API key"
+}
+```
+
+### 429 Too Many Requests
+```json
+{
+  "code": 429,
+  "status": "Too Many Requests",
+  "error": "Rate limit exceeded. Please try again later."
+}
+```
+
+```json
+{
+  "code": 429,
+  "status": "Too Many Requests",
+  "error": "Too many failed authentication attempts. Please try again later."
 }
 ```
 
