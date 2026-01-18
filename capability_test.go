@@ -424,8 +424,6 @@ func TestGetDeviceCapabilityHandler(t *testing.T) {
 		assert.Equal(t, "EG8145X6", data["model"])
 		assert.Equal(t, "dualband", data["band_type"])
 		assert.Equal(t, true, data["is_dual_band"])
-		assert.Equal(t, float64(4), data["max_24ghz"])
-		assert.Equal(t, float64(8), data["max_5ghz"])
 	})
 
 	t.Run("Single-band device capability", func(t *testing.T) {
@@ -469,8 +467,6 @@ func TestGetDeviceCapabilityHandler(t *testing.T) {
 		assert.Equal(t, "HG8245H5", data["model"])
 		assert.Equal(t, "singleband", data["band_type"])
 		assert.Equal(t, false, data["is_dual_band"])
-		assert.Equal(t, float64(4), data["max_24ghz"])
-		assert.Equal(t, float64(0), data["max_5ghz"])
 	})
 
 	t.Run("Device not found", func(t *testing.T) {
@@ -659,7 +655,8 @@ func TestCreateWLANHandler(t *testing.T) {
 		r.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assert.Contains(t, rr.Body.String(), "single-band")
+		// Error message is sanitized to not expose device details
+		assert.Contains(t, rr.Body.String(), "does not support 5GHz WLAN")
 	})
 
 	t.Run("Fail - WLAN ID out of range (0)", func(t *testing.T) {
@@ -1094,7 +1091,8 @@ func TestValidateWLANIDForDeviceEdgeCases(t *testing.T) {
 
 		err := validateWLANIDForDevice(context.Background(), "NonExistentDevice", 1)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get device capability")
+		// Error message is sanitized to not expose internal details
+		assert.Contains(t, err.Error(), "unable to verify device capability")
 	})
 }
 

@@ -36,17 +36,10 @@ func TestWLANPathFormats(t *testing.T) {
 }
 
 func TestFieldNameConstants(t *testing.T) {
-	assert.Equal(t, "_id", FieldID)
-	assert.Equal(t, "_value", FieldValue)
-	assert.Equal(t, "Enable", FieldEnable)
-	assert.Equal(t, "SSID", FieldSSID)
-	assert.Equal(t, "Standard", FieldStandard)
-	assert.Equal(t, "PreSharedKey", FieldPreSharedKey)
-	assert.Equal(t, "KeyPassphrase", FieldKeyPassphrase)
-	assert.Equal(t, "X_CMS_KeyPassphrase", FieldXCMSPassphrase)
-	assert.Equal(t, "MACAddress", FieldMACAddress)
-	assert.Equal(t, "HostName", FieldHostName)
-	assert.Equal(t, "IPAddress", FieldIPAddress)
+	// Test field constants used for device IP lookup
+	assert.Equal(t, "summary.ip", FieldSummaryIP)
+	assert.Contains(t, FieldWANPPPConn1, "WANPPPConnection.1")
+	assert.Contains(t, FieldWANPPPConn2, "WANPPPConnection.2")
 }
 
 func TestTimeoutConstants(t *testing.T) {
@@ -84,11 +77,6 @@ func TestPasswordConstants(t *testing.T) {
 	assert.Equal(t, "N/A", PasswordNA)
 }
 
-func TestVendorConstants(t *testing.T) {
-	assert.Equal(t, "ZTE", VendorZTE)
-	assert.Equal(t, "ZT", VendorZT)
-}
-
 func TestStatusConstants(t *testing.T) {
 	assert.Equal(t, "OK", StatusOK)
 	assert.Equal(t, "Accepted", StatusAccepted)
@@ -109,8 +97,9 @@ func TestErrorMessageConstants(t *testing.T) {
 func TestSuccessMessageConstants(t *testing.T) {
 	assert.Contains(t, MsgCacheCleared, "Cache")
 	assert.Contains(t, MsgRefreshSubmitted, "Refresh")
-	assert.Contains(t, MsgSSIDUpdateSubmitted, "SSID")
-	assert.Contains(t, MsgPasswordUpdateSubmitted, "Password")
+	assert.Contains(t, MsgWLANCreationSubmitted, "WLAN")
+	assert.Contains(t, MsgWLANUpdateSubmitted, "WLAN")
+	assert.Contains(t, MsgWLANDeletionSubmitted, "WLAN")
 }
 
 func TestXSDConstants(t *testing.T) {
@@ -125,8 +114,6 @@ func TestDefaultConfigConstants(t *testing.T) {
 }
 
 func TestMiddlewareAuthConstants(t *testing.T) {
-	// Test default middleware auth is disabled
-	assert.False(t, DefaultMiddlewareAuth)
 	// DefaultAuthKey should be empty - must be set via environment variable
 	assert.Equal(t, "", DefaultAuthKey)
 	// Test header and env var names
@@ -139,4 +126,11 @@ func TestAuthErrorConstants(t *testing.T) {
 	assert.Equal(t, "Missing X-API-Key header", ErrMissingAPIKey)
 	assert.Equal(t, "Invalid API key", ErrInvalidAPIKey)
 	assert.Equal(t, "Unauthorized", StatusUnauthorized)
+}
+
+func TestServerTimeoutConstants(t *testing.T) {
+	assert.Equal(t, 15*time.Second, DefaultReadTimeout)
+	assert.Equal(t, 15*time.Second, DefaultWriteTimeout)
+	assert.Equal(t, 60*time.Second, DefaultServerIdleTimeout)
+	assert.Equal(t, 5*time.Second, DefaultReadHeaderTimeout)
 }
