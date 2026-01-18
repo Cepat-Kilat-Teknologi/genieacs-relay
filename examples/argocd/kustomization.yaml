@@ -1,0 +1,19 @@
+# Kustomization for ArgoCD resources
+# Usage: kubectl apply -k examples/argocd/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - project.yaml
+
+  # Choose ONE of the following deployment options:
+
+  # Option 1: Single environment (basic)
+  - application.yaml
+
+  # Option 2: Single environment with image updater
+  # - application-image-updater.yaml
+
+  # Option 3: Multi-environment (recommended)
+  # - applicationset.yaml          # Dev & Staging (auto-sync)
+  # - application-production.yaml  # Production (manual sync)

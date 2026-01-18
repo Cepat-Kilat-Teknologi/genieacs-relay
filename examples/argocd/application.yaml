@@ -1,0 +1,57 @@
+# ArgoCD Application - Basic Auto-Sync
+# Syncs automatically when Git repository changes
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: genieacs-relay
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # Git repository containing the Helm chart
+    repoURL: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+    targetRevision: main
+    path: examples/helm/genieacs-relay
+
+    # Helm configuration
+    helm:
+      valueFiles:
+        - values.yaml
+      # Override specific values
+      parameters:
+        - name: replicaCount
+          value: "2"
+        - name: config.genieacsBaseUrl
+          value: "http://genieacs-nbi.genieacs:7557"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: genieacs
+
+  # Sync policy - automatic sync enabled
+  syncPolicy:
+    automated:
+      # Prune resources that are no longer in Git
+      prune: true
+      # Auto-fix if someone manually changes resources in cluster
+      selfHeal: true
+      # Don't sync if the source is empty
+      allowEmpty: false
+    syncOptions:
+      # Create namespace if it doesn't exist
+      - CreateNamespace=true
+      # Use server-side apply for better conflict resolution
+      - ServerSideApply=true
+    # Retry on failure
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health check settings
+  revisionHistoryLimit: 10

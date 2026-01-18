@@ -1,0 +1,82 @@
+# ArgoCD Application with Image Updater
+# Automatically updates when new Docker images are pushed
+#
+# Prerequisites:
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: genieacs-relay
+  namespace: argocd
+  annotations:
+    # ================================
+    # ArgoCD Image Updater Configuration
+    # ================================
+
+    # Define image to track (alias=image)
+    argocd-image-updater.argoproj.io/image-list: app=cepatkilatteknologi/genieacs-relay
+
+    # Update strategy: semver, latest, digest, or name
+    # semver: Only update to valid semantic versions (recommended for production)
+    argocd-image-updater.argoproj.io/app.update-strategy: semver
+
+    # Only allow semver tags (e.g., 1.0.0, 2.1.3)
+    # Excludes: latest, edge, dev, etc.
+    argocd-image-updater.argoproj.io/app.allow-tags: regexp:^[0-9]+\.[0-9]+\.[0-9]+$
+
+    # Ignore pre-release versions (alpha, beta, rc)
+    argocd-image-updater.argoproj.io/app.ignore-tags: regexp:.*-(alpha|beta|rc).*
+
+    # How to write back changes: git, argocd (in-memory)
+    # git: Commits changes back to Git repository
+    # argocd: Updates in ArgoCD only (doesn't persist in Git)
+    argocd-image-updater.argoproj.io/write-back-method: git
+
+    # Git write-back configuration
+    argocd-image-updater.argoproj.io/write-back-target: helmvalues:values.yaml
+    argocd-image-updater.argoproj.io/git-branch: main
+
+    # Which Helm value to update
+    argocd-image-updater.argoproj.io/app.helm.image-name: image.repository
+    argocd-image-updater.argoproj.io/app.helm.image-tag: image.tag
+
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+    targetRevision: main
+    path: examples/helm/genieacs-relay
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: config.genieacsBaseUrl
+          value: "http://genieacs-nbi.genieacs:7557"
+        - name: config.nbiAuth.enabled
+          value: "true"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: genieacs
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  revisionHistoryLimit: 10

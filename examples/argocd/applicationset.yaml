@@ -1,0 +1,74 @@
+# ArgoCD ApplicationSet - Multi-Environment Deployment
+# Creates separate Application for each environment
+#
+# Sync Policy:
+#   - dev/staging: Auto-sync enabled
+#   - production:  Manual sync (requires approval)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: genieacs-relay
+  namespace: argocd
+spec:
+  generators:
+    # List generator - define each environment
+    - list:
+        elements:
+          # Development environment - auto-sync enabled
+          - env: dev
+            namespace: genieacs-dev
+            replicaCount: "1"
+            imageTag: edge
+            genieacsUrl: "http://genieacs-nbi.genieacs-dev:7557"
+
+          # Staging environment - auto-sync enabled
+          - env: staging
+            namespace: genieacs-staging
+            replicaCount: "2"
+            imageTag: latest
+            genieacsUrl: "http://genieacs-nbi.genieacs-staging:7557"
+
+  template:
+    metadata:
+      name: "genieacs-relay-{{env}}"
+      namespace: argocd
+      annotations:
+        argocd-image-updater.argoproj.io/image-list: "app=cepatkilatteknologi/genieacs-relay:{{imageTag}}"
+        argocd-image-updater.argoproj.io/app.update-strategy: latest
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+        targetRevision: main
+        path: examples/helm/genieacs-relay
+        helm:
+          valueFiles:
+            - values.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{replicaCount}}"
+            - name: image.tag
+              value: "{{imageTag}}"
+            - name: config.genieacsBaseUrl
+              value: "{{genieacsUrl}}"
+            - name: config.nbiAuth.enabled
+              value: "true"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      # Auto-sync for dev/staging
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 1m
+      revisionHistoryLimit: 5
