@@ -1,0 +1,80 @@
+# ArgoCD Application - Production Environment
+# MANUAL SYNC ONLY - requires explicit approval
+#
+# To sync production:
+#   argocd app sync genieacs-relay-prod
+#   # or via ArgoCD UI
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: genieacs-relay-prod
+  namespace: argocd
+  annotations:
+    # Image updater with semver strategy (only stable versions)
+    argocd-image-updater.argoproj.io/image-list: app=cepatkilatteknologi/genieacs-relay
+    argocd-image-updater.argoproj.io/app.update-strategy: semver
+    # Only allow stable semver tags (no alpha, beta, rc)
+    argocd-image-updater.argoproj.io/app.allow-tags: regexp:^[0-9]+\.[0-9]+\.[0-9]+$
+    argocd-image-updater.argoproj.io/app.ignore-tags: regexp:.*-(alpha|beta|rc).*
+    # Write back to git but DON'T auto-sync
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+    targetRevision: main
+    path: examples/helm/genieacs-relay
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: replicaCount
+          value: "3"
+        - name: image.tag
+          value: "1.0.0"  # Pin to specific version
+        - name: config.genieacsBaseUrl
+          value: "http://genieacs-nbi.genieacs-prod:7557"
+        - name: config.nbiAuth.enabled
+          value: "true"
+        - name: resources.requests.cpu
+          value: "200m"
+        - name: resources.requests.memory
+          value: "256Mi"
+        - name: resources.limits.cpu
+          value: "1000m"
+        - name: resources.limits.memory
+          value: "512Mi"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: genieacs-prod
+
+  # NO automated sync for production!
+  # Sync must be triggered manually via CLI or UI
+  syncPolicy:
+    # automated: <-- intentionally omitted for manual sync
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PruneLast=true           # Prune after sync (safer)
+      - ApplyOutOfSyncOnly=true  # Only apply changed resources
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+
+  revisionHistoryLimit: 10
+
+  # Ignore differences in replicas (managed by HPA)
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

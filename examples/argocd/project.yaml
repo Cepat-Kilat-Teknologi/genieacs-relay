@@ -1,0 +1,97 @@
+# ArgoCD AppProject - Access Control
+# Restricts which repositories and clusters the application can access
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: genieacs
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: GenieACS Relay Project
+
+  # Allowed source repositories
+  sourceRepos:
+    - https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+    # Add config repo if using external values
+    # - https://github.com/Cepat-Kilat-Teknologi/genieacs-config.git
+
+  # Allowed destination clusters and namespaces
+  destinations:
+    # Development
+    - namespace: genieacs-dev
+      server: https://kubernetes.default.svc
+    # Staging
+    - namespace: genieacs-staging
+      server: https://kubernetes.default.svc
+    # Production
+    - namespace: genieacs-prod
+      server: https://kubernetes.default.svc
+    # Default namespace
+    - namespace: genieacs
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster resources (cluster-scoped)
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  # Allowed namespace resources
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: policy
+      kind: PodDisruptionBudget
+
+  # Deny list - resources that cannot be created
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+
+  # Roles for RBAC
+  roles:
+    # Developer role - can sync dev environment
+    - name: developer
+      description: Developer access to dev environment
+      policies:
+        - p, proj:genieacs:developer, applications, get, genieacs/genieacs-relay-dev, allow
+        - p, proj:genieacs:developer, applications, sync, genieacs/genieacs-relay-dev, allow
+      groups:
+        - developers
+
+    # DevOps role - can sync dev and staging
+    - name: devops
+      description: DevOps access to dev and staging
+      policies:
+        - p, proj:genieacs:devops, applications, *, genieacs/genieacs-relay-dev, allow
+        - p, proj:genieacs:devops, applications, *, genieacs/genieacs-relay-staging, allow
+      groups:
+        - devops
+
+    # Admin role - full access
+    - name: admin
+      description: Full admin access
+      policies:
+        - p, proj:genieacs:admin, applications, *, genieacs/*, allow
+      groups:
+        - admins
+
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true
