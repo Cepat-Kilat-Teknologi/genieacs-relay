@@ -13,6 +13,7 @@ This document covers installation, configuration, and deployment options for Gen
   - [Docker Compose](#docker-compose)
   - [Kubernetes](#kubernetes)
   - [Helm Chart](#helm-chart)
+  - [ArgoCD (GitOps)](#argocd-gitops)
   - [Systemd (Bare Metal)](#systemd-bare-metal)
 - [Makefile Commands](#makefile-commands)
 - [Swagger Documentation](#swagger-documentation)
@@ -271,6 +272,50 @@ helm install genieacs-relay ./genieacs-relay -n genieacs --create-namespace
 helm upgrade genieacs-relay ./genieacs-relay -n genieacs
 helm uninstall genieacs-relay -n genieacs
 helm rollback genieacs-relay 1 -n genieacs
+```
+
+### ArgoCD (GitOps)
+
+See [examples/argocd/README.md](examples/argocd/README.md) for detailed guide.
+
+```bash
+cd examples/argocd
+
+# Option 1: Single environment (auto-sync)
+kubectl apply -f application.yaml
+
+# Option 2: With automatic image updates (auto-sync)
+kubectl apply -f application-image-updater.yaml
+
+# Option 3: Multi-environment (recommended)
+kubectl apply -f applicationset.yaml          # Dev & Staging (auto-sync)
+kubectl apply -f application-production.yaml  # Production (manual sync)
+```
+
+**Available manifests:**
+
+| File | Description | Sync Policy |
+|------|-------------|-------------|
+| `application.yaml` | Basic ArgoCD Application | Auto-sync |
+| `application-image-updater.yaml` | With automatic image updates | Auto-sync |
+| `applicationset.yaml` | Dev & Staging environments | Auto-sync |
+| `application-production.yaml` | Production environment | **Manual** |
+| `project.yaml` | ArgoCD AppProject for access control | - |
+
+**Install ArgoCD Image Updater (optional):**
+
+```bash
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
+```
+
+**Production Deployment (Manual Sync):**
+
+```bash
+# Review changes
+argocd app diff genieacs-relay-prod
+
+# Sync after approval
+argocd app sync genieacs-relay-prod
 ```
 
 ### Systemd (Bare Metal)
