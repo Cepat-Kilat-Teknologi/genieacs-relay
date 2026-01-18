@@ -17,6 +17,8 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - [Installation & Configuration](INSTALLATION.md) - Setup, environment variables, and deployment
 - [Security](SECURITY.md) - Authentication, rate limiting, and security features
 - [ONU Models](ONU.md) - Supported ONU/ONT device models
+- [Contributing](CONTRIBUTING.md) - How to contribute to this project
+- [API Test Examples](API_TEST.md) - API endpoint examples and test results
 
 ---
 
