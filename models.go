@@ -12,10 +12,14 @@ type Device struct {
 
 // WLANConfig represents wireless LAN configuration for a device
 type WLANConfig struct {
-	WLAN     string `json:"wlan"`     // WLAN interface identifier (e.g., "1", "5")
-	SSID     string `json:"ssid"`     // Network name broadcast by the WLAN
-	Password string `json:"password"` // Security key/password for the WLAN
-	Band     string `json:"band"`     // Frequency band (2.4GHz, 5GHz, etc.)
+	WLAN       string `json:"wlan"`                  // WLAN interface identifier (e.g., "1", "5")
+	SSID       string `json:"ssid"`                  // Network name broadcast by the WLAN
+	Password   string `json:"password"`              // Security key/password for the WLAN
+	Band       string `json:"band"`                  // Frequency band (2.4GHz, 5GHz, etc.)
+	Hidden     bool   `json:"hidden"`                // True if SSID is not broadcast
+	MaxClients int    `json:"max_clients,omitempty"` // Maximum number of associated devices
+	AuthMode   string `json:"auth_mode,omitempty"`   // Authentication mode (Open, WPA, WPA2, WPA/WPA2)
+	Encryption string `json:"encryption,omitempty"`  // Encryption mode (AES, TKIP, TKIP+AES)
 }
 
 // DHCPClient represents a client device that obtained IP address via DHCP

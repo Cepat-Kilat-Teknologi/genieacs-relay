@@ -92,10 +92,14 @@ func getWLANData(ctx context.Context, deviceID string) ([]WLANConfig, error) {
 
 		// Create WLANConfig struct and add to results
 		configs = append(configs, WLANConfig{
-			WLAN:     key,                // WLAN interface identifier
-			SSID:     ssid,               // Network name
-			Password: getPassword(wlan),  // Security password
-			Band:     getBand(wlan, key), // Frequency band
+			WLAN:       key,                 // WLAN interface identifier
+			SSID:       ssid,                // Network name
+			Password:   getPassword(wlan),   // Security password
+			Band:       getBand(wlan, key),  // Frequency band
+			Hidden:     getHidden(wlan),     // SSID broadcast disabled
+			MaxClients: getMaxClients(wlan), // Maximum associated devices
+			AuthMode:   getAuthMode(wlan),   // Authentication mode
+			Encryption: getEncryption(wlan), // Encryption mode
 		})
 	}
 
@@ -178,6 +182,85 @@ func getBand(wlan map[string]interface{}, wlanKey string) string {
 	}
 	// Return unknown if band cannot be determined
 	return "Unknown"
+}
+
+// getHidden checks if SSID broadcast is disabled (hidden network)
+func getHidden(wlan map[string]interface{}) bool {
+	// SSIDAdvertisementEnabled = false means hidden = true
+	if advMap, ok := wlan["SSIDAdvertisementEnabled"].(map[string]interface{}); ok {
+		if adv, ok := advMap["_value"].(bool); ok {
+			return !adv // Invert: advertisement disabled = hidden
+		}
+	}
+	return false // Default to visible
+}
+
+// getMaxClients extracts maximum associated devices from WLAN configuration
+func getMaxClients(wlan map[string]interface{}) int {
+	if maxMap, ok := wlan["MaxAssociatedDevices"].(map[string]interface{}); ok {
+		if maxVal, ok := maxMap["_value"].(float64); ok {
+			return int(maxVal)
+		}
+		// Try int type
+		if maxVal, ok := maxMap["_value"].(int); ok {
+			return maxVal
+		}
+	}
+	return 0 // Return 0 if not found (omitempty will hide it)
+}
+
+// getAuthMode extracts authentication mode from BeaconType field
+func getAuthMode(wlan map[string]interface{}) string {
+	if beaconMap, ok := wlan["BeaconType"].(map[string]interface{}); ok {
+		if beacon, ok := beaconMap["_value"].(string); ok {
+			// Map BeaconType to user-friendly auth mode
+			switch strings.ToLower(beacon) {
+			case "none", "basic":
+				return "Open"
+			case "wpa":
+				return "WPA"
+			case "11i", "wpa2":
+				return "WPA2"
+			case "wpaand11i", "wpawpa2":
+				return "WPA/WPA2"
+			default:
+				return beacon // Return as-is if unknown
+			}
+		}
+	}
+	return "" // Return empty if not found
+}
+
+// getEncryption extracts encryption mode from WLAN configuration
+func getEncryption(wlan map[string]interface{}) string {
+	// Try WPAEncryptionModes first
+	if encMap, ok := wlan["WPAEncryptionModes"].(map[string]interface{}); ok {
+		if enc, ok := encMap["_value"].(string); ok {
+			return normalizeEncryption(enc)
+		}
+	}
+	// Try IEEE11iEncryptionModes as fallback
+	if encMap, ok := wlan["IEEE11iEncryptionModes"].(map[string]interface{}); ok {
+		if enc, ok := encMap["_value"].(string); ok {
+			return normalizeEncryption(enc)
+		}
+	}
+	return "" // Return empty if not found
+}
+
+// normalizeEncryption converts encryption value to user-friendly format
+func normalizeEncryption(enc string) string {
+	enc = strings.ToUpper(enc)
+	switch enc {
+	case "AESENCRYPTION", "AES":
+		return "AES"
+	case "TKIPENCRYPTION", "TKIP":
+		return "TKIP"
+	case "TKIPANDAESENCRYPTION", "TKIPAES", "TKIP+AES":
+		return "TKIP+AES"
+	default:
+		return enc // Return as-is if unknown
+	}
 }
 
 // isWLANValid checks if a specific WLAN interface exists and is enabled on a device
