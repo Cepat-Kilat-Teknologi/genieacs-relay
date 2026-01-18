@@ -1,8 +1,8 @@
-# Makefile for ACS API Gateway
+# Makefile for GenieACS Relay
 
 # Variables
 REGISTRY_USER   := cepatkilatteknologi
-IMAGE_NAME      := acs-api-gateway
+IMAGE_NAME      := genieacs-relay
 TAG             := 1.1
 DOCKER_COMPOSE  := docker compose
 DOCKER_COMPOSE_PROD := docker compose -f docker-compose.prod.yml
@@ -18,7 +18,7 @@ TEST_DIR        := test-results
         docker-build docker-push \
         docker-buildx docker-pushx \
         healthcheck lint format check-deps \
-        check-deps-install help
+        check-deps-install swagger swagger-install swagger-fmt swagger-clean swagger-serve help
 
 .DEFAULT_GOAL := help
 
@@ -71,7 +71,7 @@ test-race:
 ## test-coverage: Run tests with coverage analysis
 test-coverage:
 	@echo ">> Running tests with coverage..."
-	go test $(GO_TEST_FLAGS) $(GO_COVER_FLAGS) ./...
+	go test $(GO_TEST_FLAGS) $(GO_COVER_FLAGS) $$(go list ./... | grep -v /docs)
 	@echo ">> Coverage summary:"
 	go tool cover -func=coverage.out
 
@@ -216,6 +216,46 @@ check-deps-install:
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 	@echo ">> Install complete! Now run: make check-deps"
 
+# Swagger Documentation
+## swagger: Generate Swagger documentation
+swagger:
+	@echo ">> Generating Swagger documentation..."
+	@if command -v swag >/dev/null 2>&1; then \
+		swag init --parseDependency --parseInternal; \
+		echo ">> Swagger docs generated in ./docs"; \
+		echo ">> Access at: http://localhost:8080/swagger/index.html"; \
+	else \
+		echo "swag not installed. Run: make swagger-install"; \
+		exit 1; \
+	fi
+
+## swagger-install: Install swag CLI tool
+swagger-install:
+	@echo ">> Installing swag CLI..."
+	go install github.com/swaggo/swag/cmd/swag@latest
+	@echo ">> swag installed successfully!"
+	@echo ">> Now run: make swagger"
+
+## swagger-fmt: Format Swagger annotations
+swagger-fmt:
+	@echo ">> Formatting Swagger annotations..."
+	@if command -v swag >/dev/null 2>&1; then \
+		swag fmt; \
+		echo ">> Swagger annotations formatted"; \
+	else \
+		echo "swag not installed. Run: make swagger-install"; \
+		exit 1; \
+	fi
+
+## swagger-clean: Remove generated Swagger documentation
+swagger-clean:
+	@echo ">> Removing Swagger documentation..."
+	rm -rf docs/
+	@echo ">> Swagger docs removed"
+
+## swagger-serve: Generate docs and start server
+swagger-serve: swagger run
+
 # Utilities
 ## healthcheck: Check if the local running application is healthy
 healthcheck:
@@ -237,7 +277,7 @@ clean-all: clean docker-clean
 
 ## help: Show this help message
 help:
-	@echo "ACS API Gateway Management Makefile"
+	@echo "GenieACS Relay Management Makefile"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make [target]"
@@ -285,6 +325,13 @@ help:
 	@echo "  make format          Format Go code"
 	@echo "  make check-deps      Check for outdated dependencies"
 	@echo "  make check-deps-install Install dependency checking tools"
+	@echo ""
+	@echo "Swagger Documentation:"
+	@echo "  make swagger         Generate Swagger documentation"
+	@echo "  make swagger-install Install swag CLI tool"
+	@echo "  make swagger-fmt     Format Swagger annotations"
+	@echo "  make swagger-clean   Remove generated Swagger docs"
+	@echo "  make swagger-serve   Generate docs and start server"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make healthcheck     Check if application is healthy"

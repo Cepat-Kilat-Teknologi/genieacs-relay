@@ -1,7 +1,7 @@
 services:
   api:
-    image: cepatkilatteknologi/acs-api-gateway:2.0
-    container_name: acs-api-gateway-prod
+    image: cepatkilatteknologi/genieacs-relay:2.0
+    container_name: genieacs-relay-prod
     env_file:
       - .env
     environment:
@@ -11,6 +11,7 @@ services:
       - SERVER_ADDR=${SERVER_ADDR:-:8080}
       - MIDDLEWARE_AUTH=${MIDDLEWARE_AUTH:-false}
       - AUTH_KEY=${AUTH_KEY}
+      - STALE_THRESHOLD_MINUTES=${STALE_THRESHOLD_MINUTES:-30}
     ports:
       - "8080:8080"
     restart: unless-stopped

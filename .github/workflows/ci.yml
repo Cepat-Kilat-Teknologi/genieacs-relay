@@ -10,9 +10,9 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: cepatkilatteknologi/acs-api-gateway
+  IMAGE_NAME: cepatkilatteknologi/genieacs-relay
   GO_VERSION: '1.25'
-  IMAGE_VERSION: '2.0'
+  IMAGE_VERSION: '1.0'
 
 jobs:
   # ========================
@@ -47,7 +47,7 @@ jobs:
           govulncheck ./...
       
       - name: Run Unit Tests with Coverage
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /docs)
       
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4

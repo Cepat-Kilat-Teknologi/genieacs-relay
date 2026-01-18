@@ -1,0 +1,958 @@
+basePath: /api/v1/genieacs
+definitions:
+  main.AvailableWLANResponse:
+    properties:
+      available_wlan:
+        properties:
+          2_4ghz:
+            items:
+              type: integer
+            type: array
+          5ghz:
+            items:
+              type: integer
+            type: array
+        type: object
+      band_type:
+        type: string
+      config_options:
+        properties:
+          auth_modes:
+            items:
+              type: string
+            type: array
+          encryptions:
+            items:
+              type: string
+            type: array
+          max_clients:
+            properties:
+              default:
+                type: integer
+              max:
+                type: integer
+              min:
+                type: integer
+            type: object
+        type: object
+      device_id:
+        type: string
+      model:
+        type: string
+      total_slots:
+        properties:
+          2_4ghz:
+            items:
+              type: integer
+            type: array
+          5ghz:
+            items:
+              type: integer
+            type: array
+        type: object
+      used_wlan:
+        items:
+          $ref: '#/definitions/main.UsedWLANInfo'
+        type: array
+    type: object
+  main.CreateWLANRequest:
+    properties:
+      auth_mode:
+        description: 'Authentication mode: Open, WPA, WPA2, WPA/WPA2'
+        type: string
+      encryption:
+        description: 'Encryption mode: AES, TKIP, TKIP+AES'
+        type: string
+      hidden:
+        description: Hide SSID (SSIDAdvertisementEnabled = false)
+        type: boolean
+      max_clients:
+        description: Maximum number of associated devices (1-64)
+        type: integer
+      password:
+        description: Password for the new WLAN (required for WPA/WPA2)
+        type: string
+      ssid:
+        description: SSID for the new WLAN
+        type: string
+    type: object
+  main.DHCPClient:
+    properties:
+      hostname:
+        description: Hostname reported by the client
+        type: string
+      ip:
+        description: IP address assigned to the client
+        type: string
+      mac:
+        description: MAC address of the client device
+        type: string
+    type: object
+  main.DeviceCapabilityResponse:
+    description: Device capability response
+    properties:
+      band_type:
+        example: dualband
+        type: string
+      description:
+        example: Device supports both 2.4GHz and 5GHz bands
+        type: string
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      is_dual_band:
+        example: true
+        type: boolean
+      model:
+        example: F670L
+        type: string
+      supported_wlan:
+        properties:
+          2_4ghz:
+            example:
+            - 1
+            - 2
+            - 3
+            - 4
+            items:
+              type: integer
+            type: array
+          5ghz:
+            example:
+            - 5
+            - 6
+            - 7
+            - 8
+            items:
+              type: integer
+            type: array
+        type: object
+    type: object
+  main.HealthResponse:
+    description: Health check response data
+    properties:
+      status:
+        example: healthy
+        type: string
+    type: object
+  main.MessageResponse:
+    description: Simple message response
+    properties:
+      message:
+        example: Operation completed successfully
+        type: string
+    type: object
+  main.OptimizeWLANRequest:
+    properties:
+      bandwidth:
+        description: 'Bandwidth: 20MHz, 40MHz, 80MHz (5GHz only), Auto'
+        type: string
+      channel:
+        description: 'Channel: Auto, or channel number'
+        type: string
+      mode:
+        description: WiFi standard mode (b, g, n, b/g, g/n, b/g/n for 2.4GHz; a, n,
+          ac, a/n, a/n/ac for 5GHz)
+        type: string
+      transmit_power:
+        description: 'Transmit power percentage: 0, 20, 40, 60, 80, 100'
+        type: integer
+    type: object
+  main.Response:
+    properties:
+      code:
+        description: HTTP status code
+        type: integer
+      data:
+        description: Response payload data when successful
+      error:
+        description: Error description when operation fails
+        type: string
+      status:
+        description: Status message (e.g., "OK", "Error")
+        type: string
+    type: object
+  main.SSIDForceResponse:
+    description: Force SSID response with retry information
+    properties:
+      attempts:
+        example: 1
+        type: integer
+      wlan_data:
+        items:
+          $ref: '#/definitions/main.WLANConfig'
+        type: array
+    type: object
+  main.UpdateWLANRequest:
+    properties:
+      auth_mode:
+        description: Authentication mode (optional)
+        type: string
+      encryption:
+        description: Encryption mode (optional)
+        type: string
+      hidden:
+        description: Hide SSID (optional)
+        type: boolean
+      max_clients:
+        description: Maximum clients (optional)
+        type: integer
+      password:
+        description: New password (optional)
+        type: string
+      ssid:
+        description: New SSID (optional)
+        type: string
+    type: object
+  main.UsedWLANInfo:
+    properties:
+      band:
+        type: string
+      ssid:
+        type: string
+      wlan_id:
+        type: integer
+    type: object
+  main.WLANConfig:
+    properties:
+      band:
+        description: Frequency band (2.4GHz, 5GHz, etc.)
+        type: string
+      password:
+        description: Security key/password for the WLAN
+        type: string
+      ssid:
+        description: Network name broadcast by the WLAN
+        type: string
+      wlan:
+        description: WLAN interface identifier (e.g., "1", "5")
+        type: string
+    type: object
+  main.WLANCreateResponse:
+    description: WLAN creation response
+    properties:
+      auth_mode:
+        example: WPA2
+        type: string
+      band:
+        example: 2.4GHz
+        type: string
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      encryption:
+        example: AES
+        type: string
+      hidden:
+        example: false
+        type: boolean
+      ip:
+        example: 192.168.1.1
+        type: string
+      max_clients:
+        example: 10
+        type: integer
+      message:
+        example: WLAN creation submitted successfully
+        type: string
+      ssid:
+        example: GuestNetwork
+        type: string
+      wlan:
+        example: "2"
+        type: string
+    type: object
+  main.WLANDeleteResponse:
+    description: WLAN deletion response
+    properties:
+      band:
+        example: 2.4GHz
+        type: string
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      message:
+        example: WLAN disabled successfully
+        type: string
+      wlan:
+        example: "2"
+        type: string
+    type: object
+  main.WLANOptimizeResponse:
+    description: WLAN optimization response
+    properties:
+      band:
+        example: 2.4GHz
+        type: string
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      message:
+        example: WLAN optimization submitted successfully
+        type: string
+      updated_settings:
+        additionalProperties: true
+        type: object
+      wlan:
+        example: "1"
+        type: string
+    type: object
+  main.WLANUpdateResponse:
+    description: WLAN update response
+    properties:
+      band:
+        example: 2.4GHz
+        type: string
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      message:
+        example: WLAN update submitted successfully
+        type: string
+      updated_fields:
+        additionalProperties: true
+        type: object
+      wlan:
+        example: "2"
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: Cepat Kilat Teknologi
+    url: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+  description: |-
+    A lightweight relay service for managing TR-069 devices via GenieACS.
+    Provides endpoints for SSID/WLAN management, device capability detection, and DHCP clients.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: GenieACS Relay API
+  version: 1.0.0
+paths:
+  /cache/clear:
+    post:
+      description: Clears the device cache. Can clear cache for a specific device
+        or all devices.
+      parameters:
+      - description: Device ID to clear cache for (omit to clear all)
+        in: query
+        name: device_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.MessageResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Clear cache
+      tags:
+      - Cache
+  /capability/{ip}:
+    get:
+      description: Retrieves the wireless capability of a device (single-band or dual-band)
+        based on ONU model detection
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.DeviceCapabilityResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get device capability
+      tags:
+      - Device
+  /dhcp-client/{ip}:
+    get:
+      description: Retrieves DHCP client information (connected devices) for a device
+        identified by its IP address
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Force refresh data from device
+        in: query
+        name: refresh
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/main.DHCPClient'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get DHCP clients
+      tags:
+      - Device
+  /force/ssid/{ip}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves WLAN/SSID information, automatically triggering a refresh
+        if data is not available and retrying until data is found or timeout
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: 'Maximum retry attempts (default: 12)'
+        in: query
+        maximum: 30
+        minimum: 1
+        name: max_retries
+        type: integer
+      - description: 'Delay between retries in ms (default: 5000)'
+        in: query
+        maximum: 30000
+        minimum: 100
+        name: retry_delay_ms
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SSIDForceResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "408":
+          description: Request Timeout
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get SSID with force refresh
+      tags:
+      - SSID
+  /health:
+    get:
+      description: Returns the health status of the service. Does not require authentication.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.HealthResponse'
+              type: object
+      summary: Health check
+      tags:
+      - Health
+  /ssid/{ip}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves WLAN/SSID configuration for a device identified by its
+        IP address
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/main.WLANConfig'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get SSID by device IP
+      tags:
+      - SSID
+  /ssid/{ip}/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Triggers a refresh of WLAN configuration data for a device. The
+        refresh is processed asynchronously.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.MessageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Trigger SSID refresh
+      tags:
+      - SSID
+  /wlan/available/{ip}:
+    get:
+      description: Returns available WLAN slots for creating new WiFi networks based
+        on device capability
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.AvailableWLANResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get available WLAN slots
+      tags:
+      - WLAN
+  /wlan/create/{wlan}/{ip}:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new WLAN on an available slot with advanced configuration
+        options
+      parameters:
+      - description: WLAN ID (1-4 for 2.4GHz, 5-8 for 5GHz)
+        example: "2"
+        in: path
+        name: wlan
+        required: true
+        type: string
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: WLAN creation parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.CreateWLANRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WLANCreateResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Create new WLAN
+      tags:
+      - WLAN
+  /wlan/delete/{wlan}/{ip}:
+    delete:
+      description: Disables an existing WLAN configuration. This effectively "deletes"
+        the WLAN by disabling it.
+      parameters:
+      - description: WLAN ID (1-8)
+        example: "2"
+        in: path
+        name: wlan
+        required: true
+        type: string
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WLANDeleteResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete/Disable WLAN
+      tags:
+      - WLAN
+  /wlan/optimize/{wlan}/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Optimizes WLAN radio settings including channel, mode, bandwidth,
+        and transmit power. Supports partial updates.
+      parameters:
+      - description: WLAN ID (1-8)
+        example: "1"
+        in: path
+        name: wlan
+        required: true
+        type: string
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: WLAN optimization parameters (all fields optional)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.OptimizeWLANRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WLANOptimizeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Optimize WLAN radio settings
+      tags:
+      - WLAN
+  /wlan/update/{wlan}/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing WLAN configuration. Supports partial updates
+        - only include fields you want to change.
+      parameters:
+      - description: WLAN ID (1-8)
+        example: "2"
+        in: path
+        name: wlan
+        required: true
+        type: string
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: WLAN update parameters (all fields optional)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.UpdateWLANRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WLANUpdateResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update WLAN configuration
+      tags:
+      - WLAN
+securityDefinitions:
+  ApiKeyAuth:
+    description: API key for authentication (required when MIDDLEWARE_AUTH=true)
+    in: header
+    name: X-API-Key
+    type: apiKey
+swagger: "2.0"

@@ -1,0 +1,1459 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "A lightweight relay service for managing TR-069 devices via GenieACS.\nProvides endpoints for SSID/WLAN management, device capability detection, and DHCP clients.",
+        "title": "GenieACS Relay API",
+        "contact": {
+            "name": "Cepat Kilat Teknologi",
+            "url": "https://github.com/Cepat-Kilat-Teknologi/genieacs-relay"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api/v1/genieacs",
+    "paths": {
+        "/cache/clear": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Clears the device cache. Can clear cache for a specific device or all devices.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cache"
+                ],
+                "summary": "Clear cache",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID to clear cache for (omit to clear all)",
+                        "name": "device_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/capability/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves the wireless capability of a device (single-band or dual-band) based on ONU model detection",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Device"
+                ],
+                "summary": "Get device capability",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.DeviceCapabilityResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/dhcp-client/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves DHCP client information (connected devices) for a device identified by its IP address",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Device"
+                ],
+                "summary": "Get DHCP clients",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Force refresh data from device",
+                        "name": "refresh",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/main.DHCPClient"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/force/ssid/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves WLAN/SSID information, automatically triggering a refresh if data is not available and retrying until data is found or timeout",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSID"
+                ],
+                "summary": "Get SSID with force refresh",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "maximum": 30,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Maximum retry attempts (default: 12)",
+                        "name": "max_retries",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 30000,
+                        "minimum": 100,
+                        "type": "integer",
+                        "description": "Delay between retries in ms (default: 5000)",
+                        "name": "retry_delay_ms",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SSIDForceResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "408": {
+                        "description": "Request Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "description": "Returns the health status of the service. Does not require authentication.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.HealthResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/ssid/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves WLAN/SSID configuration for a device identified by its IP address",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSID"
+                ],
+                "summary": "Get SSID by device IP",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/main.WLANConfig"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/ssid/{ip}/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Triggers a refresh of WLAN configuration data for a device. The refresh is processed asynchronously.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSID"
+                ],
+                "summary": "Trigger SSID refresh",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wlan/available/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns available WLAN slots for creating new WiFi networks based on device capability",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WLAN"
+                ],
+                "summary": "Get available WLAN slots",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.AvailableWLANResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wlan/create/{wlan}/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates a new WLAN on an available slot with advanced configuration options",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WLAN"
+                ],
+                "summary": "Create new WLAN",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2",
+                        "description": "WLAN ID (1-4 for 2.4GHz, 5-8 for 5GHz)",
+                        "name": "wlan",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "WLAN creation parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.CreateWLANRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WLANCreateResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wlan/delete/{wlan}/{ip}": {
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Disables an existing WLAN configuration. This effectively \"deletes\" the WLAN by disabling it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WLAN"
+                ],
+                "summary": "Delete/Disable WLAN",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2",
+                        "description": "WLAN ID (1-8)",
+                        "name": "wlan",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WLANDeleteResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wlan/optimize/{wlan}/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Optimizes WLAN radio settings including channel, mode, bandwidth, and transmit power. Supports partial updates.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WLAN"
+                ],
+                "summary": "Optimize WLAN radio settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "1",
+                        "description": "WLAN ID (1-8)",
+                        "name": "wlan",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "WLAN optimization parameters (all fields optional)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.OptimizeWLANRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WLANOptimizeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wlan/update/{wlan}/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates an existing WLAN configuration. Supports partial updates - only include fields you want to change.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WLAN"
+                ],
+                "summary": "Update WLAN configuration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2",
+                        "description": "WLAN ID (1-8)",
+                        "name": "wlan",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "WLAN update parameters (all fields optional)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.UpdateWLANRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WLANUpdateResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "main.AvailableWLANResponse": {
+            "type": "object",
+            "properties": {
+                "available_wlan": {
+                    "type": "object",
+                    "properties": {
+                        "2_4ghz": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "5ghz": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                },
+                "band_type": {
+                    "type": "string"
+                },
+                "config_options": {
+                    "type": "object",
+                    "properties": {
+                        "auth_modes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "encryptions": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "max_clients": {
+                            "type": "object",
+                            "properties": {
+                                "default": {
+                                    "type": "integer"
+                                },
+                                "max": {
+                                    "type": "integer"
+                                },
+                                "min": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    }
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "total_slots": {
+                    "type": "object",
+                    "properties": {
+                        "2_4ghz": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "5ghz": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                },
+                "used_wlan": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.UsedWLANInfo"
+                    }
+                }
+            }
+        },
+        "main.CreateWLANRequest": {
+            "type": "object",
+            "properties": {
+                "auth_mode": {
+                    "description": "Authentication mode: Open, WPA, WPA2, WPA/WPA2",
+                    "type": "string"
+                },
+                "encryption": {
+                    "description": "Encryption mode: AES, TKIP, TKIP+AES",
+                    "type": "string"
+                },
+                "hidden": {
+                    "description": "Hide SSID (SSIDAdvertisementEnabled = false)",
+                    "type": "boolean"
+                },
+                "max_clients": {
+                    "description": "Maximum number of associated devices (1-64)",
+                    "type": "integer"
+                },
+                "password": {
+                    "description": "Password for the new WLAN (required for WPA/WPA2)",
+                    "type": "string"
+                },
+                "ssid": {
+                    "description": "SSID for the new WLAN",
+                    "type": "string"
+                }
+            }
+        },
+        "main.DHCPClient": {
+            "type": "object",
+            "properties": {
+                "hostname": {
+                    "description": "Hostname reported by the client",
+                    "type": "string"
+                },
+                "ip": {
+                    "description": "IP address assigned to the client",
+                    "type": "string"
+                },
+                "mac": {
+                    "description": "MAC address of the client device",
+                    "type": "string"
+                }
+            }
+        },
+        "main.DeviceCapabilityResponse": {
+            "description": "Device capability response",
+            "type": "object",
+            "properties": {
+                "band_type": {
+                    "type": "string",
+                    "example": "dualband"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Device supports both 2.4GHz and 5GHz bands"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "is_dual_band": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "model": {
+                    "type": "string",
+                    "example": "F670L"
+                },
+                "supported_wlan": {
+                    "type": "object",
+                    "properties": {
+                        "2_4ghz": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            },
+                            "example": [
+                                1,
+                                2,
+                                3,
+                                4
+                            ]
+                        },
+                        "5ghz": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            },
+                            "example": [
+                                5,
+                                6,
+                                7,
+                                8
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "main.HealthResponse": {
+            "description": "Health check response data",
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "healthy"
+                }
+            }
+        },
+        "main.MessageResponse": {
+            "description": "Simple message response",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Operation completed successfully"
+                }
+            }
+        },
+        "main.OptimizeWLANRequest": {
+            "type": "object",
+            "properties": {
+                "bandwidth": {
+                    "description": "Bandwidth: 20MHz, 40MHz, 80MHz (5GHz only), Auto",
+                    "type": "string"
+                },
+                "channel": {
+                    "description": "Channel: Auto, or channel number",
+                    "type": "string"
+                },
+                "mode": {
+                    "description": "WiFi standard mode (b, g, n, b/g, g/n, b/g/n for 2.4GHz; a, n, ac, a/n, a/n/ac for 5GHz)",
+                    "type": "string"
+                },
+                "transmit_power": {
+                    "description": "Transmit power percentage: 0, 20, 40, 60, 80, 100",
+                    "type": "integer"
+                }
+            }
+        },
+        "main.Response": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "HTTP status code",
+                    "type": "integer"
+                },
+                "data": {
+                    "description": "Response payload data when successful"
+                },
+                "error": {
+                    "description": "Error description when operation fails",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status message (e.g., \"OK\", \"Error\")",
+                    "type": "string"
+                }
+            }
+        },
+        "main.SSIDForceResponse": {
+            "description": "Force SSID response with retry information",
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "wlan_data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.WLANConfig"
+                    }
+                }
+            }
+        },
+        "main.UpdateWLANRequest": {
+            "type": "object",
+            "properties": {
+                "auth_mode": {
+                    "description": "Authentication mode (optional)",
+                    "type": "string"
+                },
+                "encryption": {
+                    "description": "Encryption mode (optional)",
+                    "type": "string"
+                },
+                "hidden": {
+                    "description": "Hide SSID (optional)",
+                    "type": "boolean"
+                },
+                "max_clients": {
+                    "description": "Maximum clients (optional)",
+                    "type": "integer"
+                },
+                "password": {
+                    "description": "New password (optional)",
+                    "type": "string"
+                },
+                "ssid": {
+                    "description": "New SSID (optional)",
+                    "type": "string"
+                }
+            }
+        },
+        "main.UsedWLANInfo": {
+            "type": "object",
+            "properties": {
+                "band": {
+                    "type": "string"
+                },
+                "ssid": {
+                    "type": "string"
+                },
+                "wlan_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.WLANConfig": {
+            "type": "object",
+            "properties": {
+                "band": {
+                    "description": "Frequency band (2.4GHz, 5GHz, etc.)",
+                    "type": "string"
+                },
+                "password": {
+                    "description": "Security key/password for the WLAN",
+                    "type": "string"
+                },
+                "ssid": {
+                    "description": "Network name broadcast by the WLAN",
+                    "type": "string"
+                },
+                "wlan": {
+                    "description": "WLAN interface identifier (e.g., \"1\", \"5\")",
+                    "type": "string"
+                }
+            }
+        },
+        "main.WLANCreateResponse": {
+            "description": "WLAN creation response",
+            "type": "object",
+            "properties": {
+                "auth_mode": {
+                    "type": "string",
+                    "example": "WPA2"
+                },
+                "band": {
+                    "type": "string",
+                    "example": "2.4GHz"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "encryption": {
+                    "type": "string",
+                    "example": "AES"
+                },
+                "hidden": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "max_clients": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "message": {
+                    "type": "string",
+                    "example": "WLAN creation submitted successfully"
+                },
+                "ssid": {
+                    "type": "string",
+                    "example": "GuestNetwork"
+                },
+                "wlan": {
+                    "type": "string",
+                    "example": "2"
+                }
+            }
+        },
+        "main.WLANDeleteResponse": {
+            "description": "WLAN deletion response",
+            "type": "object",
+            "properties": {
+                "band": {
+                    "type": "string",
+                    "example": "2.4GHz"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "WLAN disabled successfully"
+                },
+                "wlan": {
+                    "type": "string",
+                    "example": "2"
+                }
+            }
+        },
+        "main.WLANOptimizeResponse": {
+            "description": "WLAN optimization response",
+            "type": "object",
+            "properties": {
+                "band": {
+                    "type": "string",
+                    "example": "2.4GHz"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "WLAN optimization submitted successfully"
+                },
+                "updated_settings": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "wlan": {
+                    "type": "string",
+                    "example": "1"
+                }
+            }
+        },
+        "main.WLANUpdateResponse": {
+            "description": "WLAN update response",
+            "type": "object",
+            "properties": {
+                "band": {
+                    "type": "string",
+                    "example": "2.4GHz"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "WLAN update submitted successfully"
+                },
+                "updated_fields": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "wlan": {
+                    "type": "string",
+                    "example": "2"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "description": "API key for authentication (required when MIDDLEWARE_AUTH=true)",
+            "type": "apiKey",
+            "name": "X-API-Key",
+            "in": "header"
+        }
+    }
+}
