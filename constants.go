@@ -60,6 +60,16 @@ const (
 	EnvAuthKey        = "AUTH_KEY"
 )
 
+// NBI (Northbound Interface) authentication configuration
+const (
+	// EnvNBIAuth is the environment variable to enable/disable NBI authentication
+	// Set to "true" to require NBI_AUTH_KEY for GenieACS API calls
+	// Set to "false" to disable NBI authentication (default - GenieACS default has no auth)
+	EnvNBIAuth = "NBI_AUTH"
+	// EnvNBIAuthKey is the environment variable for NBI authentication key
+	EnvNBIAuthKey = "NBI_AUTH_KEY"
+)
+
 // CORS configuration
 const (
 	// EnvCORSAllowedOrigins is the environment variable for allowed CORS origins (comma-separated)
