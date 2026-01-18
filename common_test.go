@@ -170,6 +170,8 @@ func (f *failingBodyTransport) RoundTrip(*http.Request) (*http.Response, error) 
 
 func loadConfigFromEnv() {
 	geniesBaseURL = getEnv("GENIEACS_BASE_URL", "http://127.0.0.1:7557")
+	// For testing, enable NBI auth with a mock key
+	nbiAuth = true
 	nbiAuthKey = getEnv("NBI_AUTH_KEY", "mock-nbi-key")
 }
 
