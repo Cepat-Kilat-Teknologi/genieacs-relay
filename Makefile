@@ -71,7 +71,7 @@ test-race:
 ## test-coverage: Run tests with coverage analysis
 test-coverage:
 	@echo ">> Running tests with coverage..."
-	go test $(GO_TEST_FLAGS) $(GO_COVER_FLAGS) ./...
+	go test $(GO_TEST_FLAGS) $(GO_COVER_FLAGS) $$(go list ./... | grep -v /docs)
 	@echo ">> Coverage summary:"
 	go tool cover -func=coverage.out
 
