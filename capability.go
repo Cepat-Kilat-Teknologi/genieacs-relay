@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -9,12 +10,9 @@ import (
 
 // DeviceCapability represents the wireless capability of a device
 type DeviceCapability struct {
-	Model         string   `json:"model"`          // Device model name
-	BandType      BandType `json:"band_type"`      // singleband, dualband, or unknown
-	IsDualBand    bool     `json:"is_dual_band"`   // Convenience field for dual-band check
-	AvailableWLAN []int    `json:"available_wlan"` // List of available WLAN IDs
-	Max24GHz      int      `json:"max_24ghz"`      // Max WLAN ID for 2.4GHz (always 4)
-	Max5GHz       int      `json:"max_5ghz"`       // Max WLAN ID for 5GHz (0 for single-band, 8 for dual-band)
+	Model      string   `json:"model"`        // Device model name
+	BandType   BandType `json:"band_type"`    // singleband, dualband, or unknown
+	IsDualBand bool     `json:"is_dual_band"` // Convenience field for dual-band check
 }
 
 // getDeviceBandType determines the band type of a device based on its model
@@ -216,18 +214,9 @@ func getDeviceCapability(ctx context.Context, deviceID string) (*DeviceCapabilit
 		BandType: bandType,
 	}
 
-	// Set available WLAN IDs based on band type
-	switch bandType {
-	case BandTypeDualBand:
+	// Set dual-band flag based on band type
+	if bandType == BandTypeDualBand {
 		capability.IsDualBand = true
-		capability.AvailableWLAN = []int{1, 2, 3, 4, 5, 6, 7, 8}
-		capability.Max24GHz = WLAN24GHzMax
-		capability.Max5GHz = WLAN5GHzMax
-	default: // SingleBand or Unknown defaults to single-band for safety
-		capability.IsDualBand = false
-		capability.AvailableWLAN = []int{1, 2, 3, 4}
-		capability.Max24GHz = WLAN24GHzMax
-		capability.Max5GHz = 0
 	}
 
 	return capability, nil
@@ -235,22 +224,22 @@ func getDeviceCapability(ctx context.Context, deviceID string) (*DeviceCapabilit
 
 // validateWLANIDForDevice validates if a WLAN ID is valid for the device's capability
 // Returns nil if valid, error if invalid
+// Error messages are sanitized to avoid exposing device model names
 func validateWLANIDForDevice(ctx context.Context, deviceID string, wlanID int) error {
 	// Get device capability
 	capability, err := getDeviceCapability(ctx, deviceID)
 	if err != nil {
-		return fmt.Errorf("failed to get device capability: %w", err)
+		return errors.New(ErrDeviceCapabilityCheck)
 	}
 
 	// Check if WLAN ID is in valid range
 	if wlanID < WLAN24GHzMin || wlanID > WLAN5GHzMax {
-		return fmt.Errorf("WLAN ID must be between %d and %d", WLAN24GHzMin, WLAN5GHzMax)
+		return errors.New(ErrWLANIDOutOfRange)
 	}
 
 	// Check if device supports this WLAN ID
 	if wlanID >= WLAN5GHzMin && !capability.IsDualBand {
-		return fmt.Errorf("device %s is single-band and does not support WLAN ID %d (5GHz range). Available WLAN IDs: 1-4",
-			capability.Model, wlanID)
+		return errors.New(ErrWLANID5GHzNotSupported)
 	}
 
 	return nil

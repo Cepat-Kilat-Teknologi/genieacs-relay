@@ -25,21 +25,10 @@ const (
 	PathLANDeviceRefresh     = "InternetGatewayDevice.LANDevice.1"
 	PathRefreshObjectPayload = `{"name": "refreshObject", "objectName": "%s"}`
 
-	// Field names in GenieACS data
-	FieldID             = "_id"
-	FieldValue          = "_value"
-	FieldEnable         = "Enable"
-	FieldSSID           = "SSID"
-	FieldStandard       = "Standard"
-	FieldPreSharedKey   = "PreSharedKey"
-	FieldKeyPassphrase  = "KeyPassphrase"
-	FieldXCMSPassphrase = "X_CMS_KeyPassphrase"
-	FieldMACAddress     = "MACAddress"
-	FieldHostName       = "HostName"
-	FieldIPAddress      = "IPAddress"
-	FieldSummaryIP      = "summary.ip"
-	FieldWANPPPConn1    = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress._value"
-	FieldWANPPPConn2    = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress._value"
+	// Field names for device IP lookup in GenieACS queries
+	FieldSummaryIP   = "summary.ip"
+	FieldWANPPPConn1 = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress._value"
+	FieldWANPPPConn2 = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress._value"
 )
 
 // HTTP and timeout configurations
@@ -47,22 +36,24 @@ const (
 	DefaultServerAddr  = ":8080"
 	DefaultGenieACSURL = "http://localhost:7557"
 	// DefaultNBIAuthKey is intentionally empty - MUST be set via NBI_AUTH_KEY environment variable
-	DefaultNBIAuthKey       = ""
-	DefaultHTTPTimeout      = 15 * time.Second
-	DefaultCacheTimeout     = 30 * time.Second
-	DefaultShutdownTimeout  = 30 * time.Second
-	DefaultRequestTimeout   = 60 * time.Second
-	DefaultMaxIdleConns     = 100
-	DefaultIdleConnsPerHost = 20
-	DefaultIdleConnTimeout  = 30 * time.Second
-	DefaultWorkerCount      = 10
-	DefaultQueueSize        = 100
+	DefaultNBIAuthKey        = ""
+	DefaultHTTPTimeout       = 15 * time.Second
+	DefaultCacheTimeout      = 30 * time.Second
+	DefaultShutdownTimeout   = 30 * time.Second
+	DefaultRequestTimeout    = 60 * time.Second
+	DefaultReadTimeout       = 15 * time.Second
+	DefaultWriteTimeout      = 15 * time.Second
+	DefaultServerIdleTimeout = 60 * time.Second
+	DefaultReadHeaderTimeout = 5 * time.Second
+	DefaultMaxIdleConns      = 100
+	DefaultIdleConnsPerHost  = 20
+	DefaultIdleConnTimeout   = 30 * time.Second
+	DefaultWorkerCount       = 10
+	DefaultQueueSize         = 100
 )
 
 // Authentication middleware configuration
 const (
-	// DefaultMiddlewareAuth controls whether API key authentication is enabled (default: false)
-	DefaultMiddlewareAuth = false
 	// DefaultAuthKey is intentionally empty - MUST be set via AUTH_KEY environment variable when MIDDLEWARE_AUTH=true
 	DefaultAuthKey    = ""
 	HeaderXAPIKey     = "X-API-Key"
@@ -70,10 +61,62 @@ const (
 	EnvAuthKey        = "AUTH_KEY"
 )
 
+// CORS configuration
+const (
+	// EnvCORSAllowedOrigins is the environment variable for allowed CORS origins (comma-separated)
+	// Use "*" to allow all origins (default), or specify specific origins like "https://example.com,https://app.example.com"
+	EnvCORSAllowedOrigins = "CORS_ALLOWED_ORIGINS"
+	// DefaultCORSAllowedOrigins allows all origins by default
+	DefaultCORSAllowedOrigins = "*"
+	// EnvCORSMaxAge is the environment variable for CORS preflight cache duration in seconds
+	EnvCORSMaxAge = "CORS_MAX_AGE"
+	// DefaultCORSMaxAge is the default CORS preflight cache duration (24 hours)
+	DefaultCORSMaxAge = 86400
+)
+
+// Rate limiting configuration
+const (
+	// EnvRateLimitRequests is the environment variable for rate limit requests per window
+	EnvRateLimitRequests = "RATE_LIMIT_REQUESTS"
+	// EnvRateLimitWindow is the environment variable for rate limit window in seconds
+	EnvRateLimitWindow = "RATE_LIMIT_WINDOW"
+	// DefaultRateLimitRequests is the default rate limit (100 requests per window)
+	DefaultRateLimitRequests = 100
+	// DefaultRateLimitWindow is the default rate limit window (60 seconds)
+	DefaultRateLimitWindow = 60
+	// MaxRateLimiterEntries is the maximum number of IPs to track to prevent memory exhaustion
+	MaxRateLimiterEntries = 10000
+)
+
+// Authentication rate limiting (brute force protection)
+const (
+	// MaxFailedAuthAttempts is the maximum failed auth attempts before temporary ban
+	MaxFailedAuthAttempts = 5
+	// AuthLockoutDuration is how long an IP is banned after max failed attempts (15 minutes)
+	AuthLockoutDuration = 15 * time.Minute
+	// AuthAttemptWindow is the window for counting failed attempts (5 minutes)
+	AuthAttemptWindow = 5 * time.Minute
+)
+
+// Audit event types
+const (
+	AuditEventAuthSuccess  = "AUTH_SUCCESS"
+	AuditEventAuthFailure  = "AUTH_FAILURE"
+	AuditEventAuthBlocked  = "AUTH_BLOCKED"
+	AuditEventWLANCreate   = "WLAN_CREATE"
+	AuditEventWLANUpdate   = "WLAN_UPDATE"
+	AuditEventWLANDelete   = "WLAN_DELETE"
+	AuditEventWLANOptimize = "WLAN_OPTIMIZE"
+	AuditEventCacheClear   = "CACHE_CLEAR"
+	AuditEventRefresh      = "REFRESH"
+)
+
 // Retry configurations for force handler
 const (
 	DefaultMaxRetries = 12
 	DefaultRetryDelay = 5 * time.Second
+	MaxRetryAttempts  = 20    // Maximum allowed retry attempts (prevents resource exhaustion)
+	MaxRetryDelayMs   = 30000 // Maximum retry delay in milliseconds (30 seconds)
 	QueryMaxRetries   = "max_retries"
 	QueryRetryDelayMs = "retry_delay_ms"
 	QueryRefresh      = "refresh"
@@ -104,12 +147,6 @@ const (
 	PasswordNA     = "N/A"
 )
 
-// Device vendor identifiers
-const (
-	VendorZTE = "ZTE"
-	VendorZT  = "ZT"
-)
-
 // HTTP response messages
 const (
 	StatusOK            = "OK"
@@ -118,6 +155,7 @@ const (
 	StatusBadRequest    = "Bad Request"
 	StatusInternalError = "Internal Server Error"
 	StatusTimeout       = "Timeout"
+	StatusConflict      = "Conflict"
 )
 
 // Input validation constraints
@@ -137,6 +175,7 @@ const (
 // Error messages
 const (
 	ErrInvalidJSON          = "Invalid JSON format"
+	ErrInvalidContentType   = "Content-Type must be application/json"
 	ErrSSIDRequired         = "SSID value required"
 	ErrSSIDTooLong          = "SSID must be at most 32 characters"
 	ErrSSIDInvalidSpaces    = "The beginning and end cannot be Spaces"
@@ -156,6 +195,16 @@ const (
 	ErrInvalidEncryption    = "Invalid encryption mode. Valid values: AES, TKIP, TKIP+AES"
 	ErrInvalidMaxClients    = "Max clients must be between 1 and 64"
 	ErrPasswordRequiredAuth = "Password is required for WPA, WPA2, or WPA/WPA2 authentication"
+	ErrRefreshFailed        = "Refresh failed"
+	ErrDeviceCapability     = "Failed to determine device capability"
+	ErrNoWLANDataFound      = "No WLAN data found after %d attempts"
+	ErrWLANCheckFailed      = "Failed to check WLAN status"
+	ErrWLANAlreadyExists    = "WLAN %s already exists and is enabled on this device. Use the update endpoint to modify it."
+	ErrWLANNotFound         = "WLAN %s does not exist or is not enabled on this device. Use the create endpoint to create it first."
+	ErrWLANNotFoundDelete   = "WLAN %s does not exist or is already disabled on this device."
+	ErrUpdateFieldRequired  = "At least one field must be provided for update"
+	ErrGetDeviceCapability  = "Failed to get device capability"
+	ErrGetWLANData          = "Failed to get WLAN data"
 )
 
 // HTTP status messages for authentication
@@ -165,10 +214,11 @@ const (
 
 // Success messages
 const (
-	MsgCacheCleared            = "Cache cleared"
-	MsgRefreshSubmitted        = "Refresh task submitted. Please query the GET endpoint again after a few moments."
-	MsgSSIDUpdateSubmitted     = "SSID update submitted successfully"
-	MsgPasswordUpdateSubmitted = "Password update submitted successfully"
+	MsgCacheCleared          = "Cache cleared"
+	MsgRefreshSubmitted      = "Refresh task submitted. Please query the GET endpoint again after a few moments."
+	MsgWLANCreationSubmitted = "WLAN creation submitted successfully"
+	MsgWLANUpdateSubmitted   = "WLAN update submitted successfully"
+	MsgWLANDeletionSubmitted = "WLAN deletion submitted successfully"
 )
 
 // XSD types for GenieACS
@@ -216,8 +266,6 @@ const (
 	MinMaxClients     = 1     // Minimum allowed max clients
 	MaxMaxClients     = 64    // Maximum allowed max clients
 	DefaultHiddenSSID = false // SSID is visible by default
-	DefaultAuthMode   = AuthModeWPA2
-	DefaultEncryption = EncryptionAES
 )
 
 // WLAN Radio optimization parameter paths (TR-069)
@@ -291,17 +339,42 @@ var ValidTransmitPower = map[int]bool{
 
 // Error messages for WLAN optimization
 const (
-	ErrInvalidChannel24GHz   = "invalid channel '%s' for 2.4GHz band. Valid channels: Auto, 1-13"
-	ErrInvalidChannel5GHz    = "invalid channel '%s' for 5GHz band. Valid channels: Auto, 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161"
-	ErrInvalidMode24GHz      = "invalid mode '%s' for 2.4GHz band. Valid modes: b, g, n, b/g, g/n, b/g/n"
-	ErrInvalidMode5GHz       = "invalid mode '%s' for 5GHz band. Valid modes: a, n, ac, a/n, a/n/ac"
-	ErrInvalidBandwidth24GHz = "invalid bandwidth '%s' for 2.4GHz band. Valid values: 20MHz, 40MHz, Auto"
-	ErrInvalidBandwidth5GHz  = "invalid bandwidth '%s' for 5GHz band. Valid values: 20MHz, 40MHz, 80MHz, Auto"
-	ErrInvalidTransmitPower  = "invalid transmit power '%d'. Valid values: 0, 20, 40, 60, 80, 100 (percentage)"
+	ErrInvalidChannel24GHz   = "invalid channel for 2.4GHz band, valid channels: Auto, 1-13"
+	ErrInvalidChannel5GHz    = "invalid channel for 5GHz band, valid channels: Auto, 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161"
+	ErrInvalidMode24GHz      = "invalid mode for 2.4GHz band, valid modes: b, g, n, b/g, g/n, b/g/n"
+	ErrInvalidMode5GHz       = "invalid mode for 5GHz band, valid modes: a, n, ac, a/n, a/n/ac"
+	ErrInvalidBandwidth24GHz = "invalid bandwidth for 2.4GHz band, valid values: 20MHz, 40MHz, Auto"
+	ErrInvalidBandwidth5GHz  = "invalid bandwidth for 5GHz band, valid values: 20MHz, 40MHz, 80MHz, Auto"
+	ErrInvalidTransmitPower  = "invalid transmit power, valid values: 0, 20, 40, 60, 80, 100 (percentage)"
 	ErrNoOptimizeFields      = "at least one optimization field must be provided (channel, mode, bandwidth, or transmit_power)"
+)
+
+// Sanitized error messages (for external responses)
+const (
+	ErrWLANIDOutOfRange       = "WLAN ID must be between 1 and 8"
+	ErrWLANID5GHzNotSupported = "this device does not support 5GHz WLAN (IDs 5-8), available WLAN IDs: 1-4"
+	ErrDeviceCapabilityCheck  = "unable to verify device capability"
 )
 
 // Success message for WLAN optimization
 const (
 	MsgWLANOptimizeSubmitted = "WLAN optimization submitted successfully"
 )
+
+// ErrBodyTooLarge is the error message returned by http.MaxBytesReader
+const ErrBodyTooLarge = "http: request body too large"
+
+// ValidAuthModes maps user-friendly auth mode names to TR-069 BeaconType values
+var ValidAuthModes = map[string]string{
+	"Open":     AuthModeOpen,
+	"WPA":      AuthModeWPA,
+	"WPA2":     AuthModeWPA2,
+	"WPA/WPA2": AuthModeWPAWPA2,
+}
+
+// ValidEncryptions maps user-friendly encryption names to TR-069 encryption mode values
+var ValidEncryptions = map[string]string{
+	"AES":      EncryptionAES,
+	"TKIP":     EncryptionTKIP,
+	"TKIP+AES": EncryptionTKIPAES,
+}
