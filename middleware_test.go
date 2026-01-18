@@ -289,18 +289,34 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	t.Run("API endpoints have strict CSP", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/test", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
 
-	// Verify all security headers are set
-	assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"), "X-Content-Type-Options should be set")
-	assert.Equal(t, "DENY", rr.Header().Get("X-Frame-Options"), "X-Frame-Options should be set")
-	assert.Equal(t, "1; mode=block", rr.Header().Get("X-XSS-Protection"), "X-XSS-Protection should be set")
-	assert.Contains(t, rr.Header().Get("Cache-Control"), "no-store", "Cache-Control should prevent caching")
-	assert.Contains(t, rr.Header().Get("Content-Security-Policy"), "default-src 'none'", "CSP should be set")
-	assert.Equal(t, "no-referrer", rr.Header().Get("Referrer-Policy"), "Referrer-Policy should be set")
-	assert.Contains(t, rr.Header().Get("Permissions-Policy"), "geolocation=()", "Permissions-Policy should be set")
+		// Verify all security headers are set
+		assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"), "X-Content-Type-Options should be set")
+		assert.Equal(t, "DENY", rr.Header().Get("X-Frame-Options"), "X-Frame-Options should be set")
+		assert.Equal(t, "1; mode=block", rr.Header().Get("X-XSS-Protection"), "X-XSS-Protection should be set")
+		assert.Contains(t, rr.Header().Get("Cache-Control"), "no-store", "Cache-Control should prevent caching")
+		assert.Contains(t, rr.Header().Get("Content-Security-Policy"), "default-src 'none'", "CSP should be strict for API")
+		assert.Equal(t, "no-referrer", rr.Header().Get("Referrer-Policy"), "Referrer-Policy should be set")
+		assert.Contains(t, rr.Header().Get("Permissions-Policy"), "geolocation=()", "Permissions-Policy should be set")
+	})
+
+	t.Run("Swagger endpoints have relaxed CSP", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/swagger/index.html", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		// Verify relaxed CSP for Swagger UI
+		csp := rr.Header().Get("Content-Security-Policy")
+		assert.Contains(t, csp, "default-src 'self'", "Swagger CSP should allow self")
+		assert.Contains(t, csp, "script-src", "Swagger CSP should allow scripts")
+		assert.Contains(t, csp, "style-src", "Swagger CSP should allow styles")
+		// Cache-Control should NOT be set for swagger
+		assert.Empty(t, rr.Header().Get("Cache-Control"), "Cache-Control should not be set for swagger")
+	})
 }
 
 // --- Rate Limiter Cleanup Tests ---

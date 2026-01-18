@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -456,14 +457,20 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		// Enable XSS filter in browsers (legacy browsers)
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
-		// Prevent caching of sensitive API responses
-		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
-		// Content Security Policy - restrict resource loading
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		// Referrer Policy - don't leak referrer information
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		// Permissions Policy - disable unnecessary browser features
 		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		// Content Security Policy - use relaxed CSP for Swagger UI, strict for API
+		if strings.HasPrefix(r.URL.Path, "/swagger") {
+			// Swagger UI needs inline styles/scripts and data URIs for images
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:")
+		} else {
+			// Strict CSP for API endpoints
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		}
 
 		next.ServeHTTP(w, r)
 	})
