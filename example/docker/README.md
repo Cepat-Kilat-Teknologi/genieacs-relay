@@ -32,11 +32,12 @@ docker compose logs -f
 Edit `.env` file with your configuration:
 
 ```bash
-# GenieACS NBI URL (required)
+# GenieACS NBI URL
 GENIEACS_BASE_URL=http://genieacs:7557
 
-# GenieACS NBI Authentication Key (required)
-NBI_AUTH_KEY=your-genieacs-nbi-key
+# NBI Authentication (if your GenieACS requires authentication)
+NBI_AUTH=false
+# NBI_AUTH_KEY=your-genieacs-nbi-key  # Required if NBI_AUTH=true
 
 # Enable API authentication (recommended for production)
 MIDDLEWARE_AUTH=true
@@ -186,7 +187,8 @@ docker compose logs
 
 # Common issues:
 # - Invalid GENIEACS_BASE_URL
-# - Missing NBI_AUTH_KEY
+# - NBI_AUTH=true but NBI_AUTH_KEY not set
+# - MIDDLEWARE_AUTH=true but AUTH_KEY not set
 # - Port 8080 already in use
 ```
 
