@@ -56,21 +56,22 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 ├── config.go               # Configuration loading
 ├── constants.go            # All constants (paths, timeouts, messages)
 ├── models.go               # Data structures and navigation helpers
-├── http_helpers.go         # HTTP handler helper functions
+├── response.go             # HTTP response helpers (sendResponse, sendError)
 ├── middleware.go           # Authentication, rate limiting, CORS, security headers
-├── handlers_device.go      # Device-related handlers
-├── handlers_ssid.go        # SSID-related handlers
-├── handlers_wlan.go        # WLAN management handlers
+├── handlers_device.go      # Device-related handlers (capability, DHCP)
+├── handlers_ssid.go        # SSID-related handlers (get, update, refresh)
+├── handlers_wlan.go        # WLAN management handlers (create, update, delete, optimize)
 ├── validation.go           # Input validation functions
-├── cache.go                # Device data caching
+├── cache.go                # Device data caching with TTL
 ├── client.go               # GenieACS API client
 ├── worker.go               # Worker pool for async tasks
-├── capability.go           # ONU/ONT model database (single-band/dual-band)
+├── capability.go           # Device capability detection (single-band/dual-band)
+├── onu_models.go           # ONU/ONT model database
 ├── wlan.go                 # WLAN data extraction
 ├── dhcp.go                 # DHCP client extraction
 ├── utils.go                # Utility functions
-├── response.go             # Response helpers
-├── *_test.go               # Unit tests
+├── *_test.go               # Unit tests (100% coverage)
+├── common_test.go          # Shared test utilities and mocks
 ├── test.http               # HTTP test file for API testing (VS Code REST Client)
 ├── ONU.md                  # ONU/ONT model reference documentation
 ├── Dockerfile              # Multi-stage build (dev, builder, production)
@@ -169,8 +170,8 @@ Security-relevant events are logged for audit purposes:
 | `WLAN_UPDATE` | WLAN configuration updated |
 | `WLAN_DELETE` | WLAN deleted/disabled |
 | `WLAN_OPTIMIZE` | WLAN radio settings optimized |
-| `SSID_UPDATE` | SSID updated |
-| `PASSWORD_UPDATE` | Password updated |
+| `CACHE_CLEAR` | Device cache cleared |
+| `REFRESH` | Device data refresh triggered |
 
 Example audit log entry:
 ```json
@@ -280,7 +281,7 @@ By default, the API Gateway does **not** require authentication for incoming req
 ## Development
 
 ### Prerequisites
-- [Go 1.21+](https://go.dev/)
+- [Go 1.24+](https://go.dev/)
 - [Docker](https://www.docker.com/)
 - [Docker Compose](https://docs.docker.com/compose/)
 
