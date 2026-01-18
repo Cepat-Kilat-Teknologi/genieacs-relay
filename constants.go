@@ -19,11 +19,10 @@ const (
 	PathHost                  = "Host"
 
 	// WLAN parameter paths
-	PathWLANSSIDFormat       = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID"
-	PathWLANPasswordFormat   = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey"
-	PathWLANConfigRefresh    = "InternetGatewayDevice.LANDevice.1.WLANConfiguration"
-	PathLANDeviceRefresh     = "InternetGatewayDevice.LANDevice.1"
-	PathRefreshObjectPayload = `{"name": "refreshObject", "objectName": "%s"}`
+	PathWLANSSIDFormat     = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.SSID"
+	PathWLANPasswordFormat = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.%s.PreSharedKey.1.PreSharedKey"
+	PathWLANConfigRefresh  = "InternetGatewayDevice.LANDevice.1.WLANConfiguration"
+	PathLANDeviceRefresh   = "InternetGatewayDevice.LANDevice.1"
 
 	// Field names for device IP lookup in GenieACS queries
 	FieldSummaryIP   = "summary.ip"
@@ -59,6 +58,16 @@ const (
 	HeaderXAPIKey     = "X-API-Key"
 	EnvMiddlewareAuth = "MIDDLEWARE_AUTH"
 	EnvAuthKey        = "AUTH_KEY"
+)
+
+// NBI (Northbound Interface) authentication configuration
+const (
+	// EnvNBIAuth is the environment variable to enable/disable NBI authentication
+	// Set to "true" to require NBI_AUTH_KEY for GenieACS API calls
+	// Set to "false" to disable NBI authentication (default - GenieACS default has no auth)
+	EnvNBIAuth = "NBI_AUTH"
+	// EnvNBIAuthKey is the environment variable for NBI authentication key
+	EnvNBIAuthKey = "NBI_AUTH_KEY"
 )
 
 // CORS configuration
@@ -108,7 +117,6 @@ const (
 	AuditEventWLANDelete   = "WLAN_DELETE"
 	AuditEventWLANOptimize = "WLAN_OPTIMIZE"
 	AuditEventCacheClear   = "CACHE_CLEAR"
-	AuditEventRefresh      = "REFRESH"
 )
 
 // Retry configurations for force handler
@@ -130,8 +138,6 @@ const (
 	DefaultStaleThreshold = 30 * time.Minute
 	// EnvStaleThreshold is the environment variable name for stale threshold in minutes
 	EnvStaleThreshold = "STALE_THRESHOLD_MINUTES"
-	// FieldLastInform is the GenieACS field for last inform timestamp
-	FieldLastInform = "_lastInform"
 )
 
 // Frequency bands

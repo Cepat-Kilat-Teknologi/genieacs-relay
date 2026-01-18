@@ -12,17 +12,16 @@
 
 1. [Health Check](#1-health-check)
 2. [SSID Endpoints](#2-ssid-endpoints)
-3. [Password Endpoints](#3-password-endpoints)
-4. [DHCP Client Endpoints](#4-dhcp-client-endpoints)
-5. [Device Capability Endpoints](#5-device-capability-endpoints)
-6. [WLAN Available Endpoints](#6-wlan-available-endpoints)
-7. [WLAN Create Endpoints](#7-wlan-create-endpoints)
-8. [WLAN Update Endpoints](#8-wlan-update-endpoints)
-9. [WLAN Delete Endpoints](#9-wlan-delete-endpoints)
-10. [WLAN Optimize Endpoints](#10-wlan-optimize-endpoints)
-11. [Cache Endpoints](#11-cache-endpoints)
-12. [Error Cases](#12-error-cases)
-13. [Authentication Error Cases](#13-authentication-error-cases-middleware_authtrue)
+3. [DHCP Client Endpoints](#3-dhcp-client-endpoints)
+4. [Device Capability Endpoints](#4-device-capability-endpoints)
+5. [WLAN Available Endpoints](#5-wlan-available-endpoints)
+6. [WLAN Create Endpoints](#6-wlan-create-endpoints)
+7. [WLAN Update Endpoints](#7-wlan-update-endpoints)
+8. [WLAN Delete Endpoints](#8-wlan-delete-endpoints)
+9. [WLAN Optimize Endpoints](#9-wlan-optimize-endpoints)
+10. [Cache Endpoints](#10-cache-endpoints)
+11. [Error Cases](#11-error-cases)
+12. [Authentication Error Cases](#12-authentication-error-cases-middleware_authtrue)
 
 ---
 

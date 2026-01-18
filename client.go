@@ -40,8 +40,10 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 	}
 	// Set content type to JSON
 	req.Header.Set("Content-Type", "application/json")
-	// Add authentication header
-	req.Header.Set("X-API-Key", nbiAuthKey)
+	// Add authentication header only if NBI auth is enabled
+	if nbiAuth && nbiAuthKey != "" {
+		req.Header.Set("X-API-Key", nbiAuthKey)
+	}
 	// Execute HTTP request and return response
 	return httpClient.Do(req)
 }
@@ -71,8 +73,10 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 		return nil, err
 	}
 
-	// Add authentication header for GenieACS API
-	req.Header.Set("X-API-Key", nbiAuthKey)
+	// Add authentication header only if NBI auth is enabled
+	if nbiAuth && nbiAuthKey != "" {
+		req.Header.Set("X-API-Key", nbiAuthKey)
+	}
 	resp, err := httpClient.Do(req) // Execute HTTP request
 	if err != nil {
 		return nil, err
@@ -133,8 +137,10 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Add authentication header
-	req.Header.Set("X-API-Key", nbiAuthKey)
+	// Add authentication header only if NBI auth is enabled
+	if nbiAuth && nbiAuthKey != "" {
+		req.Header.Set("X-API-Key", nbiAuthKey)
+	}
 	// Execute HTTP request
 	resp, err := httpClient.Do(req)
 	if err != nil {

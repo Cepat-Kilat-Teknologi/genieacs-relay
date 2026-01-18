@@ -48,14 +48,14 @@ func TestInitEnvFallback(t *testing.T) {
 	loadConfigFromEnv()
 
 	assert.NotEmpty(t, geniesBaseURL)
+	// nbiAuthKey gets a mock value from loadConfigFromEnv for testing purposes
 	assert.NotEmpty(t, nbiAuthKey)
 }
 
 func TestInit_WithEnvVars(t *testing.T) {
-	os.Setenv("GENIEACS_URL", "http://env-url")
-	os.Setenv("NBI_AUTH_KEY", "env-nbi")
-	os.Setenv("API_KEY", "env-api")
-	defer os.Clearenv()
+	t.Setenv("GENIEACS_URL", "http://env-url")
+	t.Setenv("NBI_AUTH_KEY", "env-nbi")
+	t.Setenv("API_KEY", "env-api")
 
 	loadEnv()
 	if geniesBaseURL != "http://env-url" {
@@ -121,7 +121,9 @@ func TestMainFunctionWithLoggerError(t *testing.T) {
 	// Since we can't easily test main() directly, test the component it calls
 	err := initLoggerWrapper()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to initialize logger")
+	if err != nil {
+		assert.Contains(t, err.Error(), "failed to initialize logger")
+	}
 }
 
 // Test for logger initialization failure handling
@@ -157,8 +159,10 @@ func TestInitLoggerWrapperError(t *testing.T) {
 	err := initLoggerWrapper()
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to initialize logger")
-	assert.Contains(t, err.Error(), "mock logger error")
+	if err != nil {
+		assert.Contains(t, err.Error(), "failed to initialize logger")
+		assert.Contains(t, err.Error(), "mock logger error")
+	}
 
 	// Verify logger is still nil (not initialized)
 	assert.Nil(t, logger)

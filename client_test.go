@@ -488,7 +488,7 @@ func TestPostJSONRequest_ExtraCases(t *testing.T) {
 		resp, err := postJSONRequest(ctx, mockServer.URL, map[string]string{"key": "value"})
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	})
 
 	t.Run("Invalid URL", func(t *testing.T) {
@@ -1018,7 +1018,9 @@ func TestSetParameterValuesNonOKWithBodyReadError(t *testing.T) {
 	geniesBaseURL = "http://localhost:12345"
 	err := setParameterValues(ctx, mockDeviceID, [][]interface{}{{"param", "value", "type"}})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to read response body")
+	if err != nil {
+		assert.Contains(t, err.Error(), "failed to read response body")
+	}
 }
 
 func TestSetParameterValuesStatusAccepted(t *testing.T) {
@@ -1042,7 +1044,9 @@ func TestSetParameterValuesNonOKStatusWithBody(t *testing.T) {
 	geniesBaseURL = mockServer.URL
 	err := setParameterValues(ctx, mockDeviceID, [][]interface{}{{"param", "value", "type"}})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "set parameter values failed")
+	if err != nil {
+		assert.Contains(t, err.Error(), "set parameter values failed")
+	}
 }
 
 // TestGetDeviceDataRequestCreationError tests getDeviceData when request creation fails

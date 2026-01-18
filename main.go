@@ -56,6 +56,7 @@ const (
 var (
 	serverAddr     string
 	geniesBaseURL  string        // Base URL for GenieACS server API endpoints
+	nbiAuth        bool          // Whether NBI authentication is enabled for GenieACS
 	nbiAuthKey     string        // Authentication key for GenieACS Northbound Interface (NBI)
 	logger         *zap.Logger   // Structured logger for application logging
 	middlewareAuth bool          // Whether API key authentication middleware is enabled

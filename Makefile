@@ -5,7 +5,7 @@ REGISTRY_USER   := cepatkilatteknologi
 IMAGE_NAME      := genieacs-relay
 TAG             := 1.1
 DOCKER_COMPOSE  := docker compose
-DOCKER_COMPOSE_PROD := docker compose -f docker-compose.prod.yml
+DOCKER_COMPOSE_PROD := docker compose -f example/docker/docker-compose.yml
 BUILDX_PLATFORMS := linux/amd64,linux/arm64,linux/arm/v7
 GO_TEST_FLAGS   := -v -race -timeout=30s
 GO_COVER_FLAGS  := -coverprofile=coverage.out -covermode=atomic

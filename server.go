@@ -24,14 +24,22 @@ func runServer(addr string) error {
 	// load config
 	serverAddr = getEnv("SERVER_ADDR", addr)
 	geniesBaseURL = getEnv("GENIEACS_BASE_URL", DefaultGenieACSURL)
-	nbiAuthKey = getEnv("NBI_AUTH_KEY", DefaultNBIAuthKey)
 
-	// Warn if NBI_AUTH_KEY is not set (security best practice)
-	if nbiAuthKey == "" {
-		logger.Warn("NBI_AUTH_KEY environment variable is not set - API authentication may fail")
+	// Load NBI authentication config (for GenieACS API calls)
+	// By default, GenieACS NBI has no authentication, so NBI_AUTH defaults to false
+	nbiAuth = getEnv(EnvNBIAuth, "false") == "true"
+	nbiAuthKey = getEnv(EnvNBIAuthKey, DefaultNBIAuthKey)
+
+	// Return error if NBI auth is enabled but NBI_AUTH_KEY is not set
+	if nbiAuth && nbiAuthKey == "" {
+		return fmt.Errorf("NBI_AUTH is enabled but NBI_AUTH_KEY is not set. " +
+			"Set NBI_AUTH_KEY environment variable or disable NBI_AUTH")
 	}
 
-	// Load middleware authentication config
+	// Log NBI auth status
+	logger.Info("NBI authentication", zap.Bool("enabled", nbiAuth))
+
+	// Load middleware authentication config (for incoming API requests)
 	middlewareAuth = getEnv(EnvMiddlewareAuth, "false") == "true"
 	authKey = getEnv(EnvAuthKey, DefaultAuthKey)
 
