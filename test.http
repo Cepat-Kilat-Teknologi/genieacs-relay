@@ -43,46 +43,6 @@ POST {{baseUrl}}/api/v1/genieacs/ssid/{{deviceIP}}/refresh
 Content-Type: application/json
 X-API-Key: {{apiKey}}
 
-### Update SSID (WLAN 1 - 2.4GHz)
-PUT {{baseUrl}}/api/v1/genieacs/ssid/update/1/{{deviceIP}}
-Content-Type: application/json
-X-API-Key: {{apiKey}}
-
-{
-    "ssid": "MyNewSSID"
-}
-
-### Update SSID (WLAN 5 - 5GHz, dual-band only)
-PUT {{baseUrl}}/api/v1/genieacs/ssid/update/5/{{deviceIP}}
-Content-Type: application/json
-X-API-Key: {{apiKey}}
-
-{
-    "ssid": "MyNewSSID-5G"
-}
-
-###############################################################################
-# PASSWORD ENDPOINTS
-###############################################################################
-
-### Update Password (WLAN 1 - 2.4GHz)
-PUT {{baseUrl}}/api/v1/genieacs/password/update/1/{{deviceIP}}
-Content-Type: application/json
-X-API-Key: {{apiKey}}
-
-{
-    "password": "NewSecurePassword123"
-}
-
-### Update Password (WLAN 5 - 5GHz, dual-band only)
-PUT {{baseUrl}}/api/v1/genieacs/password/update/5/{{deviceIP}}
-Content-Type: application/json
-X-API-Key: {{apiKey}}
-
-{
-    "password": "NewSecurePassword456"
-}
-
 ###############################################################################
 # DHCP CLIENT ENDPOINTS
 ###############################################################################
