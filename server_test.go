@@ -240,15 +240,22 @@ func TestHTTPServerTimeouts(t *testing.T) {
 	})
 }
 
-func TestRunServer_EmptyNBIAuthKey(t *testing.T) {
-	// Save original env value
+func TestRunServer_NBIAuthDisabled(t *testing.T) {
+	// Save original env values
+	originalNBIAuth := os.Getenv("NBI_AUTH")
 	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
 
-	// Unset NBI_AUTH_KEY to trigger warning
+	// Set NBI_AUTH=false (default) - NBI_AUTH_KEY should not be required
+	os.Setenv("NBI_AUTH", "false")
 	os.Unsetenv("NBI_AUTH_KEY")
 
-	// Restore original value after test
+	// Restore original values after test
 	defer func() {
+		if originalNBIAuth != "" {
+			os.Setenv("NBI_AUTH", originalNBIAuth)
+		} else {
+			os.Unsetenv("NBI_AUTH")
+		}
 		if originalNBIKey != "" {
 			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
 		}
@@ -261,10 +268,80 @@ func TestRunServer_EmptyNBIAuthKey(t *testing.T) {
 		_ = p.Signal(syscall.SIGINT)
 	}()
 
-	// Test should complete without error (warning is logged but not fatal)
+	// Test should complete without error (NBI auth is disabled, key not required)
 	err := runServer(":0")
 	if err != nil {
 		t.Fatalf("Expected normal shutdown, got error: %v", err)
+	}
+}
+
+func TestRunServer_NBIAuthEnabledWithKey(t *testing.T) {
+	// Save original env values
+	originalNBIAuth := os.Getenv("NBI_AUTH")
+	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
+
+	// Set NBI_AUTH=true with a valid NBI_AUTH_KEY
+	os.Setenv("NBI_AUTH", "true")
+	os.Setenv("NBI_AUTH_KEY", "test-nbi-key")
+
+	// Restore original values after test
+	defer func() {
+		if originalNBIAuth != "" {
+			os.Setenv("NBI_AUTH", originalNBIAuth)
+		} else {
+			os.Unsetenv("NBI_AUTH")
+		}
+		if originalNBIKey != "" {
+			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
+		} else {
+			os.Unsetenv("NBI_AUTH_KEY")
+		}
+	}()
+
+	// Send SIGINT after short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p, _ := os.FindProcess(os.Getpid())
+		_ = p.Signal(syscall.SIGINT)
+	}()
+
+	// Test should complete without error
+	err := runServer(":0")
+	if err != nil {
+		t.Fatalf("Expected normal shutdown, got error: %v", err)
+	}
+}
+
+func TestRunServer_NBIAuthEnabledWithoutKey(t *testing.T) {
+	// Save original env values
+	originalNBIAuth := os.Getenv("NBI_AUTH")
+	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
+
+	// Set NBI_AUTH=true but no NBI_AUTH_KEY to trigger error
+	os.Setenv("NBI_AUTH", "true")
+	os.Unsetenv("NBI_AUTH_KEY")
+
+	// Restore original values after test
+	defer func() {
+		if originalNBIAuth != "" {
+			os.Setenv("NBI_AUTH", originalNBIAuth)
+		} else {
+			os.Unsetenv("NBI_AUTH")
+		}
+		if originalNBIKey != "" {
+			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
+		} else {
+			os.Unsetenv("NBI_AUTH_KEY")
+		}
+	}()
+
+	// Server should fail to start with error about missing NBI_AUTH_KEY
+	err := runServer(":0")
+	if err == nil {
+		t.Fatal("Expected error when NBI_AUTH=true but NBI_AUTH_KEY is empty")
+	}
+	if !strings.Contains(err.Error(), "NBI_AUTH_KEY") {
+		t.Errorf("Expected error message to mention NBI_AUTH_KEY, got: %v", err)
 	}
 }
 

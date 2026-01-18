@@ -48,6 +48,7 @@ func TestInitEnvFallback(t *testing.T) {
 	loadConfigFromEnv()
 
 	assert.NotEmpty(t, geniesBaseURL)
+	// nbiAuthKey gets a mock value from loadConfigFromEnv for testing purposes
 	assert.NotEmpty(t, nbiAuthKey)
 }
 
