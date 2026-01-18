@@ -1,0 +1,187 @@
+# values.yaml - Default values for the chart
+# Users can override with: helm install -f custom-values.yaml
+# or: helm install --set replicaCount=3
+
+# =============================================================================
+# DEPLOYMENT
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: cepatkilatteknologi/genieacs-relay
+  tag: ""           # Empty = use appVersion from Chart.yaml
+  pullPolicy: Always
+
+imagePullSecrets: []
+# - name: my-registry-secret
+
+# =============================================================================
+# APPLICATION CONFIG
+# =============================================================================
+
+config:
+  # GenieACS NBI configuration
+  genieacsBaseUrl: "http://genieacs-nbi:7557"
+
+  # NBI Authentication (for requests to GenieACS)
+  nbiAuth:
+    enabled: true
+    # Key can be set via --set or existingSecret
+    key: ""
+    # Or use an existing secret
+    existingSecret: ""
+    existingSecretKey: "NBI_AUTH_KEY"
+
+  # Middleware Authentication (for incoming requests to relay)
+  middlewareAuth:
+    enabled: false
+    key: ""
+    existingSecret: ""
+    existingSecretKey: "AUTH_KEY"
+
+  # CORS
+  corsAllowedOrigins: "*"
+
+  # Rate limiting
+  rateLimit:
+    requests: 50
+    window: 30
+
+  # Stale device threshold (minutes)
+  staleThresholdMinutes: 15
+
+# =============================================================================
+# SERVICE
+# =============================================================================
+
+service:
+  type: ClusterIP
+  port: 80
+  # nodePort: 30080  # Only for type: NodePort
+
+# =============================================================================
+# INGRESS
+# =============================================================================
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: genieacs-relay.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: genieacs-relay-tls
+  #    hosts:
+  #      - genieacs-relay.example.com
+
+# =============================================================================
+# RESOURCES
+# =============================================================================
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# =============================================================================
+# AUTOSCALING
+# =============================================================================
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# =============================================================================
+# POD CONFIGURATION
+# =============================================================================
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity (default: spread across nodes)
+affinity: {}
+
+# Pod anti-affinity (spread pods across nodes)
+podAntiAffinity:
+  enabled: true
+  type: soft  # soft or hard
+
+# =============================================================================
+# MONITORING
+# =============================================================================
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# =============================================================================
+# NETWORK POLICY
+# =============================================================================
+
+networkPolicy:
+  enabled: false
+  # Ingress rules
+  ingress:
+    # Allow from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+  # Egress rules (allow GenieACS and DNS)
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 7557

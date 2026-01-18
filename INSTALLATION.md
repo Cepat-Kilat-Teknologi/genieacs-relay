@@ -1,6 +1,6 @@
 # Installation & Configuration
 
-This document covers installation, configuration, and development setup for GenieACS Relay.
+This document covers installation, configuration, and deployment options for GenieACS Relay.
 
 ## Table of Contents
 
@@ -8,7 +8,12 @@ This document covers installation, configuration, and development setup for Geni
 - [Quick Start](#quick-start)
 - [Environment Variables](#environment-variables)
 - [Configuration Examples](#configuration-examples)
-- [Running the Application](#running-the-application)
+- [Deployment Options](#deployment-options)
+  - [Local Development](#local-development)
+  - [Docker Compose](#docker-compose)
+  - [Kubernetes](#kubernetes)
+  - [Helm Chart](#helm-chart)
+  - [Systemd (Bare Metal)](#systemd-bare-metal)
 - [Makefile Commands](#makefile-commands)
 - [Swagger Documentation](#swagger-documentation)
 
@@ -16,9 +21,10 @@ This document covers installation, configuration, and development setup for Geni
 
 ## Prerequisites
 
-- [Go 1.24+](https://go.dev/)
-- [Docker](https://www.docker.com/) (optional)
-- [Docker Compose](https://docs.docker.com/compose/) (optional)
+- [Go 1.24+](https://go.dev/) (for local development)
+- [Docker](https://www.docker.com/) (for containerized deployment)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) (for Kubernetes deployment)
+- [Helm 3.0+](https://helm.sh/) (for Helm deployment)
 
 ---
 
@@ -120,7 +126,7 @@ STALE_THRESHOLD_MINUTES=15
 
 ---
 
-## Running the Application
+## Deployment Options
 
 ### Local Development
 
@@ -130,63 +136,206 @@ make run
 
 # Run with hot-reload (requires Air)
 make dev
+
+# Run tests
+make test
 ```
 
-### Docker Compose (Development)
+### Docker Compose
+
+See [examples/docker/README.md](examples/docker/README.md) for detailed guide.
 
 ```bash
-# Start with logs
-make up
-
-# Start in background
-make up-d
-
-# View logs
-make logs
-
-# Stop
-make down
-```
-
-### Docker Compose (Production)
-
-See [example/docker/README.md](example/docker/README.md) for detailed Docker deployment guide.
-
-```bash
-# Quick start with example config
-cd example/docker
+# Quick start
+cd examples/docker
 cp .env.example .env
 nano .env  # Configure your settings
 docker compose up -d
+
+# Or using Makefile from project root
+make up        # Development
+make prod-up   # Production
 ```
 
-Or using Makefile from project root:
+**Docker Commands:**
 
 ```bash
-# Start production
-make prod-up
-
-# View logs
-make logs-prod
-
-# Stop
-make prod-down
+make up          # Start development environment
+make up-d        # Start in background
+make down        # Stop environment
+make logs        # View logs
+make prod-up     # Start production
+make prod-down   # Stop production
 ```
 
-### Testing
+### Kubernetes
+
+See [examples/kubernetes/README.md](examples/kubernetes/README.md) for detailed guide.
 
 ```bash
-# Run all tests
-make test
+cd examples/kubernetes
 
-# Run with race detector
-make test-race
+# Edit secret with your keys
+nano secret.yaml
 
-# Run with coverage analysis
-make test-coverage
+# Deploy with Kustomize
+kubectl apply -k .
 
-# Generate HTML coverage report
-make test-html
+# Or deploy manually
+kubectl apply -f namespace.yaml
+kubectl apply -f configmap.yaml
+kubectl apply -f secret.yaml
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+```
+
+**Verify deployment:**
+
+```bash
+kubectl get pods -n genieacs
+kubectl get svc -n genieacs
+kubectl port-forward -n genieacs svc/genieacs-relay 8080:80
+curl http://localhost:8080/health
+```
+
+**Available manifests:**
+
+| File | Description |
+|------|-------------|
+| `namespace.yaml` | Namespace definition |
+| `configmap.yaml` | Environment configuration |
+| `secret.yaml` | API keys (basic) |
+| `sealed-secret.yaml` | Encrypted secrets (GitOps) |
+| `external-secret.yaml` | External secret manager integration |
+| `deployment.yaml` | Application deployment |
+| `service.yaml` | ClusterIP service |
+| `ingress.yaml` | Ingress resource |
+| `hpa.yaml` | Horizontal Pod Autoscaler |
+| `pdb.yaml` | Pod Disruption Budget |
+| `networkpolicy.yaml` | Network policies |
+
+### Helm Chart
+
+See [examples/helm/genieacs-relay/README.md](examples/helm/genieacs-relay/README.md) for detailed guide.
+
+```bash
+cd examples/helm
+
+# Validate chart
+helm lint genieacs-relay
+
+# Preview manifests
+helm template my-release genieacs-relay
+
+# Install
+helm install genieacs-relay ./genieacs-relay \
+  -n genieacs --create-namespace \
+  --set config.nbiAuth.key="your-nbi-key"
+
+# Install with custom values
+helm install genieacs-relay ./genieacs-relay \
+  -n genieacs --create-namespace \
+  -f my-values.yaml
+```
+
+**Example values.yaml:**
+
+```yaml
+replicaCount: 3
+
+config:
+  genieacsBaseUrl: "http://genieacs-nbi:7557"
+  nbiAuth:
+    enabled: true
+    key: "your-32-byte-hex-key"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: genieacs-relay.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+```
+
+**Helm Commands:**
+
+```bash
+helm install genieacs-relay ./genieacs-relay -n genieacs --create-namespace
+helm upgrade genieacs-relay ./genieacs-relay -n genieacs
+helm uninstall genieacs-relay -n genieacs
+helm rollback genieacs-relay 1 -n genieacs
+```
+
+### Systemd (Bare Metal)
+
+See [examples/systemd/README.md](examples/systemd/README.md) for detailed guide.
+
+**Quick Install:**
+
+```bash
+# Build binary
+go build -ldflags="-w -s" -o genieacs-relay .
+
+# Copy to server
+scp genieacs-relay user@server:/tmp/
+scp examples/systemd/* user@server:/tmp/
+
+# On server, run installer
+ssh user@server
+cd /tmp
+sudo chmod +x install.sh
+sudo ./install.sh
+
+# Configure
+sudo nano /etc/genieacs-relay/env
+
+# Start service
+sudo systemctl start genieacs-relay
+```
+
+**Manual Installation:**
+
+```bash
+# 1. Build for target platform
+GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o genieacs-relay .
+
+# 2. Create user
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin genieacs
+
+# 3. Install binary
+sudo cp genieacs-relay /usr/local/bin/
+sudo chmod +x /usr/local/bin/genieacs-relay
+
+# 4. Create directories
+sudo mkdir -p /etc/genieacs-relay /var/lib/genieacs-relay
+sudo chown genieacs:genieacs /var/lib/genieacs-relay
+
+# 5. Configure environment
+sudo cp examples/systemd/env.example /etc/genieacs-relay/env
+sudo chmod 600 /etc/genieacs-relay/env
+sudo nano /etc/genieacs-relay/env
+
+# 6. Install service
+sudo cp examples/systemd/genieacs-relay.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now genieacs-relay
+```
+
+**Systemd Commands:**
+
+```bash
+sudo systemctl start genieacs-relay     # Start
+sudo systemctl stop genieacs-relay      # Stop
+sudo systemctl restart genieacs-relay   # Restart
+sudo systemctl status genieacs-relay    # Status
+sudo journalctl -u genieacs-relay -f    # View logs
 ```
 
 ---

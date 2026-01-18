@@ -36,4 +36,5 @@ Thumbs.db
 
 # Keep .env.example as a template (safe to commit)
 
-genieacs-relay
+# Binary (root only, not examples/helm/genieacs-relay/)
+/genieacs-relay

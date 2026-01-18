@@ -1,0 +1,59 @@
+# /etc/systemd/system/genieacs-relay.service
+# Systemd service file for GenieACS Relay
+#
+# Installation:
+# 1. Copy binary to /usr/local/bin/genieacs-relay
+# 2. Copy this file to /etc/systemd/system/genieacs-relay.service
+# 3. Copy environment file to /etc/genieacs-relay/env
+# 4. systemctl daemon-reload
+# 5. systemctl enable --now genieacs-relay
+
+[Unit]
+Description=GenieACS Relay - TR-069 Device Management API
+Documentation=https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=genieacs
+Group=genieacs
+
+# Working directory
+WorkingDirectory=/var/lib/genieacs-relay
+
+# Environment file (contains API keys)
+EnvironmentFile=/etc/genieacs-relay/env
+
+# Command
+ExecStart=/usr/local/bin/genieacs-relay
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=genieacs-relay
+
+[Install]
+WantedBy=multi-user.target

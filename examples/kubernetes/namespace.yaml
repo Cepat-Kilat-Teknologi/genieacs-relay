@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: genieacs
+  labels:
+    app.kubernetes.io/name: genieacs-relay
+    app.kubernetes.io/part-of: genieacs
