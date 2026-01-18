@@ -62,6 +62,19 @@ See [SECURITY.md](SECURITY.md) for details.
 
 ## Quick Start
 
+### Using Docker (Recommended)
+
+```bash
+docker pull cepatkilatteknologi/genieacs-relay:latest
+
+docker run -d \
+  -p 8080:8080 \
+  -e GENIEACS_BASE_URL=http://your-genieacs:7557 \
+  cepatkilatteknologi/genieacs-relay:latest
+```
+
+### From Source
+
 ```bash
 # Clone and setup
 git clone https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
@@ -81,27 +94,42 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
 ## Project Structure
 
-```
+```text
 .
 ├── main.go                 # Application entry point
+├── config.go               # Configuration management
 ├── server.go               # HTTP server setup
 ├── routes.go               # Route definitions
-├── handlers_*.go           # HTTP handlers
-├── middleware.go           # Auth, rate limiting, CORS
+├── middleware.go           # Auth, rate limiting, CORS, security headers
+├── handlers_ssid.go        # SSID endpoint handlers
+├── handlers_device.go      # Device/capability handlers
+├── handlers_wlan.go        # WLAN CRUD & optimize handlers
+├── client.go               # GenieACS NBI API client
+├── models.go               # Data structures
 ├── validation.go           # Input validation
-├── cache.go                # Device data caching
-├── client.go               # GenieACS API client
-├── worker.go               # Worker pool
-├── capability.go           # Device capability detection
-├── docs/                   # Swagger documentation
-├── assets/                 # Static assets
-├── example/
-│   └── docker/             # Docker deployment example
-│       ├── docker-compose.yml
-│       ├── .env.example
-│       └── README.md
-├── Dockerfile              # Multi-stage build
-└── docker-compose.yml      # Development environment
+├── cache.go                # Device data caching with TTL
+├── worker.go               # Async worker pool
+├── capability.go           # Device band detection
+├── constants.go            # Application constants
+├── response.go             # HTTP response helpers
+├── utils.go                # Utility functions
+├── *_test.go               # Unit tests
+│
+├── docs/                   # Swagger/OpenAPI documentation
+├── assets/                 # Static assets (logo, images)
+│
+├── examples/
+│   ├── docker/             # Docker Compose deployment
+│   ├── kubernetes/         # Kubernetes manifests
+│   ├── helm/               # Helm chart
+│   ├── systemd/            # Systemd service files
+│   └── argocd/             # ArgoCD GitOps manifests
+│
+├── .github/workflows/      # CI/CD pipelines
+├── Dockerfile              # Multi-stage Docker build
+├── docker-compose.yml      # Local development
+├── Makefile                # Build & dev commands
+└── .env.example            # Environment template
 ```
 
 ---
@@ -148,14 +176,9 @@ curl -H "X-API-Key: YourSecretKey" \
   "code": 200,
   "status": "OK",
   "data": {
-    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
     "model": "F670L",
     "band_type": "dualband",
-    "is_dual_band": true,
-    "supported_wlan": {
-      "2_4ghz": [1, 2, 3, 4],
-      "5ghz": [5, 6, 7, 8]
-    }
+    "is_dual_band": true
   }
 }
 ```
@@ -247,6 +270,20 @@ make swagger
 | 409 | Conflict | WLAN already exists |
 | 429 | Too Many Requests | Rate limit or brute force protection |
 | 500 | Internal Server Error | Server-side error |
+
+---
+
+## Deployment Options
+
+| Method | Description | Guide |
+|--------|-------------|-------|
+| **Docker Compose** | Quick local/production setup | [examples/docker](examples/docker/) |
+| **Kubernetes** | K8s manifests with Kustomize | [examples/kubernetes](examples/kubernetes/) |
+| **Helm** | Helm chart for K8s | [examples/helm](examples/helm/genieacs-relay/) |
+| **ArgoCD** | GitOps with auto-sync | [examples/argocd](examples/argocd/) |
+| **Systemd** | Bare metal Linux service | [examples/systemd](examples/systemd/) |
+
+See [INSTALLATION.md](INSTALLATION.md) for detailed deployment instructions.
 
 ---
 
