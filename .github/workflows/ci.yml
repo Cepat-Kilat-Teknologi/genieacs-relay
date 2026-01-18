@@ -12,7 +12,6 @@ env:
   REGISTRY: docker.io
   IMAGE_NAME: cepatkilatteknologi/genieacs-relay
   GO_VERSION: '1.25'
-  IMAGE_VERSION: '1.0'
 
 jobs:
   # ========================
@@ -25,45 +24,43 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
-      
+
       - name: Download Go modules
         run: go mod download
-      
+
       - name: Run Linter
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           golangci-lint run --timeout=5m --verbose
-      
+
       - name: Run Govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-      
+
       - name: Run Unit Tests with Coverage
         run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /docs)
-      
+
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.out
-        
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.out
           fail_ci_if_error: true
-  
-  
-  
+
   # ========================
   # Job 2: Build & Push Docker Image
   # ========================
@@ -75,20 +72,35 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Build & Push with fixed tags
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # For tags: v1.0.0 -> 1.0.0, v1.0, v1, latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # For branches: develop -> develop, main -> latest
+            type=ref,event=branch
+            # Always add latest for main/tags
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build & Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -96,9 +108,79 @@ jobs:
           target: production
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-  
+          build-args: |
+            VERSION=${{ github.ref_name }}
+
+  # ========================
+  # Job 3: Create GitHub Release (only on tags)
+  # ========================
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: startsWith(github.ref, 'refs/tags/')
+    environment: ci
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
+          else
+            CHANGES=$(git log --pretty=format:"- %s" HEAD~10..HEAD)
+          fi
+
+          # Save to file
+          cat << 'EOF' > release_notes.md
+          ## What's Changed
+
+          $CHANGES
+
+          ## Docker Image
+
+          ```bash
+          docker pull cepatkilatteknologi/genieacs-relay:${{ github.ref_name }}
+          ```
+
+          ## Deployment Options
+
+          - **Docker Compose:** See `examples/docker/`
+          - **Kubernetes:** See `examples/kubernetes/`
+          - **Helm Chart:** See `examples/helm/`
+          - **Systemd:** See `examples/systemd/`
+
+          ## Documentation
+
+          - [Installation Guide](INSTALLATION.md)
+          - [API Documentation](DOC.md)
+          - [Security](SECURITY.md)
+          EOF
+
+          # Replace $CHANGES placeholder
+          sed -i "s|\$CHANGES|$CHANGES|g" release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
