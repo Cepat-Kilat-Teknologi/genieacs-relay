@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: genieacs-relay
+  namespace: genieacs
+  labels:
+    app.kubernetes.io/name: genieacs-relay
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+    # Optional: Enable SSL redirect
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Optional: Use cert-manager for TLS
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: genieacs-relay.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: genieacs-relay
+                port:
+                  name: http
+  # Optional: TLS configuration
+  # tls:
+  #   - hosts:
+  #       - genieacs-relay.example.com
+  #     secretName: genieacs-relay-tls

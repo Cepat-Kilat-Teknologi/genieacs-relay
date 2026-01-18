@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: genieacs-relay
+
+namespace: genieacs
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+  # Secret options - choose ONE:
+  - secret.yaml              # Development only
+  # - sealed-secret.yaml     # Production: GitOps with SealedSecrets
+  # - external-secret.yaml   # Production: AWS/Vault/GCP SecretManager
+
+  # Optional resources - uncomment as needed
+  # - ingress.yaml
+  # - hpa.yaml
+  # - pdb.yaml
+  # - networkpolicy.yaml
+
+commonLabels:
+  app.kubernetes.io/name: genieacs-relay
+  app.kubernetes.io/version: "latest"
+  app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: cepatkilatteknologi/genieacs-relay
+    newTag: latest
