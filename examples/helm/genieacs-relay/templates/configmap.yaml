@@ -1,0 +1,18 @@
+{{/*
+ConfigMap - Stores non-sensitive configuration
+Syntax: {{ .Values.xxx }} retrieves values from values.yaml
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "genieacs-relay.fullname" . }}
+  labels:
+    {{- include "genieacs-relay.labels" . | nindent 4 }}
+data:
+  GENIEACS_BASE_URL: {{ .Values.config.genieacsBaseUrl | quote }}
+  NBI_AUTH: {{ .Values.config.nbiAuth.enabled | quote }}
+  MIDDLEWARE_AUTH: {{ .Values.config.middlewareAuth.enabled | quote }}
+  CORS_ALLOWED_ORIGINS: {{ .Values.config.corsAllowedOrigins | quote }}
+  RATE_LIMIT_REQUESTS: {{ .Values.config.rateLimit.requests | quote }}
+  RATE_LIMIT_WINDOW: {{ .Values.config.rateLimit.window | quote }}
+  STALE_THRESHOLD_MINUTES: {{ .Values.config.staleThresholdMinutes | quote }}

@@ -1,0 +1,34 @@
+# Chart.yaml - Metadata for Helm chart
+# This file is REQUIRED in every Helm chart
+
+apiVersion: v2                    # Helm 3 uses apiVersion v2
+name: genieacs-relay              # Chart name (must match folder name)
+description: A lightweight relay service for managing TR-069 devices via GenieACS
+type: application                 # application or library
+version: 0.1.0                    # CHART version (not app), follows SemVer
+appVersion: "latest"              # Application version being deployed
+
+# Maintainer information
+maintainers:
+  - name: Cepat Kilat Teknologi
+    url: https://github.com/Cepat-Kilat-Teknologi
+
+# Keywords for Artifact Hub search
+keywords:
+  - genieacs
+  - tr-069
+  - cwmp
+  - wifi
+  - router
+
+# Links to source code and documentation
+home: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+sources:
+  - https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+
+# Dependencies (if other charts are needed)
+# dependencies:
+#   - name: redis
+#     version: "17.x.x"
+#     repository: https://charts.bitnami.com/bitnami
+#     condition: redis.enabled

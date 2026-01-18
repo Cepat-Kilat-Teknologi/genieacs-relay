@@ -1,0 +1,53 @@
+
+================================================================================
+  GenieACS Relay has been deployed!
+================================================================================
+
+{{- if .Values.ingress.enabled }}
+Access the application at:
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+Get the application URL:
+  export NODE_PORT=$(kubectl get -n {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "genieacs-relay.fullname" . }})
+  export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+Get the application URL (may take a few minutes):
+  export SERVICE_IP=$(kubectl get svc -n {{ .Release.Namespace }} {{ include "genieacs-relay.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else }}
+Access via port-forward:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "genieacs-relay.fullname" . }} 8080:{{ .Values.service.port }}
+  echo http://localhost:8080
+{{- end }}
+
+--------------------------------------------------------------------------------
+Quick Commands:
+--------------------------------------------------------------------------------
+
+# Check pods
+kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "genieacs-relay.name" . }}
+
+# View logs
+kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "genieacs-relay.name" . }} -f
+
+# Health check
+kubectl exec -n {{ .Release.Namespace }} -it $(kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "genieacs-relay.name" . }} -o jsonpath='{.items[0].metadata.name}') -- wget -qO- http://localhost:8080/health
+
+--------------------------------------------------------------------------------
+API Documentation:
+--------------------------------------------------------------------------------
+
+Swagger UI: http://localhost:8080/swagger/index.html (via port-forward)
+
+{{- if .Values.config.middlewareAuth.enabled }}
+
+================================================================================
+  IMPORTANT: API Authentication is ENABLED
+================================================================================
+All API requests require the X-API-Key header.
+{{- end }}
