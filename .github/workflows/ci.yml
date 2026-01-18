@@ -9,8 +9,13 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: docker.io
-  IMAGE_NAME: cepatkilatteknologi/genieacs-relay
+  # Docker Hub
+  DOCKERHUB_REGISTRY: docker.io
+  DOCKERHUB_IMAGE: cepatkilatteknologi/genieacs-relay
+  # GitHub Packages
+  GHCR_REGISTRY: ghcr.io
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  # Go version
   GO_VERSION: '1.25'
 
 jobs:
@@ -69,6 +74,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     environment: ci
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -79,27 +87,49 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Login to Docker Hub
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
+          registry: ${{ env.DOCKERHUB_REGISTRY }}
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
-        id: meta
+      # Login to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata for Docker Hub
+      - name: Extract metadata (Docker Hub)
+        id: meta-dockerhub
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE }}
           tags: |
-            # For tags: v1.0.0 -> 1.0.0, v1.0, v1, latest
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # For branches: develop -> develop, main -> latest
             type=ref,event=branch
-            # Always add latest for main/tags
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
 
+      # Extract metadata for GitHub Packages
+      - name: Extract metadata (GitHub Packages)
+        id: meta-ghcr
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+
+      # Build and push to both registries
       - name: Build & Push Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -108,8 +138,10 @@ jobs:
           target: production
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ steps.meta-dockerhub.outputs.tags }}
+            ${{ steps.meta-ghcr.outputs.tags }}
+          labels: ${{ steps.meta-dockerhub.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -133,28 +165,23 @@ jobs:
           fetch-depth: 0
 
       - name: Generate Release Notes
-        id: notes
         run: |
-          # Get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          VERSION="${{ github.ref_name }}"
+          VERSION_NUM="${VERSION#v}"
 
-          # Generate changelog
-          if [ -n "$PREV_TAG" ]; then
-            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
-          else
-            CHANGES=$(git log --pretty=format:"- %s" HEAD~10..HEAD)
-          fi
+          cat > release_notes.md << 'NOTES_EOF'
+          ## Docker Images
 
-          # Save to file
-          cat << 'EOF' > release_notes.md
-          ## What's Changed
-
-          $CHANGES
-
-          ## Docker Image
-
+          **Docker Hub:**
           ```bash
-          docker pull cepatkilatteknologi/genieacs-relay:${{ github.ref_name }}
+          docker pull cepatkilatteknologi/genieacs-relay:VERSION_PLACEHOLDER
+          docker pull cepatkilatteknologi/genieacs-relay:latest
+          ```
+
+          **GitHub Packages:**
+          ```bash
+          docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:VERSION_PLACEHOLDER
+          docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:latest
           ```
 
           ## Deployment Options
@@ -169,10 +196,9 @@ jobs:
           - [Installation Guide](INSTALLATION.md)
           - [API Documentation](DOC.md)
           - [Security](SECURITY.md)
-          EOF
+          NOTES_EOF
 
-          # Replace $CHANGES placeholder
-          sed -i "s|\$CHANGES|$CHANGES|g" release_notes.md
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION_NUM}/g" release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
