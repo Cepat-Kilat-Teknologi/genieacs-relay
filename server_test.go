@@ -69,7 +69,7 @@ func TestRunServer_StartFail(t *testing.T) {
 	// Restore original function
 	defer func() {
 		newHTTPServer = originalNewHTTPServer
-		listener.Close()
+		_ = listener.Close()
 	}()
 
 	// Test server start failure
@@ -79,7 +79,7 @@ func TestRunServer_StartFail(t *testing.T) {
 	}
 
 	// Check error message
-	if err != nil && !strings.Contains(err.Error(), "address already in use") {
+	if !strings.Contains(err.Error(), "address already in use") {
 		t.Errorf("Expected 'address already in use' error, got: %v", err)
 	}
 }
@@ -115,7 +115,7 @@ func TestRunServer_ShutdownFail(t *testing.T) {
 		go func() {
 			<-serverStarted
 			time.Sleep(50 * time.Millisecond)
-			listener.Close() // Close listener to cause shutdown error
+			_ = listener.Close() // Close listener to cause shutdown error
 		}()
 
 		return s
@@ -241,25 +241,9 @@ func TestHTTPServerTimeouts(t *testing.T) {
 }
 
 func TestRunServer_NBIAuthDisabled(t *testing.T) {
-	// Save original env values
-	originalNBIAuth := os.Getenv("NBI_AUTH")
-	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
-
 	// Set NBI_AUTH=false (default) - NBI_AUTH_KEY should not be required
-	os.Setenv("NBI_AUTH", "false")
-	os.Unsetenv("NBI_AUTH_KEY")
-
-	// Restore original values after test
-	defer func() {
-		if originalNBIAuth != "" {
-			os.Setenv("NBI_AUTH", originalNBIAuth)
-		} else {
-			os.Unsetenv("NBI_AUTH")
-		}
-		if originalNBIKey != "" {
-			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
-		}
-	}()
+	// t.Setenv automatically restores original values after test
+	t.Setenv("NBI_AUTH", "false")
 
 	// Send SIGINT after short delay
 	go func() {
@@ -276,27 +260,10 @@ func TestRunServer_NBIAuthDisabled(t *testing.T) {
 }
 
 func TestRunServer_NBIAuthEnabledWithKey(t *testing.T) {
-	// Save original env values
-	originalNBIAuth := os.Getenv("NBI_AUTH")
-	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
-
 	// Set NBI_AUTH=true with a valid NBI_AUTH_KEY
-	os.Setenv("NBI_AUTH", "true")
-	os.Setenv("NBI_AUTH_KEY", "test-nbi-key")
-
-	// Restore original values after test
-	defer func() {
-		if originalNBIAuth != "" {
-			os.Setenv("NBI_AUTH", originalNBIAuth)
-		} else {
-			os.Unsetenv("NBI_AUTH")
-		}
-		if originalNBIKey != "" {
-			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
-		} else {
-			os.Unsetenv("NBI_AUTH_KEY")
-		}
-	}()
+	// t.Setenv automatically restores original values after test
+	t.Setenv("NBI_AUTH", "true")
+	t.Setenv("NBI_AUTH_KEY", "test-nbi-key")
 
 	// Send SIGINT after short delay
 	go func() {
@@ -313,27 +280,10 @@ func TestRunServer_NBIAuthEnabledWithKey(t *testing.T) {
 }
 
 func TestRunServer_NBIAuthEnabledWithoutKey(t *testing.T) {
-	// Save original env values
-	originalNBIAuth := os.Getenv("NBI_AUTH")
-	originalNBIKey := os.Getenv("NBI_AUTH_KEY")
-
 	// Set NBI_AUTH=true but no NBI_AUTH_KEY to trigger error
-	os.Setenv("NBI_AUTH", "true")
-	os.Unsetenv("NBI_AUTH_KEY")
-
-	// Restore original values after test
-	defer func() {
-		if originalNBIAuth != "" {
-			os.Setenv("NBI_AUTH", originalNBIAuth)
-		} else {
-			os.Unsetenv("NBI_AUTH")
-		}
-		if originalNBIKey != "" {
-			os.Setenv("NBI_AUTH_KEY", originalNBIKey)
-		} else {
-			os.Unsetenv("NBI_AUTH_KEY")
-		}
-	}()
+	// t.Setenv automatically restores original values after test
+	t.Setenv("NBI_AUTH", "true")
+	t.Setenv("NBI_AUTH_KEY", "") // Empty key
 
 	// Server should fail to start with error about missing NBI_AUTH_KEY
 	err := runServer(":0")
@@ -346,27 +296,10 @@ func TestRunServer_NBIAuthEnabledWithoutKey(t *testing.T) {
 }
 
 func TestRunServer_WithMiddlewareAuthEnabled(t *testing.T) {
-	// Save original env values
-	originalMiddlewareAuth := os.Getenv("MIDDLEWARE_AUTH")
-	originalAuthKey := os.Getenv("AUTH_KEY")
-
 	// Set MIDDLEWARE_AUTH=true with a valid AUTH_KEY
-	os.Setenv("MIDDLEWARE_AUTH", "true")
-	os.Setenv("AUTH_KEY", "test-key-for-server")
-
-	// Restore original values after a test
-	defer func() {
-		if originalMiddlewareAuth != "" {
-			os.Setenv("MIDDLEWARE_AUTH", originalMiddlewareAuth)
-		} else {
-			os.Unsetenv("MIDDLEWARE_AUTH")
-		}
-		if originalAuthKey != "" {
-			os.Setenv("AUTH_KEY", originalAuthKey)
-		} else {
-			os.Unsetenv("AUTH_KEY")
-		}
-	}()
+	// t.Setenv automatically restores original values after test
+	t.Setenv("MIDDLEWARE_AUTH", "true")
+	t.Setenv("AUTH_KEY", "test-key-for-server")
 
 	// Send SIGINT after short delay
 	go func() {
@@ -383,27 +316,10 @@ func TestRunServer_WithMiddlewareAuthEnabled(t *testing.T) {
 }
 
 func TestRunServer_WithMiddlewareAuthEnabledAndEmptyKey(t *testing.T) {
-	// Save original env values
-	originalMiddlewareAuth := os.Getenv("MIDDLEWARE_AUTH")
-	originalAuthKey := os.Getenv("AUTH_KEY")
-
 	// Set MIDDLEWARE_AUTH=true but no AUTH_KEY to trigger error
-	os.Setenv("MIDDLEWARE_AUTH", "true")
-	os.Unsetenv("AUTH_KEY")
-
-	// Restore original values after test
-	defer func() {
-		if originalMiddlewareAuth != "" {
-			os.Setenv("MIDDLEWARE_AUTH", originalMiddlewareAuth)
-		} else {
-			os.Unsetenv("MIDDLEWARE_AUTH")
-		}
-		if originalAuthKey != "" {
-			os.Setenv("AUTH_KEY", originalAuthKey)
-		} else {
-			os.Unsetenv("AUTH_KEY")
-		}
-	}()
+	// t.Setenv automatically restores original values after test
+	t.Setenv("MIDDLEWARE_AUTH", "true")
+	t.Setenv("AUTH_KEY", "") // Empty key
 
 	// Server should fail to start with error about missing AUTH_KEY
 	err := runServer(":0")
@@ -439,12 +355,9 @@ func TestRunServer_MiddlewareAuthEnabled(t *testing.T) {
 	}()
 
 	// Set environment variables for middleware auth
-	os.Setenv("MIDDLEWARE_AUTH", "true")
-	os.Setenv("AUTH_KEY", "test-api-key")
-	defer func() {
-		os.Unsetenv("MIDDLEWARE_AUTH")
-		os.Unsetenv("AUTH_KEY")
-	}()
+	// t.Setenv automatically restores original values after test
+	t.Setenv("MIDDLEWARE_AUTH", "true")
+	t.Setenv("AUTH_KEY", "test-api-key")
 
 	// Create mock GenieACS server
 	mockGenieServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -453,8 +366,7 @@ func TestRunServer_MiddlewareAuthEnabled(t *testing.T) {
 	}))
 	defer mockGenieServer.Close()
 
-	os.Setenv("GENIEACS_BASE_URL", mockGenieServer.URL)
-	defer os.Unsetenv("GENIEACS_BASE_URL")
+	t.Setenv("GENIEACS_BASE_URL", mockGenieServer.URL)
 
 	// Override runServerFunc to capture the setup
 	originalRunServerFunc := runServerFunc
@@ -536,10 +448,10 @@ func Test_main(t *testing.T) {
 	}
 	defer func() { taskWorkerPool = orig }()
 
-	// set env minimal
-	os.Setenv("GENIEACS_BASE_URL", "http://localhost")
-	os.Setenv("NBI_AUTH_KEY", "test")
-	os.Setenv("API_KEY", "apitest")
+	// set env minimal using t.Setenv
+	t.Setenv("GENIEACS_BASE_URL", "http://localhost")
+	t.Setenv("NBI_AUTH_KEY", "test")
+	t.Setenv("API_KEY", "apitest")
 
 	done := make(chan struct{})
 	go func() {
@@ -566,8 +478,7 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 
 	// Test case 1: Valid environment variable
 	t.Run("Valid_60_minutes", func(t *testing.T) {
-		os.Setenv("STALE_THRESHOLD_MINUTES", "60")
-		defer os.Unsetenv("STALE_THRESHOLD_MINUTES")
+		t.Setenv("STALE_THRESHOLD_MINUTES", "60")
 
 		// Parse using same logic as runServer
 		result := DefaultStaleThreshold
@@ -581,8 +492,7 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 
 	// Test case 2: Invalid environment variable (non-numeric)
 	t.Run("Invalid_non_numeric", func(t *testing.T) {
-		os.Setenv("STALE_THRESHOLD_MINUTES", "invalid")
-		defer os.Unsetenv("STALE_THRESHOLD_MINUTES")
+		t.Setenv("STALE_THRESHOLD_MINUTES", "invalid")
 
 		result := DefaultStaleThreshold
 		if staleMinStr := getEnv(EnvStaleThreshold, ""); staleMinStr != "" {
@@ -596,8 +506,7 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 
 	// Test case 3: Zero value (disabled)
 	t.Run("Zero_value_disabled", func(t *testing.T) {
-		os.Setenv("STALE_THRESHOLD_MINUTES", "0")
-		defer os.Unsetenv("STALE_THRESHOLD_MINUTES")
+		t.Setenv("STALE_THRESHOLD_MINUTES", "0")
 
 		result := DefaultStaleThreshold
 		if staleMinStr := getEnv(EnvStaleThreshold, ""); staleMinStr != "" {
@@ -611,8 +520,7 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 
 	// Test case 4: Negative value
 	t.Run("Negative_value", func(t *testing.T) {
-		os.Setenv("STALE_THRESHOLD_MINUTES", "-10")
-		defer os.Unsetenv("STALE_THRESHOLD_MINUTES")
+		t.Setenv("STALE_THRESHOLD_MINUTES", "-10")
 
 		result := DefaultStaleThreshold
 		if staleMinStr := getEnv(EnvStaleThreshold, ""); staleMinStr != "" {
@@ -626,7 +534,7 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 
 	// Test case 5: Empty environment variable
 	t.Run("Empty_env_var", func(t *testing.T) {
-		os.Unsetenv("STALE_THRESHOLD_MINUTES")
+		t.Setenv("STALE_THRESHOLD_MINUTES", "")
 
 		result := DefaultStaleThreshold
 		if staleMinStr := getEnv(EnvStaleThreshold, ""); staleMinStr != "" {
@@ -650,8 +558,7 @@ func TestRunServerWithCustomStaleThreshold(t *testing.T) {
 		}()
 
 		// Set custom stale threshold via environment variable
-		_ = os.Setenv("STALE_THRESHOLD_MINUTES", "45")
-		defer func() { _ = os.Unsetenv("STALE_THRESHOLD_MINUTES") }()
+		t.Setenv("STALE_THRESHOLD_MINUTES", "45")
 
 		// Create a channel to signal server creation
 		serverCreated := make(chan struct{})
@@ -788,18 +695,8 @@ func TestRouterWithMiddlewareEnabled(t *testing.T) {
 func TestRunServer_EnvVarParsing(t *testing.T) {
 	// Test CORS specific origins (not "*") - covers lines 63-65
 	t.Run("CORS_specific_origins", func(t *testing.T) {
-		// Save original env values
-		origCORSOrigins := os.Getenv(EnvCORSAllowedOrigins)
-		defer func() {
-			if origCORSOrigins != "" {
-				os.Setenv(EnvCORSAllowedOrigins, origCORSOrigins)
-			} else {
-				os.Unsetenv(EnvCORSAllowedOrigins)
-			}
-		}()
-
 		// Set specific origins (not "*")
-		os.Setenv(EnvCORSAllowedOrigins, "http://localhost:3000,http://example.com")
+		t.Setenv(EnvCORSAllowedOrigins, "http://localhost:3000,http://example.com")
 
 		// Send SIGINT after short delay
 		go func() {
@@ -814,18 +711,8 @@ func TestRunServer_EnvVarParsing(t *testing.T) {
 
 	// Test RATE_LIMIT_REQUESTS env parsing - covers lines 73-76
 	t.Run("RATE_LIMIT_REQUESTS_parsing", func(t *testing.T) {
-		// Save original env values
-		origRateLimitRequests := os.Getenv(EnvRateLimitRequests)
-		defer func() {
-			if origRateLimitRequests != "" {
-				os.Setenv(EnvRateLimitRequests, origRateLimitRequests)
-			} else {
-				os.Unsetenv(EnvRateLimitRequests)
-			}
-		}()
-
 		// Set valid rate limit requests
-		os.Setenv(EnvRateLimitRequests, "200")
+		t.Setenv(EnvRateLimitRequests, "200")
 
 		// Send SIGINT after short delay
 		go func() {
@@ -840,18 +727,8 @@ func TestRunServer_EnvVarParsing(t *testing.T) {
 
 	// Test RATE_LIMIT_WINDOW env parsing - covers lines 79-82
 	t.Run("RATE_LIMIT_WINDOW_parsing", func(t *testing.T) {
-		// Save original env values
-		origRateLimitWindow := os.Getenv(EnvRateLimitWindow)
-		defer func() {
-			if origRateLimitWindow != "" {
-				os.Setenv(EnvRateLimitWindow, origRateLimitWindow)
-			} else {
-				os.Unsetenv(EnvRateLimitWindow)
-			}
-		}()
-
 		// Set valid rate limit window
-		os.Setenv(EnvRateLimitWindow, "120")
+		t.Setenv(EnvRateLimitWindow, "120")
 
 		// Send SIGINT after short delay
 		go func() {
@@ -866,18 +743,8 @@ func TestRunServer_EnvVarParsing(t *testing.T) {
 
 	// Test CORS_MAX_AGE env parsing - covers lines 90-93
 	t.Run("CORS_MAX_AGE_parsing", func(t *testing.T) {
-		// Save original env values
-		origCORSMaxAge := os.Getenv(EnvCORSMaxAge)
-		defer func() {
-			if origCORSMaxAge != "" {
-				os.Setenv(EnvCORSMaxAge, origCORSMaxAge)
-			} else {
-				os.Unsetenv(EnvCORSMaxAge)
-			}
-		}()
-
 		// Set valid CORS max age
-		os.Setenv(EnvCORSMaxAge, "7200")
+		t.Setenv(EnvCORSMaxAge, "7200")
 
 		// Send SIGINT after short delay
 		go func() {
@@ -892,39 +759,11 @@ func TestRunServer_EnvVarParsing(t *testing.T) {
 
 	// Test all env vars together
 	t.Run("All_env_vars_combined", func(t *testing.T) {
-		// Save original env values
-		origCORSOrigins := os.Getenv(EnvCORSAllowedOrigins)
-		origRateLimitRequests := os.Getenv(EnvRateLimitRequests)
-		origRateLimitWindow := os.Getenv(EnvRateLimitWindow)
-		origCORSMaxAge := os.Getenv(EnvCORSMaxAge)
-		defer func() {
-			if origCORSOrigins != "" {
-				os.Setenv(EnvCORSAllowedOrigins, origCORSOrigins)
-			} else {
-				os.Unsetenv(EnvCORSAllowedOrigins)
-			}
-			if origRateLimitRequests != "" {
-				os.Setenv(EnvRateLimitRequests, origRateLimitRequests)
-			} else {
-				os.Unsetenv(EnvRateLimitRequests)
-			}
-			if origRateLimitWindow != "" {
-				os.Setenv(EnvRateLimitWindow, origRateLimitWindow)
-			} else {
-				os.Unsetenv(EnvRateLimitWindow)
-			}
-			if origCORSMaxAge != "" {
-				os.Setenv(EnvCORSMaxAge, origCORSMaxAge)
-			} else {
-				os.Unsetenv(EnvCORSMaxAge)
-			}
-		}()
-
 		// Set all env vars
-		os.Setenv(EnvCORSAllowedOrigins, "http://localhost:3000")
-		os.Setenv(EnvRateLimitRequests, "500")
-		os.Setenv(EnvRateLimitWindow, "300")
-		os.Setenv(EnvCORSMaxAge, "3600")
+		t.Setenv(EnvCORSAllowedOrigins, "http://localhost:3000")
+		t.Setenv(EnvRateLimitRequests, "500")
+		t.Setenv(EnvRateLimitWindow, "300")
+		t.Setenv(EnvCORSMaxAge, "3600")
 
 		// Send SIGINT after short delay
 		go func() {

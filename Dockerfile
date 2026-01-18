@@ -21,7 +21,7 @@ RUN go mod tidy
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-w -s -X main.version=${VERSION:-dev}" \
-    -o /app/main main.go
+    -o /app/main .
 
 # Stage 3: Final image
 FROM alpine:3.19 AS production
