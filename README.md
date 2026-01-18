@@ -18,7 +18,14 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - [Security](SECURITY.md) - Authentication, rate limiting, and security features
 - [ONU Models](ONU.md) - Supported ONU/ONT device models
 - [Contributing](CONTRIBUTING.md) - How to contribute to this project
-- [API Test Examples](API_TEST.md) - API endpoint examples and test results
+- [API Reference](API_TEST.md) - Complete API endpoint examples and documentation
+
+### Testing Documentation
+
+- [Single-Band Test Results](TEST_RESULT_SINGLEBAND.md) - Test results for 2.4GHz only devices
+- [Dual-Band Test Results](TEST_RESULT_DUALBAND.md) - Test results for 2.4GHz + 5GHz devices
+- [test_singleband.http](test_singleband.http) - HTTP test file for single-band devices
+- [test_dualband.http](test_dualband.http) - HTTP test file for dual-band devices
 
 ---
 
@@ -110,13 +117,22 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 ├── cache.go                # Device data caching with TTL
 ├── worker.go               # Async worker pool
 ├── capability.go           # Device band detection
+├── wlan.go                 # WLAN helper functions
+├── dhcp.go                 # DHCP client helpers
 ├── constants.go            # Application constants
 ├── response.go             # HTTP response helpers
 ├── utils.go                # Utility functions
+├── onu_models.go           # ONU/ONT model definitions
 ├── *_test.go               # Unit tests
 │
 ├── docs/                   # Swagger/OpenAPI documentation
 ├── assets/                 # Static assets (logo, images)
+│
+├── test_singleband.http    # HTTP test file for single-band devices
+├── test_dualband.http      # HTTP test file for dual-band devices
+├── TEST_RESULT_SINGLEBAND.md  # Single-band test results
+├── TEST_RESULT_DUALBAND.md    # Dual-band test results
+├── API_TEST.md             # API reference documentation
 │
 ├── examples/
 │   ├── docker/             # Docker Compose deployment
@@ -157,8 +173,26 @@ curl -H "X-API-Key: YourSecretKey" \
   "code": 200,
   "status": "OK",
   "data": [
-    {"wlan": "1", "ssid": "MyWiFi", "password": "******", "band": "2.4GHz"},
-    {"wlan": "5", "ssid": "MyWiFi-5G", "password": "******", "band": "5GHz"}
+    {
+      "wlan": "1",
+      "ssid": "MyWiFi",
+      "password": "********",
+      "band": "2.4GHz",
+      "hidden": false,
+      "max_clients": 32,
+      "auth_mode": "WPA2",
+      "encryption": "AES"
+    },
+    {
+      "wlan": "5",
+      "ssid": "MyWiFi-5G",
+      "password": "********",
+      "band": "5GHz",
+      "hidden": false,
+      "max_clients": 32,
+      "auth_mode": "WPA2",
+      "encryption": "AES"
+    }
   ]
 }
 ```
@@ -284,6 +318,57 @@ make swagger
 | **Systemd** | Bare metal Linux service | [examples/systemd](examples/systemd/) |
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed deployment instructions.
+
+---
+
+## Testing
+
+### Running Unit Tests
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# Run tests with race detection
+go test -race ./...
+```
+
+### API Testing with HTTP Files
+
+This project includes HTTP test files for testing the API endpoints using VS Code REST Client or IntelliJ HTTP Client.
+
+| Device Type | Test File | Description |
+|-------------|-----------|-------------|
+| Single-Band | [test_singleband.http](test_singleband.http) | Tests for 2.4GHz only devices (WLAN 1-4) |
+| Dual-Band | [test_dualband.http](test_dualband.http) | Tests for 2.4GHz + 5GHz devices (WLAN 1-8) |
+
+**Usage:**
+1. Open the `.http` file in VS Code with REST Client extension
+2. Update the `@deviceIP` variable with your device's IP address
+3. Update the `@apiKey` variable if authentication is enabled
+4. Click "Send Request" to execute each test
+
+### Test Results Summary
+
+| Device Type | Model | Band Type | Total Tests | Status |
+|-------------|-------|-----------|-------------|--------|
+| Single-Band | CDATA FD512XW-R460 | 2.4GHz | 30 | All PASS |
+| Dual-Band | ZTE F670L | 2.4GHz + 5GHz | 30 | All PASS |
+
+**Detailed Test Results:**
+- [TEST_RESULT_SINGLEBAND.md](TEST_RESULT_SINGLEBAND.md) - Single-band device test results
+- [TEST_RESULT_DUALBAND.md](TEST_RESULT_DUALBAND.md) - Dual-band device test results
+
+### Test Coverage
+
+| Category | Tests |
+|----------|-------|
+| Endpoint Tests | Health, SSID, DHCP, Capability, WLAN CRUD, Optimize, Cache |
+| Error Handling | Validation, Invalid inputs, Cross-band validation |
+| Authentication | API Key validation (when MIDDLEWARE_AUTH=true) |
 
 ---
 
