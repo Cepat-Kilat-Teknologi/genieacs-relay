@@ -98,6 +98,20 @@ type AvailableWLANResponse struct {
 }
 
 // --- Swagger Documentation Response Types ---
+// These types are used by swaggo/swag for API documentation generation.
+// They appear in Swagger annotations (@Success, @Failure) in handler files.
+
+// Compile-time check to ensure Swagger types are valid (prevents "unused" warnings)
+var (
+	_ = HealthResponse{}
+	_ = MessageResponse{}
+	_ = SSIDForceResponse{}
+	_ = DeviceCapabilityResponse{}
+	_ = WLANCreateResponse{}
+	_ = WLANUpdateResponse{}
+	_ = WLANDeleteResponse{}
+	_ = WLANOptimizeResponse{}
+)
 
 // HealthResponse represents health check response
 // @Description Health check response data
