@@ -47,7 +47,7 @@ jobs:
           govulncheck ./...
       
       - name: Run Unit Tests with Coverage
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /docs)
       
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
