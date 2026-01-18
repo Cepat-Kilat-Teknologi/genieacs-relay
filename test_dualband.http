@@ -1,0 +1,932 @@
+# GenieACS Relay - Dual-Band Device Test File
+# For dual-band devices (2.4GHz + 5GHz, WLAN 1-8)
+#
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+#
+# Example devices: ZTE F670L, F680, Huawei HG8245H5 (dual-band variants)
+
+### Variables
+@baseUrl = http://localhost:8080
+@apiKey = YourSecretKey # Change to your actual API key
+@deviceIP = 10.90.7.129 # Change to your device's IP address
+
+###############################################################################
+# HEALTH CHECK
+###############################################################################
+
+### Health Check (no auth required)
+GET {{baseUrl}}/health
+Content-Type: application/json
+
+###############################################################################
+# DEVICE INFO
+###############################################################################
+
+### Get Device Capability (should show dualband)
+GET {{baseUrl}}/api/v1/genieacs/capability/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Get Available WLAN Slots (should show WLAN 1-4 for 2.4GHz, 5-8 for 5GHz)
+GET {{baseUrl}}/api/v1/genieacs/wlan/available/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+###############################################################################
+# SSID ENDPOINTS
+###############################################################################
+
+### Get SSID by IP (shows both 2.4GHz and 5GHz)
+GET {{baseUrl}}/api/v1/genieacs/ssid/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Get SSID by IP (Force Refresh)
+GET {{baseUrl}}/api/v1/genieacs/force/ssid/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Get SSID by IP (Force Refresh with custom retry)
+GET {{baseUrl}}/api/v1/genieacs/force/ssid/{{deviceIP}}?max_retries=5&retry_delay_ms=2000
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Trigger SSID Refresh
+POST {{baseUrl}}/api/v1/genieacs/ssid/{{deviceIP}}/refresh
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+###############################################################################
+# DHCP CLIENT ENDPOINTS
+###############################################################################
+
+### Get DHCP Clients
+GET {{baseUrl}}/api/v1/genieacs/dhcp-client/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Get DHCP Clients (with refresh)
+GET {{baseUrl}}/api/v1/genieacs/dhcp-client/{{deviceIP}}?refresh=true
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+###############################################################################
+# CACHE ENDPOINTS
+###############################################################################
+
+### Clear All Cache
+POST {{baseUrl}}/api/v1/genieacs/cache/clear
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Clear Cache for Specific Device
+POST {{baseUrl}}/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZTEGCFLN794B3A1
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+###############################################################################
+# WLAN CREATE - 2.4GHz (WLAN 1-4)
+###############################################################################
+
+### Create WLAN 2 (2.4GHz) - Basic
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "GuestNetwork-2G",
+    "password": "GuestPass123"
+}
+
+### Create WLAN 3 (2.4GHz) - Full Options
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/3/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "SecureNetwork-2G",
+    "password": "SecurePass456",
+    "hidden": false,
+    "max_clients": 20,
+    "auth_mode": "WPA2",
+    "encryption": "AES"
+}
+
+### Create WLAN 4 (2.4GHz) - Hidden Network
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/4/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "HiddenNetwork-2G",
+    "password": "HiddenPass789",
+    "hidden": true,
+    "auth_mode": "WPA2",
+    "encryption": "AES"
+}
+
+### Create WLAN 2 (2.4GHz) - Open Network
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "OpenGuestNetwork-2G",
+    "auth_mode": "Open"
+}
+
+### Create WLAN 2 (2.4GHz) - WPA/WPA2 Mixed
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "LegacyNetwork-2G",
+    "password": "LegacyPass123",
+    "auth_mode": "WPA/WPA2",
+    "encryption": "TKIP+AES"
+}
+
+###############################################################################
+# WLAN CREATE - 5GHz (WLAN 5-8)
+###############################################################################
+
+### Create WLAN 6 (5GHz) - Basic
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/6/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "FastNetwork-5G",
+    "password": "Fast5GPass123"
+}
+
+### Create WLAN 7 (5GHz) - Full Options
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/7/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "SecureNetwork-5G",
+    "password": "Secure5GPass456",
+    "hidden": false,
+    "max_clients": 32,
+    "auth_mode": "WPA2",
+    "encryption": "AES"
+}
+
+### Create WLAN 8 (5GHz) - Hidden Network
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/8/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "IoT-Network-5G",
+    "password": "IoTPass123456",
+    "hidden": true,
+    "max_clients": 50,
+    "auth_mode": "WPA2",
+    "encryption": "AES"
+}
+
+### Create WLAN 6 (5GHz) - Open Network
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/6/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "OpenGuest-5G",
+    "auth_mode": "Open"
+}
+
+### Create WLAN 7 (5GHz) - WPA/WPA2 Mixed
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/7/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "LegacyNetwork-5G",
+    "password": "LegacyPass123",
+    "auth_mode": "WPA/WPA2",
+    "encryption": "TKIP+AES"
+}
+
+###############################################################################
+# WLAN UPDATE - 2.4GHz
+###############################################################################
+
+### Update WLAN 2 (2.4GHz) - Full Update
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "UpdatedNetwork-2G",
+    "password": "NewPassword123",
+    "hidden": true,
+    "max_clients": 20
+}
+
+### Update WLAN 3 (2.4GHz) - SSID Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/3/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "NewNetworkName-2G"
+}
+
+### Update WLAN 4 (2.4GHz) - Auth Mode Change
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/4/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "auth_mode": "WPA/WPA2",
+    "encryption": "TKIP+AES"
+}
+
+### Update WLAN 2 (2.4GHz) - Max Clients Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "max_clients": 32
+}
+
+### Update WLAN 2 (2.4GHz) - Encryption Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "encryption": "AES"
+}
+
+### Update WLAN 2 (2.4GHz) - Password Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "password": "NewSecurePass2G"
+}
+
+### Update WLAN 2 (2.4GHz) - Hidden Status Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "hidden": true
+}
+
+###############################################################################
+# WLAN UPDATE - 5GHz
+###############################################################################
+
+### Update WLAN 5 (5GHz) - Full Update
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "Updated5GNetwork",
+    "password": "New5GPassword",
+    "max_clients": 25
+}
+
+### Update WLAN 6 (5GHz) - SSID Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/6/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "NewFastNetwork-5G"
+}
+
+### Update WLAN 7 (5GHz) - Password Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/7/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "password": "NewSecure5GPass"
+}
+
+### Update WLAN 8 (5GHz) - Hidden Status
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/8/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "hidden": false
+}
+
+### Update WLAN 6 (5GHz) - Max Clients Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/6/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "max_clients": 40
+}
+
+### Update WLAN 6 (5GHz) - Encryption Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/6/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "encryption": "AES"
+}
+
+### Update WLAN 7 (5GHz) - Auth Mode Change
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/7/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "auth_mode": "WPA/WPA2",
+    "encryption": "TKIP+AES"
+}
+
+###############################################################################
+# WLAN DELETE
+###############################################################################
+
+### Delete WLAN 2 (2.4GHz)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Delete WLAN 3 (2.4GHz)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/3/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Delete WLAN 4 (2.4GHz)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/4/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Delete WLAN 6 (5GHz)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/6/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Delete WLAN 7 (5GHz)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/7/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Delete WLAN 8 (5GHz)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/8/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+###############################################################################
+# WLAN OPTIMIZE - 2.4GHz
+###############################################################################
+
+### Optimize WLAN 1 (2.4GHz) - Full Settings
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "6",
+    "mode": "b/g/n",
+    "bandwidth": "40MHz",
+    "transmit_power": 100
+}
+
+### Optimize WLAN 1 (2.4GHz) - Auto Channel
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "Auto"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Channel 1
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "1"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Channel 11
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "11"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Mode b/g/n
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "b/g/n"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Bandwidth 20MHz
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "20MHz"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Transmit Power 60%
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "transmit_power": 60
+}
+
+### Optimize WLAN 1 (2.4GHz) - Mode g/n
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "g/n"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Bandwidth 40MHz
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "40MHz"
+}
+
+### Optimize WLAN 1 (2.4GHz) - Channel 6
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "6"
+}
+
+###############################################################################
+# WLAN OPTIMIZE - 5GHz
+###############################################################################
+
+### Optimize WLAN 5 (5GHz) - Full Settings
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "149",
+    "mode": "a/n/ac",
+    "bandwidth": "80MHz",
+    "transmit_power": 100
+}
+
+### Optimize WLAN 5 (5GHz) - Auto Channel
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "Auto"
+}
+
+### Optimize WLAN 5 (5GHz) - Channel 36
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "36"
+}
+
+### Optimize WLAN 5 (5GHz) - Channel 149
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "149"
+}
+
+### Optimize WLAN 5 (5GHz) - Channel 153
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "153"
+}
+
+### Optimize WLAN 5 (5GHz) - Mode a/n/ac
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "a/n/ac"
+}
+
+### Optimize WLAN 5 (5GHz) - Mode ac only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "ac"
+}
+
+### Optimize WLAN 5 (5GHz) - Bandwidth 40MHz
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "40MHz"
+}
+
+### Optimize WLAN 5 (5GHz) - Bandwidth 80MHz
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "80MHz"
+}
+
+### Optimize WLAN 5 (5GHz) - Transmit Power 100%
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "transmit_power": 100
+}
+
+### Optimize WLAN 5 (5GHz) - Transmit Power 60%
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "transmit_power": 60
+}
+
+### Optimize WLAN 5 (5GHz) - Mode a/n
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "a/n"
+}
+
+### Optimize WLAN 5 (5GHz) - Bandwidth 20MHz
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "20MHz"
+}
+
+### Optimize WLAN 5 (5GHz) - Channel 44
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "44"
+}
+
+### Optimize WLAN 5 (5GHz) - Channel 157
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "157"
+}
+
+###############################################################################
+# ERROR TEST CASES
+###############################################################################
+
+### Test: Invalid IP Address
+GET {{baseUrl}}/api/v1/genieacs/ssid/invalid-ip
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Test: Missing API Key
+GET {{baseUrl}}/api/v1/genieacs/ssid/{{deviceIP}}
+Content-Type: application/json
+
+### Test: Invalid API Key
+GET {{baseUrl}}/api/v1/genieacs/ssid/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: WrongApiKey
+
+### Test: Create WLAN - Missing SSID
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "password": "TestPass123"
+}
+
+### Test: Create WLAN - Missing Password for WPA2
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "auth_mode": "WPA2"
+}
+
+### Test: Create WLAN - Password Too Short
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "password": "short"
+}
+
+### Test: Create WLAN - SSID Too Long
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "ThisSSIDIsWayTooLongAndExceeds32Characters",
+    "password": "TestPass123"
+}
+
+### Test: Create WLAN - Invalid Auth Mode
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "password": "TestPass123",
+    "auth_mode": "InvalidMode"
+}
+
+### Test: Create WLAN - Invalid Encryption
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "password": "TestPass123",
+    "encryption": "InvalidEncryption"
+}
+
+### Test: Create WLAN - Max Clients Out of Range
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "password": "TestPass123",
+    "max_clients": 100
+}
+
+### Test: Create WLAN - Invalid WLAN ID (0)
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/0/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "password": "TestPass123"
+}
+
+### Test: Create WLAN - Invalid WLAN ID (9)
+POST {{baseUrl}}/api/v1/genieacs/wlan/create/9/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork",
+    "password": "TestPass123"
+}
+
+### Test: Update WLAN - Empty Body
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{}
+
+### Test: Update WLAN - WLAN Not Found
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/8/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "TestNetwork"
+}
+
+### Test: Delete WLAN - Invalid WLAN ID (0)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/0/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Test: Delete WLAN - Invalid WLAN ID (9)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/9/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Test: Optimize WLAN - Empty Body
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{}
+
+### Test: Optimize 2.4GHz - Invalid Channel
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "99"
+}
+
+### Test: Optimize 5GHz - Invalid Channel
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "100"
+}
+
+### Test: Optimize 2.4GHz - Invalid Mode (5GHz mode)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "a/n/ac"
+}
+
+### Test: Optimize 5GHz - Invalid Mode (2.4GHz mode)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "mode": "b/g/n"
+}
+
+### Test: Optimize 2.4GHz - Invalid Bandwidth (80MHz)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "80MHz"
+}
+
+### Test: Optimize 5GHz - Invalid Bandwidth (160MHz)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "bandwidth": "160MHz"
+}
+
+### Test: Optimize - Invalid Transmit Power
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "transmit_power": 50
+}
+
+### Test: Delete WLAN 1 (Primary 2.4GHz - should fail)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Test: Delete WLAN 5 (Primary 5GHz - should fail)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Test: Optimize 2.4GHz - Using 5GHz Channel (149)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "149"
+}
+
+### Test: Optimize 5GHz - Using 2.4GHz Channel (6)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/5/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "6"
+}
+
+### Test: Update WLAN - Invalid Max Clients (too high)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "max_clients": 100
+}
+
+### Test: Update WLAN - Invalid Max Clients (zero)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "max_clients": 0
+}
+
+### Test: Update WLAN - Invalid Encryption
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "encryption": "WEP"
+}
+
+### Test: Update WLAN - Invalid Auth Mode
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "auth_mode": "WPA3"
+}
+
+### Test: Update WLAN - Password Too Short
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "password": "short"
+}
+
+### Test: Update WLAN - SSID Too Long
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "ssid": "ThisSSIDIsWayTooLongAndExceeds32Characters"
+}
+
+### Test: Optimize WLAN - Invalid WLAN ID (0)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/0/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "Auto"
+}
+
+### Test: Optimize WLAN - Invalid WLAN ID (9)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/optimize/9/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "channel": "Auto"
+}
