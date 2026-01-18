@@ -37,6 +37,8 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - **Caching** for device data with configurable TTL
 - **Worker pool** for asynchronous task processing
 - **ONU/ONT Band Detection** - Automatic detection of single-band and dual-band devices
+- **API Key Authentication** - Protect sensitive endpoints with API keys
+- **Cross-band Validation** - Prevent cross-band SSID/password updates
 
 ### Security Features
 
