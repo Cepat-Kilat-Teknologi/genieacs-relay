@@ -1,3 +1,38 @@
+// Package main GenieACS Relay API
+//
+// A lightweight relay service for managing devices via GenieACS.
+// Provides RESTful endpoints for SSID management, WLAN configuration,
+// device capability detection, and DHCP client information.
+//
+//	@title						GenieACS Relay API
+//	@version					1.0.0
+//	@description				A lightweight relay service for managing TR-069 devices via GenieACS.
+//	@description				Provides endpoints for SSID/WLAN management, device capability detection, and DHCP clients.
+//
+//	@contact.name				Cepat Kilat Teknologi
+//	@contact.url				https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+//
+//	@license.name				MIT
+//	@license.url				https://opensource.org/licenses/MIT
+//
+//	@host						localhost:8080
+//	@BasePath					/api/v1/genieacs
+//
+//	@securityDefinitions.apikey	ApiKeyAuth
+//	@in							header
+//	@name						X-API-Key
+//	@description				API key for authentication (required when MIDDLEWARE_AUTH=true)
+//
+//	@tag.name					Health
+//	@tag.description			Health check endpoint
+//	@tag.name					SSID
+//	@tag.description			SSID management operations
+//	@tag.name					WLAN
+//	@tag.description			WLAN configuration and management
+//	@tag.name					Device
+//	@tag.description			Device capability and information
+//	@tag.name					Cache
+//	@tag.description			Cache management operations
 package main
 
 import (

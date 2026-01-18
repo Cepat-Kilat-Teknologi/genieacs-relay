@@ -14,7 +14,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
+
+	_ "github.com/Cepat-Kilat-Teknologi/genieacs-relay/docs"
 )
 
 func runServer(addr string) error {
@@ -116,6 +119,11 @@ func runServer(addr string) error {
 	// This allows load balancers and monitoring systems to check service health
 	// without requiring API credentials. It returns minimal info (status only).
 	r.Get("/health", healthCheckHandler)
+
+	// Swagger documentation endpoint - also outside authentication
+	// Allows developers to access API documentation without credentials
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
 		// Apply API key authentication middleware if enabled
 		if middlewareAuth {

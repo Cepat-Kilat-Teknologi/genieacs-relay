@@ -12,6 +12,21 @@ import (
 )
 
 // getSSIDByIPHandler retrieves WLAN/SSID information for a device by its IP address
+//
+//	@Summary		Get SSID by device IP
+//	@Description	Retrieves WLAN/SSID configuration for a device identified by its IP address
+//	@Tags			SSID
+//	@Accept			json
+//	@Produce		json
+//	@Param			ip	path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		200	{object}	Response{data=[]WLANConfig}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		429	{object}	Response
+//	@Failure		500	{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/ssid/{ip} [get]
 func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract device ID from IP
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
@@ -31,6 +46,24 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // getSSIDByIPForceHandler retrieves WLAN/SSID information, triggering refresh if needed
+//
+//	@Summary		Get SSID with force refresh
+//	@Description	Retrieves WLAN/SSID information, automatically triggering a refresh if data is not available and retrying until data is found or timeout
+//	@Tags			SSID
+//	@Accept			json
+//	@Produce		json
+//	@Param			ip				path		string	true	"Device IP address"						example(192.168.1.1)
+//	@Param			max_retries		query		int		false	"Maximum retry attempts (default: 12)"	minimum(1)	maximum(30)
+//	@Param			retry_delay_ms	query		int		false	"Delay between retries in ms (default: 5000)"	minimum(100)	maximum(30000)
+//	@Success		200				{object}	Response{data=SSIDForceResponse}
+//	@Failure		400				{object}	Response
+//	@Failure		401				{object}	Response
+//	@Failure		404				{object}	Response
+//	@Failure		408				{object}	Response
+//	@Failure		429				{object}	Response
+//	@Failure		500				{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/force/ssid/{ip} [get]
 func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
 	// --- Step 1: get device ID ---
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
@@ -148,6 +181,20 @@ func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // refreshSSIDHandler triggers a refresh of WLAN configuration data for a device
+//
+//	@Summary		Trigger SSID refresh
+//	@Description	Triggers a refresh of WLAN configuration data for a device. The refresh is processed asynchronously.
+//	@Tags			SSID
+//	@Accept			json
+//	@Produce		json
+//	@Param			ip	path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		202	{object}	Response{data=MessageResponse}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		429	{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/ssid/{ip}/refresh [post]
 func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract device ID from IP
 	deviceID, ok := ExtractDeviceIDByIP(w, r)

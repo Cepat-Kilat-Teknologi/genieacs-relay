@@ -1,7 +1,11 @@
+![GenieACS Relay Logo](assets/LOGO.png)
+
 # GenieACS Relay
 
-[![ci](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/actions/workflows/ci.yml)
+[![CI](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/Cepat-Kilat-Teknologi/genieacs-relay/graph/badge.svg?token=Q0XLKG2ZPE)](https://codecov.io/gh/Cepat-Kilat-Teknologi/genieacs-relay)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Cepat-Kilat-Teknologi/genieacs-relay.svg)](https://pkg.go.dev/github.com/Cepat-Kilat-Teknologi/genieacs-relay)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Cepat-Kilat-Teknologi/genieacs-relay)](https://goreportcard.com/report/github.com/Cepat-Kilat-Teknologi/genieacs-relay)
 
 A lightweight **Relay** for managing devices via **GenieACS**, built with **Go**.
 This service provides endpoints for retrieving and updating device SSID, WiFi passwords, and DHCP clients.
@@ -14,6 +18,7 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - **100% test coverage** with race condition detection
 - Dockerized with **multi-stage builds** (development, builder, production)
 - Supports **Docker Compose** for both development and production
+- **Swagger/OpenAPI** documentation with interactive UI
 - **Caching** for device data with configurable TTL
 - **Worker pool** for asynchronous task processing
 - **ONU/ONT Band Detection** - Automatic detection of single-band (2.4GHz) and dual-band (2.4GHz + 5GHz) devices
@@ -72,6 +77,12 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 ├── utils.go                # Utility functions
 ├── *_test.go               # Unit tests (100% coverage)
 ├── common_test.go          # Shared test utilities and mocks
+├── docs/                   # Swagger documentation (auto-generated)
+│   ├── docs.go             # Go Swagger spec
+│   ├── swagger.json        # OpenAPI JSON
+│   └── swagger.yaml        # OpenAPI YAML
+├── assets/                 # Static assets
+│   └── LOGO.png            # Project logo
 ├── test.http               # HTTP test file for API testing (VS Code REST Client)
 ├── ONU.md                  # ONU/ONT model reference documentation
 ├── Dockerfile              # Multi-stage build (dev, builder, production)
@@ -278,6 +289,54 @@ By default, the API Gateway does **not** require authentication for incoming req
 
 ---
 
+## Swagger Documentation
+
+This project includes interactive API documentation using **Swagger/OpenAPI**.
+
+### Accessing Swagger UI
+
+Once the server is running, access the Swagger UI at:
+```
+http://localhost:8080/swagger/index.html
+```
+
+### Generating Swagger Docs
+
+Generate or update Swagger documentation:
+```bash
+# Install swag CLI (first time only)
+make swagger-install
+
+# Generate Swagger documentation
+make swagger
+
+# Format Swagger annotations
+make swagger-fmt
+
+# Generate docs and start server
+make swagger-serve
+```
+
+### Swagger Features
+
+- **Interactive API Testing** - Test endpoints directly from the browser
+- **Request/Response Examples** - See expected request formats and responses
+- **Authentication Support** - Test authenticated endpoints with API key
+- **Schema Documentation** - View all data models and their structures
+
+### Screenshot
+
+After running the server, you can explore all endpoints, try requests, and see response schemas:
+
+```
+GET  /health                          # Health check (no auth required)
+GET  /api/v1/genieacs/ssid/{ip}       # Get SSID by device IP
+POST /api/v1/genieacs/wlan/create/... # Create new WLAN
+...
+```
+
+---
+
 ## Development
 
 ### Prerequisites
@@ -377,6 +436,13 @@ Code Quality:
   make format          Format Go code
   make check-deps      Check for outdated dependencies
   make check-deps-install Install dependency checking tools
+
+Swagger Documentation:
+  make swagger         Generate Swagger documentation
+  make swagger-install Install swag CLI tool
+  make swagger-fmt     Format Swagger annotations
+  make swagger-clean   Remove generated Swagger docs
+  make swagger-serve   Generate docs and start server
 
 Utilities:
   make healthcheck     Check if application is healthy

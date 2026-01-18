@@ -5,12 +5,30 @@ import (
 )
 
 // healthCheckHandler handles health check requests to verify service status
+//
+//	@Summary		Health check
+//	@Description	Returns the health status of the service. Does not require authentication.
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	Response{data=HealthResponse}
+//	@Router			/health [get]
 func healthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	// Return simple health status response indicating service is operational
 	sendResponse(w, http.StatusOK, "OK", map[string]string{"status": "healthy"})
 }
 
 // clearCacheHandler handles requests to clear device cache (specific device or all)
+//
+//	@Summary		Clear cache
+//	@Description	Clears the device cache. Can clear cache for a specific device or all devices.
+//	@Tags			Cache
+//	@Produce		json
+//	@Param			device_id	query		string	false	"Device ID to clear cache for (omit to clear all)"
+//	@Success		200			{object}	Response{data=MessageResponse}
+//	@Failure		401			{object}	Response
+//	@Failure		429			{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/cache/clear [post]
 func clearCacheHandler(w http.ResponseWriter, r *http.Request) {
 	// Get client IP for audit logging
 	clientIP := GetClientIP(r)

@@ -10,6 +10,24 @@ import (
 )
 
 // createWLANHandler creates a new WLAN on a device with band capability validation
+//
+//	@Summary		Create new WLAN
+//	@Description	Creates a new WLAN on an available slot with advanced configuration options
+//	@Tags			WLAN
+//	@Accept			json
+//	@Produce		json
+//	@Param			wlan	path		string				true	"WLAN ID (1-4 for 2.4GHz, 5-8 for 5GHz)"	example(2)
+//	@Param			ip		path		string				true	"Device IP address"							example(192.168.1.1)
+//	@Param			body	body		CreateWLANRequest	true	"WLAN creation parameters"
+//	@Success		200		{object}	Response{data=WLANCreateResponse}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		409		{object}	Response
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/wlan/create/{wlan}/{ip} [post]
 func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 	ip := chi.URLParam(r, "ip")
 
@@ -169,6 +187,20 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // getAvailableWLANHandler returns available WLAN slots for a device
+//
+//	@Summary		Get available WLAN slots
+//	@Description	Returns available WLAN slots for creating new WiFi networks based on device capability
+//	@Tags			WLAN
+//	@Produce		json
+//	@Param			ip	path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		200	{object}	Response{data=AvailableWLANResponse}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		429	{object}	Response
+//	@Failure		500	{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/wlan/available/{ip} [get]
 func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 	// Get device ID from IP
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
@@ -271,6 +303,23 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateWLANHandler updates an existing WLAN configuration
+//
+//	@Summary		Update WLAN configuration
+//	@Description	Updates an existing WLAN configuration. Supports partial updates - only include fields you want to change.
+//	@Tags			WLAN
+//	@Accept			json
+//	@Produce		json
+//	@Param			wlan	path		string				true	"WLAN ID (1-8)"			example(2)
+//	@Param			ip		path		string				true	"Device IP address"		example(192.168.1.1)
+//	@Param			body	body		UpdateWLANRequest	true	"WLAN update parameters (all fields optional)"
+//	@Success		200		{object}	Response{data=WLANUpdateResponse}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/wlan/update/{wlan}/{ip} [put]
 func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 	ip := chi.URLParam(r, "ip")
 
@@ -425,6 +474,21 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteWLANHandler disables/deletes a WLAN configuration
+//
+//	@Summary		Delete/Disable WLAN
+//	@Description	Disables an existing WLAN configuration. This effectively "deletes" the WLAN by disabling it.
+//	@Tags			WLAN
+//	@Produce		json
+//	@Param			wlan	path		string	true	"WLAN ID (1-8)"		example(2)
+//	@Param			ip		path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		200		{object}	Response{data=WLANDeleteResponse}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/wlan/delete/{wlan}/{ip} [delete]
 func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 	ip := chi.URLParam(r, "ip")
 
@@ -481,6 +545,23 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // optimizeWLANHandler optimizes WLAN radio settings (channel, mode, bandwidth, transmit power)
+//
+//	@Summary		Optimize WLAN radio settings
+//	@Description	Optimizes WLAN radio settings including channel, mode, bandwidth, and transmit power. Supports partial updates.
+//	@Tags			WLAN
+//	@Accept			json
+//	@Produce		json
+//	@Param			wlan	path		string				true	"WLAN ID (1-8)"			example(1)
+//	@Param			ip		path		string				true	"Device IP address"		example(192.168.1.1)
+//	@Param			body	body		OptimizeWLANRequest	true	"WLAN optimization parameters (all fields optional)"
+//	@Success		200		{object}	Response{data=WLANOptimizeResponse}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/wlan/optimize/{wlan}/{ip} [put]
 func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 	ip := chi.URLParam(r, "ip")
 

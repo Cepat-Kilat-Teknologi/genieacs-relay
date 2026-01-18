@@ -7,6 +7,21 @@ import (
 )
 
 // getDHCPClientByIPHandler retrieves DHCP client information for a device
+//
+//	@Summary		Get DHCP clients
+//	@Description	Retrieves DHCP client information (connected devices) for a device identified by its IP address
+//	@Tags			Device
+//	@Produce		json
+//	@Param			ip		path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Param			refresh	query		bool	false	"Force refresh data from device"
+//	@Success		200		{object}	Response{data=[]DHCPClient}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/dhcp-client/{ip} [get]
 func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract device ID from IP
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
@@ -36,6 +51,20 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // getDeviceCapabilityHandler retrieves the wireless capability of a device (single-band or dual-band)
+//
+//	@Summary		Get device capability
+//	@Description	Retrieves the wireless capability of a device (single-band or dual-band) based on ONU model detection
+//	@Tags			Device
+//	@Produce		json
+//	@Param			ip	path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		200	{object}	Response{data=DeviceCapabilityResponse}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		429	{object}	Response
+//	@Failure		500	{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/capability/{ip} [get]
 func getDeviceCapabilityHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract device ID from IP
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
