@@ -137,7 +137,7 @@ Fix all linting issues before submitting a PR.
 
 ### File Structure
 
-```
+```text
 .
 ├── main.go              # Application entry point
 ├── config.go            # Configuration handling
@@ -230,7 +230,7 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 
 ### Format
 
-```
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -289,7 +289,7 @@ chore(deps): update Go dependencies
 
 When creating a PR, include:
 
-```markdown
+```text
 ## Summary
 Brief description of changes
 
