@@ -7,8 +7,8 @@
 
 ### Variables
 @baseUrl = http://localhost:8080
-@apiKey = YourSecretKey
-@deviceIP = 10.90.5.92
+@apiKey = YourSecretKey # Change to your actual API key
+@deviceIP = 10.x.x.x # Change to your device's IP address
 
 ###############################################################################
 # HEALTH CHECK
@@ -71,6 +71,11 @@ X-API-Key: {{apiKey}}
 
 ### Clear All Cache
 POST {{baseUrl}}/api/v1/genieacs/cache/clear
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+### Clear Cache for Specific Device
+POST {{baseUrl}}/api/v1/genieacs/cache/clear?device_id=D05FAF-FD512XW%2DR460-CDTCAF8583D6
 Content-Type: application/json
 X-API-Key: {{apiKey}}
 
@@ -189,6 +194,24 @@ X-API-Key: {{apiKey}}
 {
     "auth_mode": "WPA/WPA2",
     "encryption": "TKIP+AES"
+}
+
+### Update WLAN 2 - Max Clients Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "max_clients": 32
+}
+
+### Update WLAN 2 - Encryption Only
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "encryption": "AES"
 }
 
 ###############################################################################
@@ -389,3 +412,35 @@ X-API-Key: {{apiKey}}
 {
     "bandwidth": "80MHz"
 }
+
+### Test: Update WLAN - Invalid Max Clients (too high)
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "max_clients": 100
+}
+
+### Test: Update WLAN - Invalid Encryption
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "encryption": "WEP"
+}
+
+### Test: Update WLAN - Invalid Auth Mode
+PUT {{baseUrl}}/api/v1/genieacs/wlan/update/2/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+    "auth_mode": "WPA3"
+}
+
+### Test: Delete WLAN 1 (Primary WLAN - should fail)
+DELETE {{baseUrl}}/api/v1/genieacs/wlan/delete/1/{{deviceIP}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
