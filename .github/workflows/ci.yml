@@ -196,7 +196,7 @@ jobs:
           ## Documentation
 
           - [Installation Guide](INSTALLATION.md)
-          - [API Documentation](DOC.md)
+          - [API Test Examples](API_TEST.md)
           - [Security](SECURITY.md)
           NOTES_EOF
 
