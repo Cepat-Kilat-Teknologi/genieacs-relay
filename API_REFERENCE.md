@@ -1,10 +1,12 @@
-# GenieACS Relay API Test Documentation
+# GenieACS Relay API Reference
 
-**Test Date:** January 17, 2026
-**Device:** ZTE F670L (Dual-Band)
-**Device IP:** 10.90.14.41
-**Device ID:** 001141-F670L-ZTEGCFLN794B3A1
-**Authentication:** MIDDLEWARE_AUTH=false (no API key required)
+**Last Updated:** January 18, 2026
+
+This document provides complete API reference with request/response examples for all GenieACS Relay endpoints.
+
+> **Note:** For device-specific test results, see:
+> - [TEST_RESULT_SINGLEBAND.md](TEST_RESULT_SINGLEBAND.md) - Single-band device tests (CDATA FD512XW-R460)
+> - [TEST_RESULT_DUALBAND.md](TEST_RESULT_DUALBAND.md) - Dual-band device tests (ZTE F670L)
 
 ---
 
@@ -66,31 +68,50 @@ GET http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41
   "data": [
     {
       "wlan": "1",
-      "ssid": "MyNewSSID",
+      "ssid": "MyNetwork-2G",
       "password": "********",
-      "band": "2.4GHz"
+      "band": "2.4GHz",
+      "hidden": false,
+      "max_clients": 32,
+      "auth_mode": "WPA2",
+      "encryption": "AES"
     },
     {
       "wlan": "2",
-      "ssid": "HIDE_2G",
+      "ssid": "GuestNetwork",
       "password": "********",
-      "band": "2.4GHz"
-    },
-    {
-      "wlan": "3",
-      "ssid": "SecureNetwork",
-      "password": "********",
-      "band": "2.4GHz"
+      "band": "2.4GHz",
+      "hidden": true,
+      "max_clients": 10,
+      "auth_mode": "WPA2",
+      "encryption": "AES"
     },
     {
       "wlan": "5",
-      "ssid": "5abib7-5G",
+      "ssid": "MyNetwork-5G",
       "password": "********",
-      "band": "5GHz"
+      "band": "5GHz",
+      "hidden": false,
+      "max_clients": 32,
+      "auth_mode": "WPA2",
+      "encryption": "AES"
     }
   ]
 }
 ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| wlan | string | WLAN ID (1-4 for 2.4GHz, 5-8 for 5GHz) |
+| ssid | string | Network name |
+| password | string | Password (masked as `********` or actual value) |
+| band | string | Frequency band (`2.4GHz` or `5GHz`) |
+| hidden | boolean | Whether SSID is hidden (not broadcast) |
+| max_clients | integer | Maximum connected clients (1-64) |
+| auth_mode | string | Authentication mode (`Open`, `WPA`, `WPA2`, `WPA/WPA2`) |
+| encryption | string | Encryption type (`AES`, `TKIP`, `TKIP+AES`) |
 
 ### GET /api/v1/genieacs/force/ssid/{ip}
 
@@ -111,27 +132,23 @@ GET http://localhost:8080/api/v1/genieacs/force/ssid/10.90.14.41
     "wlan_data": [
       {
         "wlan": "1",
-        "ssid": "MyNewSSID",
+        "ssid": "MyNetwork-2G",
         "password": "********",
-        "band": "2.4GHz"
-      },
-      {
-        "wlan": "2",
-        "ssid": "HIDE_2G",
-        "password": "********",
-        "band": "2.4GHz"
-      },
-      {
-        "wlan": "3",
-        "ssid": "SecureNetwork",
-        "password": "********",
-        "band": "2.4GHz"
+        "band": "2.4GHz",
+        "hidden": false,
+        "max_clients": 32,
+        "auth_mode": "WPA2",
+        "encryption": "AES"
       },
       {
         "wlan": "5",
-        "ssid": "5abib7-5G",
+        "ssid": "MyNetwork-5G",
         "password": "********",
-        "band": "5GHz"
+        "band": "5GHz",
+        "hidden": false,
+        "max_clients": 32,
+        "auth_mode": "WPA2",
+        "encryption": "AES"
       }
     ]
   }
@@ -153,37 +170,27 @@ GET http://localhost:8080/api/v1/genieacs/force/ssid/10.90.14.41?max_retries=5&r
   "code": 200,
   "status": "OK",
   "data": {
-    "attempts": 1,
+    "attempts": 2,
     "wlan_data": [
       {
         "wlan": "1",
-        "ssid": "TestSSIDUpdate",
-        "password": "NewTestPass123",
-        "band": "2.4GHz"
-      },
-      {
-        "wlan": "2",
-        "ssid": "HIDE_2G",
-        "password": "********",
-        "band": "2.4GHz"
-      },
-      {
-        "wlan": "3",
-        "ssid": "SecureNetwork",
-        "password": "********",
-        "band": "2.4GHz"
+        "ssid": "MyNetwork-2G",
+        "password": "MyPassword123",
+        "band": "2.4GHz",
+        "hidden": false,
+        "max_clients": 32,
+        "auth_mode": "WPA2",
+        "encryption": "AES"
       },
       {
         "wlan": "5",
-        "ssid": "5abib7-5G",
-        "password": "********",
-        "band": "5GHz"
-      },
-      {
-        "wlan": "6",
-        "ssid": "TestNetwork-5G",
-        "password": "********",
-        "band": "5GHz"
+        "ssid": "MyNetwork-5G",
+        "password": "MyPassword456",
+        "band": "5GHz",
+        "hidden": false,
+        "max_clients": 32,
+        "auth_mode": "WPA2",
+        "encryption": "AES"
       }
     ]
   }
@@ -1426,7 +1433,7 @@ X-API-Key: WrongApiKey
 ```http
 GET http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41
 Content-Type: application/json
-X-API-Key: TestApiKey123
+X-API-Key: YourSecretKey
 ```
 
 **Response (200 OK):**
@@ -1437,9 +1444,13 @@ X-API-Key: TestApiKey123
   "data": [
     {
       "wlan": "1",
-      "ssid": "TestSSIDUpdate",
+      "ssid": "MyNetwork-2G",
       "password": "********",
-      "band": "2.4GHz"
+      "band": "2.4GHz",
+      "hidden": false,
+      "max_clients": 32,
+      "auth_mode": "WPA2",
+      "encryption": "AES"
     }
   ]
 }
@@ -1519,4 +1530,13 @@ X-API-Key: TestApiKey123
 
 ---
 
-**Total: 53 test cases - All PASS**
+**Total: 53 test cases documented**
+
+---
+
+## Related Documentation
+
+- [TEST_RESULT_SINGLEBAND.md](TEST_RESULT_SINGLEBAND.md) - Single-band device test results (CDATA FD512XW-R460)
+- [TEST_RESULT_DUALBAND.md](TEST_RESULT_DUALBAND.md) - Dual-band device test results (ZTE F670L)
+- [test_singleband.http](test_singleband.http) - HTTP test file for single-band devices
+- [test_dualband.http](test_dualband.http) - HTTP test file for dual-band devices

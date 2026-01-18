@@ -18,7 +18,7 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - [Security](SECURITY.md) - Authentication, rate limiting, and security features
 - [ONU Models](ONU.md) - Supported ONU/ONT device models
 - [Contributing](CONTRIBUTING.md) - How to contribute to this project
-- [API Reference](API_TEST.md) - Complete API endpoint examples and documentation
+- [API Reference](API_REFERENCE.md) - Complete API endpoint examples and documentation
 
 ### Testing Documentation
 
@@ -134,7 +134,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 ├── test_dualband.http      # HTTP test file for dual-band devices
 ├── TEST_RESULT_SINGLEBAND.md  # Single-band test results
 ├── TEST_RESULT_DUALBAND.md    # Dual-band test results
-├── API_TEST.md             # API reference documentation
+├── API_REFERENCE.md        # API reference documentation
 │
 ├── examples/
 │   ├── docker/             # Docker Compose deployment
