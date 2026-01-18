@@ -52,13 +52,19 @@ make up
 |----------|----------|---------|-------------|
 | `SERVER_ADDR` | No | `:8080` | Server listen address |
 | `GENIEACS_BASE_URL` | No | `http://localhost:7557` | GenieACS server URL |
-| `NBI_AUTH_KEY` | **Yes** | *(empty)* | Authentication key for GenieACS NBI |
 
-### Authentication
+### NBI Authentication (GenieACS API)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication |
+| `NBI_AUTH` | No | `false` | Enable NBI authentication for GenieACS API calls |
+| `NBI_AUTH_KEY` | Conditional | *(empty)* | Authentication key for GenieACS NBI (required if `NBI_AUTH=true`) |
+
+### API Authentication (Incoming Requests)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MIDDLEWARE_AUTH` | No | `false` | Enable API key authentication for incoming requests |
 | `AUTH_KEY` | Conditional | *(empty)* | API key for incoming requests (required if `MIDDLEWARE_AUTH=true`) |
 
 ### CORS Configuration
@@ -92,7 +98,7 @@ make up
 ```bash
 # .env
 GENIEACS_BASE_URL=http://localhost:7557
-NBI_AUTH_KEY=your-genieacs-key
+NBI_AUTH=false
 CORS_ALLOWED_ORIGINS=*
 MIDDLEWARE_AUTH=false
 ```
@@ -102,6 +108,7 @@ MIDDLEWARE_AUTH=false
 ```bash
 # .env
 GENIEACS_BASE_URL=http://genieacs:7557
+NBI_AUTH=true
 NBI_AUTH_KEY=your-secure-genieacs-key
 CORS_ALLOWED_ORIGINS=https://myapp.com,https://admin.myapp.com
 MIDDLEWARE_AUTH=true
