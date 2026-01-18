@@ -165,39 +165,40 @@ jobs:
           fetch-depth: 0
 
       - name: Generate Release Notes
-        id: notes
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
 
-          cat << EOF > release_notes.md
+          cat > release_notes.md << 'NOTES_EOF'
           ## Docker Images
 
           **Docker Hub:**
-          \`\`\`bash
-          docker pull cepatkilatteknologi/genieacs-relay:${VERSION_NUM}
+          ```bash
+          docker pull cepatkilatteknologi/genieacs-relay:VERSION_PLACEHOLDER
           docker pull cepatkilatteknologi/genieacs-relay:latest
-          \`\`\`
+          ```
 
           **GitHub Packages:**
-          \`\`\`bash
-          docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:${VERSION_NUM}
+          ```bash
+          docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:VERSION_PLACEHOLDER
           docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:latest
-          \`\`\`
+          ```
 
           ## Deployment Options
 
-          - **Docker Compose:** See \`examples/docker/\`
-          - **Kubernetes:** See \`examples/kubernetes/\`
-          - **Helm Chart:** See \`examples/helm/\`
-          - **Systemd:** See \`examples/systemd/\`
+          - **Docker Compose:** See `examples/docker/`
+          - **Kubernetes:** See `examples/kubernetes/`
+          - **Helm Chart:** See `examples/helm/`
+          - **Systemd:** See `examples/systemd/`
 
           ## Documentation
 
           - [Installation Guide](INSTALLATION.md)
           - [API Documentation](DOC.md)
           - [Security](SECURITY.md)
-          EOF
+          NOTES_EOF
+
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION_NUM}/g" release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
