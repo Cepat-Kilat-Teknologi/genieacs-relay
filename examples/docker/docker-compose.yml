@@ -1,6 +1,8 @@
 services:
   api:
-    image: cepatkilatteknologi/genieacs-relay:2.0
+    # Use pinned version for production, or 'latest' for development
+    # Alternative: ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0
+    image: cepatkilatteknologi/genieacs-relay:1.0.0
     container_name: genieacs-relay
     env_file:
       - .env
