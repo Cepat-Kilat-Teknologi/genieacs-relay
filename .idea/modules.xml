@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/acs-api-gateway.iml" filepath="$PROJECT_DIR$/.idea/acs-api-gateway.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/genieacs-relay.iml" filepath="$PROJECT_DIR$/.idea/genieacs-relay.iml" />
     </modules>
   </component>
 </project>
