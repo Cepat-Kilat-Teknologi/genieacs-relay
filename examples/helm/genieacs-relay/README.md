@@ -7,6 +7,24 @@ Helm chart for deploying GenieACS Relay to Kubernetes.
 - Kubernetes 1.23+
 - Helm 3.0+
 
+## Container Registries
+
+The chart supports both Docker Hub and GHCR images:
+
+| Registry | Image |
+|----------|-------|
+| Docker Hub (default) | `cepatkilatteknologi/genieacs-relay` |
+| GHCR | `ghcr.io/cepat-kilat-teknologi/genieacs-relay` |
+
+### Available Image Tags
+
+| Tag | Description | Recommended For |
+|-----|-------------|-----------------|
+| `1.0.0` | Exact version (immutable) | Production |
+| `1.0` | Minor version (auto-updates patches) | Staging |
+| `1` | Major version (auto-updates minor) | Development |
+| `latest` | Latest stable release | Testing |
+
 ## Installation
 
 ### Install from Helm Repository (Recommended)
@@ -17,9 +35,9 @@ helm repo add genieacs-relay https://cepat-kilat-teknologi.github.io/genieacs-re
 helm repo update
 
 # Search available versions
-helm search repo genieacs-relay
+helm search repo genieacs-relay --versions
 
-# Install the chart
+# Install the chart (uses Docker Hub by default)
 helm install my-relay genieacs-relay/genieacs-relay -n genieacs --create-namespace
 
 # Install with custom values
@@ -28,8 +46,14 @@ helm install my-relay genieacs-relay/genieacs-relay \
   --set config.genieacsBaseUrl="http://genieacs-nbi:7557" \
   --set config.nbiAuth.key="your-nbi-key-here"
 
-# Install specific version
-helm install my-relay genieacs-relay/genieacs-relay --version 0.1.0 -n genieacs --create-namespace
+# Install specific chart version
+helm install my-relay genieacs-relay/genieacs-relay --version 1.0.0 -n genieacs --create-namespace
+
+# Install using GHCR image instead of Docker Hub
+helm install my-relay genieacs-relay/genieacs-relay \
+  -n genieacs --create-namespace \
+  --set image.repository="ghcr.io/cepat-kilat-teknologi/genieacs-relay" \
+  --set image.tag="1.0.0"
 ```
 
 ### Install from Local Source
@@ -65,6 +89,10 @@ helm install genieacs-relay ./genieacs-relay \
 ```yaml
 replicaCount: 3
 
+# Use pinned version for production
+image:
+  tag: "1.0.0"
+
 config:
   genieacsBaseUrl: "http://genieacs-nbi:7557"
   nbiAuth:
@@ -88,6 +116,23 @@ ingress:
     - secretName: genieacs-relay-tls
       hosts:
         - genieacs-relay.yourdomain.com
+```
+
+### Using GHCR Image (my-values.yaml)
+
+```yaml
+replicaCount: 3
+
+# Use GHCR instead of Docker Hub
+image:
+  repository: ghcr.io/cepat-kilat-teknologi/genieacs-relay
+  tag: "1.0.0"
+
+config:
+  genieacsBaseUrl: "http://genieacs-nbi:7557"
+  nbiAuth:
+    enabled: true
+    key: "your-32-byte-hex-key"
 ```
 
 ### Using Existing Secrets

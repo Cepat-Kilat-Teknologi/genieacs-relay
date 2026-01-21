@@ -73,13 +73,35 @@ See [SECURITY.md](SECURITY.md) for details.
 
 ### Using Docker (Recommended)
 
+**Docker Hub:**
 ```bash
 docker pull cepatkilatteknologi/genieacs-relay:latest
+```
 
+**GitHub Container Registry (GHCR):**
+```bash
+docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:latest
+```
+
+**Run the container:**
+```bash
 docker run -d \
   -p 8080:8080 \
   -e GENIEACS_BASE_URL=http://your-genieacs:7557 \
   cepatkilatteknologi/genieacs-relay:latest
+```
+
+### Using Helm (Kubernetes)
+
+```bash
+# Add Helm repository
+helm repo add genieacs-relay https://cepat-kilat-teknologi.github.io/genieacs-relay
+helm repo update
+
+# Install
+helm install my-relay genieacs-relay/genieacs-relay \
+  -n genieacs --create-namespace \
+  --set config.genieacsBaseUrl="http://genieacs-nbi:7557"
 ```
 
 ### From Source
@@ -306,6 +328,44 @@ make swagger
 | 409 | Conflict | WLAN already exists |
 | 429 | Too Many Requests | Rate limit or brute force protection |
 | 500 | Internal Server Error | Server-side error |
+
+---
+
+## Container Registries
+
+Images are available on both **Docker Hub** and **GitHub Container Registry (GHCR)**:
+
+| Registry | Image |
+|----------|-------|
+| Docker Hub | `cepatkilatteknologi/genieacs-relay` |
+| GHCR | `ghcr.io/cepat-kilat-teknologi/genieacs-relay` |
+
+### Available Tags
+
+We follow **semantic versioning** with multiple tag formats:
+
+| Tag | Description | Update Behavior |
+|-----|-------------|-----------------|
+| `1.0.0` | Exact version (pinned) | Never changes |
+| `1.0` | Minor version | Auto-updates to `1.0.x` patches |
+| `1` | Major version | Auto-updates to `1.x.x` releases |
+| `latest` | Latest stable | Always latest stable release |
+| `edge` | Latest from main branch | Bleeding edge (may be unstable) |
+
+**Recommended usage:**
+```bash
+# Production (pinned version - recommended)
+docker pull cepatkilatteknologi/genieacs-relay:1.0.0
+
+# Auto-update patches only
+docker pull cepatkilatteknologi/genieacs-relay:1.0
+
+# Auto-update minor versions
+docker pull cepatkilatteknologi/genieacs-relay:1
+
+# Using GHCR
+docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0
+```
 
 ---
 

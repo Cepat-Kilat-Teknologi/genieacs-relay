@@ -8,6 +8,25 @@ This guide explains how to deploy GenieACS Relay using Docker.
 - [Docker Compose](https://docs.docker.com/compose/install/) v2.0+
 - Access to GenieACS NBI API
 
+## Container Registries
+
+Images are available on both registries:
+
+| Registry | Image | Example |
+|----------|-------|---------|
+| Docker Hub | `cepatkilatteknologi/genieacs-relay` | `docker pull cepatkilatteknologi/genieacs-relay:1.0.0` |
+| GHCR | `ghcr.io/cepat-kilat-teknologi/genieacs-relay` | `docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0` |
+
+### Available Tags
+
+| Tag | Description | Recommended For |
+|-----|-------------|-----------------|
+| `1.0.0` | Exact version (immutable) | Production |
+| `1.0` | Minor version (auto-updates patches) | Staging |
+| `1` | Major version (auto-updates minor) | Development |
+| `latest` | Latest stable release | Testing |
+| `edge` | Latest from main branch | Development only |
+
 ## Quick Start
 
 ```bash
@@ -57,11 +76,22 @@ The `docker-compose.yml` includes:
 
 | Option | Value | Description |
 |--------|-------|-------------|
-| `image` | `cepatkilatteknologi/genieacs-relay:2.0` | Docker image |
+| `image` | `cepatkilatteknologi/genieacs-relay:1.0.0` | Docker image (pinned version) |
 | `ports` | `8080:8080` | Port mapping |
 | `restart` | `unless-stopped` | Restart policy |
 | `memory` | `256M` (limit), `128M` (reserved) | Memory limits |
 | `cpus` | `0.5` (limit), `0.25` (reserved) | CPU limits |
+
+### Using GHCR Instead of Docker Hub
+
+Edit `docker-compose.yml` to use GHCR:
+
+```yaml
+services:
+  api:
+    image: ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0
+    # ... rest of config
+```
 
 ## Commands
 
@@ -134,8 +164,14 @@ networks:
 
 ### 1. Use specific image tag
 
+**Docker Hub:**
 ```yaml
-image: cepatkilatteknologi/genieacs-relay:2.0  # Don't use :latest
+image: cepatkilatteknologi/genieacs-relay:1.0.0
+```
+
+**Or GHCR:**
+```yaml
+image: ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0
 ```
 
 ### 2. Enable authentication
