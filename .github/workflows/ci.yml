@@ -190,7 +190,12 @@ jobs:
 
           - **Docker Compose:** See `examples/docker/`
           - **Kubernetes:** See `examples/kubernetes/`
-          - **Helm Chart:** See `examples/helm/`
+          - **Helm Chart:** Install from repository:
+            ```bash
+            helm repo add genieacs-relay https://cepat-kilat-teknologi.github.io/genieacs-relay
+            helm repo update
+            helm install my-relay genieacs-relay/genieacs-relay
+            ```
           - **Systemd:** See `examples/systemd/`
 
           ## Documentation

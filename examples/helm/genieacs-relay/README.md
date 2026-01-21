@@ -9,15 +9,37 @@ Helm chart for deploying GenieACS Relay to Kubernetes.
 
 ## Installation
 
-### Quick Install
+### Install from Helm Repository (Recommended)
 
 ```bash
-# Add repo (if published)
-# helm repo add genieacs https://cepat-kilat-teknologi.github.io/charts
-# helm repo update
+# Add the GenieACS Relay Helm repository
+helm repo add genieacs-relay https://cepat-kilat-teknologi.github.io/genieacs-relay
+helm repo update
+
+# Search available versions
+helm search repo genieacs-relay
+
+# Install the chart
+helm install my-relay genieacs-relay/genieacs-relay -n genieacs --create-namespace
+
+# Install with custom values
+helm install my-relay genieacs-relay/genieacs-relay \
+  -n genieacs --create-namespace \
+  --set config.genieacsBaseUrl="http://genieacs-nbi:7557" \
+  --set config.nbiAuth.key="your-nbi-key-here"
+
+# Install specific version
+helm install my-relay genieacs-relay/genieacs-relay --version 0.1.0 -n genieacs --create-namespace
+```
+
+### Install from Local Source
+
+```bash
+# Clone the repository
+git clone https://github.com/Cepat-Kilat-Teknologi/genieacs-relay.git
+cd genieacs-relay/examples/helm
 
 # Install from local
-cd examples/helm
 helm install genieacs-relay ./genieacs-relay -n genieacs --create-namespace
 ```
 
@@ -116,17 +138,23 @@ config:
 ## Commands
 
 ```bash
-# Install
+# Install from repository
+helm install my-relay genieacs-relay/genieacs-relay -n genieacs --create-namespace
+
+# Install from local
 helm install genieacs-relay ./genieacs-relay -n genieacs --create-namespace
 
-# Upgrade
+# Upgrade from repository
+helm upgrade my-relay genieacs-relay/genieacs-relay -n genieacs
+
+# Upgrade from local
 helm upgrade genieacs-relay ./genieacs-relay -n genieacs
 
 # Uninstall
-helm uninstall genieacs-relay -n genieacs
+helm uninstall my-relay -n genieacs
 
 # Template (preview manifests)
-helm template genieacs-relay ./genieacs-relay
+helm template my-relay genieacs-relay/genieacs-relay
 
 # Lint (validate chart)
 helm lint ./genieacs-relay
@@ -135,11 +163,17 @@ helm lint ./genieacs-relay
 ## Upgrading
 
 ```bash
+# Update repository
+helm repo update
+
 # Upgrade with new values
-helm upgrade genieacs-relay ./genieacs-relay \
+helm upgrade my-relay genieacs-relay/genieacs-relay \
   -n genieacs \
   --set replicaCount=5
 
 # Rollback to previous version
-helm rollback genieacs-relay 1 -n genieacs
+helm rollback my-relay 1 -n genieacs
+
+# View release history
+helm history my-relay -n genieacs
 ```
