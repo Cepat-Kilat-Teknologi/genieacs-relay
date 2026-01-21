@@ -1,0 +1,26 @@
+apiVersion: v1
+entries:
+  genieacs-relay:
+  - apiVersion: v2
+    appVersion: latest
+    created: "2026-01-22T02:56:53.235752+07:00"
+    description: A lightweight relay service for managing TR-069 devices via GenieACS
+    digest: fc0d959d7445be69bf662f977244c13eec71a4be66e2aef8323e84b2e737b12b
+    home: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+    keywords:
+    - genieacs
+    - tr-069
+    - cwmp
+    - wifi
+    - router
+    maintainers:
+    - name: Cepat Kilat Teknologi
+      url: https://github.com/Cepat-Kilat-Teknologi
+    name: genieacs-relay
+    sources:
+    - https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
+    type: application
+    urls:
+    - https://cepat-kilat-teknologi.github.io/genieacs-relay/genieacs-relay-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-01-22T02:56:53.234354+07:00"
