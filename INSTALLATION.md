@@ -5,6 +5,7 @@ This document covers installation, configuration, and deployment options for Gen
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Container Registries](#container-registries)
 - [Quick Start](#quick-start)
 - [Environment Variables](#environment-variables)
 - [Configuration Examples](#configuration-examples)
@@ -29,7 +30,85 @@ This document covers installation, configuration, and deployment options for Gen
 
 ---
 
+## Container Registries
+
+Images are published to both **Docker Hub** and **GitHub Container Registry (GHCR)**:
+
+| Registry | Image | Pull Command |
+|----------|-------|--------------|
+| Docker Hub | `cepatkilatteknologi/genieacs-relay` | `docker pull cepatkilatteknologi/genieacs-relay:1.0.0` |
+| GHCR | `ghcr.io/cepat-kilat-teknologi/genieacs-relay` | `docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0` |
+
+### Image Tags (Semantic Versioning)
+
+We publish multiple tags for each release following semantic versioning:
+
+| Tag | Example | Description | Use Case |
+|-----|---------|-------------|----------|
+| `X.Y.Z` | `1.0.0` | Exact version (immutable) | Production - pinned deployments |
+| `X.Y` | `1.0` | Minor version | Auto-receive patch updates (1.0.1, 1.0.2) |
+| `X` | `1` | Major version | Auto-receive minor updates (1.1.0, 1.2.0) |
+| `latest` | - | Latest stable release | Development/testing |
+| `edge` | - | Latest from main branch | Bleeding edge (unstable) |
+
+**Recommended for Production:**
+```bash
+# Use exact version for reproducible deployments
+docker pull cepatkilatteknologi/genieacs-relay:1.0.0
+
+# Or use GHCR
+docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0
+```
+
+**For Development/Staging:**
+```bash
+# Auto-update to latest patch
+docker pull cepatkilatteknologi/genieacs-relay:1.0
+
+# Or latest stable
+docker pull cepatkilatteknologi/genieacs-relay:latest
+```
+
+---
+
 ## Quick Start
+
+### Option 1: Using Docker (Fastest)
+
+```bash
+# Pull from Docker Hub
+docker pull cepatkilatteknologi/genieacs-relay:latest
+
+# Or pull from GHCR
+docker pull ghcr.io/cepat-kilat-teknologi/genieacs-relay:latest
+
+# Run
+docker run -d \
+  -p 8080:8080 \
+  -e GENIEACS_BASE_URL=http://your-genieacs:7557 \
+  cepatkilatteknologi/genieacs-relay:latest
+
+# Verify
+curl http://localhost:8080/health
+```
+
+### Option 2: Using Helm (Kubernetes)
+
+```bash
+# Add Helm repository
+helm repo add genieacs-relay https://cepat-kilat-teknologi.github.io/genieacs-relay
+helm repo update
+
+# Install
+helm install my-relay genieacs-relay/genieacs-relay \
+  -n genieacs --create-namespace \
+  --set config.genieacsBaseUrl="http://genieacs-nbi:7557"
+
+# Verify
+kubectl get pods -n genieacs
+```
+
+### Option 3: From Source
 
 ```bash
 # Clone repository
@@ -45,7 +124,7 @@ nano .env
 # Run locally
 make run
 
-# Or run with Docker
+# Or run with Docker Compose
 make up
 ```
 
@@ -219,6 +298,34 @@ curl http://localhost:8080/health
 
 See [examples/helm/genieacs-relay/README.md](examples/helm/genieacs-relay/README.md) for detailed guide.
 
+#### Install from Helm Repository (Recommended)
+
+```bash
+# Add the GenieACS Relay Helm repository
+helm repo add genieacs-relay https://cepat-kilat-teknologi.github.io/genieacs-relay
+helm repo update
+
+# Search available versions
+helm search repo genieacs-relay --versions
+
+# Install latest version
+helm install my-relay genieacs-relay/genieacs-relay \
+  -n genieacs --create-namespace \
+  --set config.genieacsBaseUrl="http://genieacs-nbi:7557"
+
+# Install specific version
+helm install my-relay genieacs-relay/genieacs-relay \
+  --version 1.0.0 \
+  -n genieacs --create-namespace
+
+# Install with custom values file
+helm install my-relay genieacs-relay/genieacs-relay \
+  -n genieacs --create-namespace \
+  -f my-values.yaml
+```
+
+#### Install from Local Source
+
 ```bash
 cd examples/helm
 
@@ -228,21 +335,32 @@ helm lint genieacs-relay
 # Preview manifests
 helm template my-release genieacs-relay
 
-# Install
+# Install from local
 helm install genieacs-relay ./genieacs-relay \
   -n genieacs --create-namespace \
   --set config.nbiAuth.key="your-nbi-key"
+```
 
-# Install with custom values
-helm install genieacs-relay ./genieacs-relay \
+#### Using GHCR Image with Helm
+
+To use the GHCR image instead of Docker Hub:
+
+```bash
+helm install my-relay genieacs-relay/genieacs-relay \
   -n genieacs --create-namespace \
-  -f my-values.yaml
+  --set image.repository="ghcr.io/cepat-kilat-teknologi/genieacs-relay" \
+  --set image.tag="1.0.0"
 ```
 
 **Example values.yaml:**
 
 ```yaml
 replicaCount: 3
+
+# Use GHCR instead of Docker Hub (optional)
+image:
+  repository: ghcr.io/cepat-kilat-teknologi/genieacs-relay
+  tag: "1.0.0"  # Use specific version for production
 
 config:
   genieacsBaseUrl: "http://genieacs-nbi:7557"
@@ -268,10 +386,20 @@ ingress:
 **Helm Commands:**
 
 ```bash
-helm install genieacs-relay ./genieacs-relay -n genieacs --create-namespace
-helm upgrade genieacs-relay ./genieacs-relay -n genieacs
-helm uninstall genieacs-relay -n genieacs
-helm rollback genieacs-relay 1 -n genieacs
+# From repository
+helm install my-relay genieacs-relay/genieacs-relay -n genieacs --create-namespace
+helm upgrade my-relay genieacs-relay/genieacs-relay -n genieacs
+helm uninstall my-relay -n genieacs
+
+# Update repository and upgrade
+helm repo update
+helm upgrade my-relay genieacs-relay/genieacs-relay -n genieacs
+
+# Rollback
+helm rollback my-relay 1 -n genieacs
+
+# View history
+helm history my-relay -n genieacs
 ```
 
 ### ArgoCD (GitOps)
