@@ -286,3 +286,271 @@ func ValidateEncryption(encryption string) (string, bool) {
 	encryptionValue, valid := ValidEncryptions[encryption]
 	return encryptionValue, valid
 }
+
+// CreateWLANConfig holds configuration for WLAN creation
+type CreateWLANConfig struct {
+	AuthMode   string
+	Encryption string
+	Hidden     bool
+	MaxClients int
+}
+
+// ApplyCreateWLANDefaults applies default values to optional WLAN creation fields
+func ApplyCreateWLANDefaults(authMode, encryption string, hidden *bool, maxClients *int) CreateWLANConfig {
+	cfg := CreateWLANConfig{
+		AuthMode:   authMode,
+		Encryption: encryption,
+		Hidden:     DefaultHiddenSSID,
+		MaxClients: DefaultMaxClients,
+	}
+
+	if cfg.AuthMode == "" {
+		cfg.AuthMode = "WPA2"
+	}
+	if cfg.Encryption == "" {
+		cfg.Encryption = "AES"
+	}
+	if hidden != nil {
+		cfg.Hidden = *hidden
+	}
+	if maxClients != nil {
+		cfg.MaxClients = *maxClients
+	}
+
+	return cfg
+}
+
+// ValidateCreateWLANAuth validates auth mode, encryption, and password for WLAN creation.
+// Returns beaconType, encryptionValue, and error message (empty if valid).
+func ValidateCreateWLANAuth(cfg CreateWLANConfig, password string) (string, string, string) {
+	beaconType, validAuth := ValidateAuthMode(cfg.AuthMode)
+	if !validAuth {
+		return "", "", ErrInvalidAuthMode
+	}
+
+	encryptionValue, validEnc := ValidateEncryption(cfg.Encryption)
+	if !validEnc {
+		return "", "", ErrInvalidEncryption
+	}
+
+	if cfg.MaxClients < MinMaxClients || cfg.MaxClients > MaxMaxClients {
+		return "", "", ErrInvalidMaxClients
+	}
+
+	// Validate password for non-Open authentication
+	if cfg.AuthMode != "Open" {
+		if password == "" {
+			return "", "", ErrPasswordRequiredAuth
+		}
+		if len(password) < MinPasswordLength {
+			return "", "", ErrPasswordTooShort
+		}
+		if len(password) > MaxPasswordLength {
+			return "", "", ErrPasswordTooLong
+		}
+	}
+
+	return beaconType, encryptionValue, ""
+}
+
+// UpdateWLANFieldResult holds the result of processing an update field
+type UpdateWLANFieldResult struct {
+	Params        [][]interface{}
+	UpdatedFields map[string]interface{}
+	ErrorMsg      string
+}
+
+// ProcessUpdateWLANFields processes optional fields for WLAN update.
+// Returns parameter values, updated fields map, and error message (empty if valid).
+func ProcessUpdateWLANFields(wlan string, req UpdateWLANRequest) UpdateWLANFieldResult {
+	result := UpdateWLANFieldResult{
+		Params:        [][]interface{}{},
+		UpdatedFields: make(map[string]interface{}),
+	}
+
+	if req.SSID != nil {
+		if errMsg := ValidateSSID(*req.SSID); errMsg != "" {
+			result.ErrorMsg = errMsg
+			return result
+		}
+		ssidPath := fmt.Sprintf(PathWLANSSIDFormat, wlan)
+		result.Params = append(result.Params, []interface{}{ssidPath, *req.SSID, XSDString})
+		result.UpdatedFields["ssid"] = *req.SSID
+	}
+
+	if req.Password != nil {
+		if errMsg := ValidatePassword(*req.Password); errMsg != "" {
+			result.ErrorMsg = errMsg
+			return result
+		}
+		passwordPath := fmt.Sprintf(PathWLANPasswordFormat, wlan)
+		result.Params = append(result.Params, []interface{}{passwordPath, *req.Password, XSDString})
+		result.UpdatedFields["password"] = "********"
+	}
+
+	if req.Hidden != nil {
+		ssidAdvertisementPath := fmt.Sprintf(PathWLANSSIDAdvertisementFormat, wlan)
+		result.Params = append(result.Params, []interface{}{ssidAdvertisementPath, !*req.Hidden, XSDBoolean})
+		result.UpdatedFields["hidden"] = *req.Hidden
+	}
+
+	if req.MaxClients != nil {
+		if *req.MaxClients < MinMaxClients || *req.MaxClients > MaxMaxClients {
+			result.ErrorMsg = ErrInvalidMaxClients
+			return result
+		}
+		maxAssocDevicesPath := fmt.Sprintf(PathWLANMaxAssocDevicesFormat, wlan)
+		result.Params = append(result.Params, []interface{}{maxAssocDevicesPath, *req.MaxClients, XSDUnsignedInt})
+		result.UpdatedFields["max_clients"] = *req.MaxClients
+	}
+
+	if req.AuthMode != nil {
+		beaconType, validAuth := ValidateAuthMode(*req.AuthMode)
+		if !validAuth {
+			result.ErrorMsg = ErrInvalidAuthMode
+			return result
+		}
+		beaconTypePath := fmt.Sprintf(PathWLANBeaconTypeFormat, wlan)
+		result.Params = append(result.Params, []interface{}{beaconTypePath, beaconType, XSDString})
+		result.UpdatedFields["auth_mode"] = *req.AuthMode
+		authModeParams := BuildAuthModeParams(wlan, *req.AuthMode)
+		result.Params = append(result.Params, authModeParams...)
+	}
+
+	if req.Encryption != nil {
+		encryptionValue, validEnc := ValidateEncryption(*req.Encryption)
+		if !validEnc {
+			result.ErrorMsg = ErrInvalidEncryption
+			return result
+		}
+		wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
+		ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
+		result.Params = append(result.Params,
+			[]interface{}{wpaEncryptionPath, encryptionValue, XSDString},
+			[]interface{}{ieee11iEncryptionPath, encryptionValue, XSDString},
+		)
+		result.UpdatedFields["encryption"] = *req.Encryption
+	}
+
+	return result
+}
+
+// OptimizeWLANFieldResult holds the result of processing optimization fields
+type OptimizeWLANFieldResult struct {
+	Params          [][]interface{}
+	UpdatedSettings map[string]interface{}
+	ErrorMsg        string
+}
+
+// ProcessOptimizeWLANFields processes optional fields for WLAN optimization.
+func ProcessOptimizeWLANFields(wlan string, req OptimizeWLANRequest, is5GHz bool) OptimizeWLANFieldResult {
+	result := OptimizeWLANFieldResult{
+		Params:          [][]interface{}{},
+		UpdatedSettings: make(map[string]interface{}),
+	}
+
+	if req.Channel != nil {
+		if err := ValidateWLANChannel(*req.Channel, is5GHz); err != nil {
+			result.ErrorMsg = sanitizeErrorMessage(err)
+			return result
+		}
+		result.Params = append(result.Params, buildChannelParams(wlan, *req.Channel)...)
+		result.UpdatedSettings["channel"] = *req.Channel
+	}
+
+	if req.Mode != nil {
+		tr069Mode, err := ValidateWLANMode(*req.Mode, is5GHz)
+		if err != nil {
+			result.ErrorMsg = sanitizeErrorMessage(err)
+			return result
+		}
+		modePath := fmt.Sprintf(PathWLANOperatingStandardFormat, wlan)
+		result.Params = append(result.Params, []interface{}{modePath, tr069Mode, XSDString})
+		result.UpdatedSettings["mode"] = *req.Mode
+	}
+
+	if req.Bandwidth != nil {
+		if err := ValidateWLANBandwidth(*req.Bandwidth, is5GHz); err != nil {
+			result.ErrorMsg = sanitizeErrorMessage(err)
+			return result
+		}
+		bandwidthPath := fmt.Sprintf(PathWLANChannelBandwidthFormat, wlan)
+		result.Params = append(result.Params, []interface{}{bandwidthPath, *req.Bandwidth, XSDString})
+		result.UpdatedSettings["bandwidth"] = *req.Bandwidth
+	}
+
+	if req.TransmitPower != nil {
+		if !ValidTransmitPower[*req.TransmitPower] {
+			result.ErrorMsg = ErrInvalidTransmitPower
+			return result
+		}
+		powerPath := fmt.Sprintf(PathWLANTransmitPowerFormat, wlan)
+		result.Params = append(result.Params, []interface{}{powerPath, *req.TransmitPower, XSDUnsignedInt})
+		result.UpdatedSettings["transmit_power"] = *req.TransmitPower
+	}
+
+	return result
+}
+
+// buildChannelParams builds parameter values for channel configuration
+func buildChannelParams(wlan, channel string) [][]interface{} {
+	autoChannelPath := fmt.Sprintf(PathWLANAutoChannelEnableFormat, wlan)
+	if channel == ChannelAuto {
+		return [][]interface{}{{autoChannelPath, true, XSDBoolean}}
+	}
+	channelPath := fmt.Sprintf(PathWLANChannelFormat, wlan)
+	channelNum, _ := strconv.Atoi(channel)
+	return [][]interface{}{
+		{autoChannelPath, false, XSDBoolean},
+		{channelPath, channelNum, XSDUnsignedInt},
+	}
+}
+
+// AvailableWLANSlots holds available and used WLAN slot information
+type AvailableWLANSlots struct {
+	Total24GHz     []int
+	Total5GHz      []int
+	Available24GHz []int
+	Available5GHz  []int
+	UsedWLAN       []UsedWLANInfo
+}
+
+// CalculateAvailableWLANSlots calculates available WLAN slots based on capability and current usage
+func CalculateAvailableWLANSlots(capability *DeviceCapability, wlanConfigs []WLANConfig) AvailableWLANSlots {
+	slots := AvailableWLANSlots{}
+
+	// Build used WLAN IDs map
+	usedWLANIDs := make(map[int]bool)
+	for _, wlan := range wlanConfigs {
+		wlanID, err := strconv.Atoi(wlan.WLAN)
+		if err != nil {
+			continue
+		}
+		usedWLANIDs[wlanID] = true
+		slots.UsedWLAN = append(slots.UsedWLAN, UsedWLANInfo{
+			WLANID: wlanID,
+			SSID:   wlan.SSID,
+			Band:   wlan.Band,
+		})
+	}
+
+	// Calculate 2.4GHz slots
+	for i := WLAN24GHzMin; i <= WLAN24GHzMax; i++ {
+		slots.Total24GHz = append(slots.Total24GHz, i)
+		if !usedWLANIDs[i] {
+			slots.Available24GHz = append(slots.Available24GHz, i)
+		}
+	}
+
+	// Calculate 5GHz slots if dual-band
+	if capability.IsDualBand {
+		for i := WLAN5GHzMin; i <= WLAN5GHzMax; i++ {
+			slots.Total5GHz = append(slots.Total5GHz, i)
+			if !usedWLANIDs[i] {
+				slots.Available5GHz = append(slots.Available5GHz, i)
+			}
+		}
+	}
+
+	return slots
+}

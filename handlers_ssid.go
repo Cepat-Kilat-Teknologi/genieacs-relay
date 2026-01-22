@@ -65,119 +65,112 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 //	@Security		ApiKeyAuth
 //	@Router			/force/ssid/{ip} [get]
 func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
-	// --- Step 1: get device ID ---
+	// Get device ID
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
 	if !ok {
 		return
 	}
 
-	// --- Step 2: setup context & retry config ---
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second) // overall timeout of 30s
+	// Setup context with timeout
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	// Default retry config
-	maxRetries := DefaultMaxRetries // default to 12 attempts
-	retryDelay := DefaultRetryDelay // default to 5 seconds between attempts
+	// Parse retry configuration from query parameters
+	maxRetries, retryDelay := parseRetryConfig(r, deviceID)
 
-	// Override with query parameters if provided (with security bounds)
-	// Log warnings for invalid values to detect potential abuse patterns
+	// Execute retry loop
+	wlanData, attempts, err := executeWLANRetryLoop(ctx, deviceID, maxRetries, retryDelay)
+	if err != nil {
+		handleWLANRetryError(w, err, maxRetries)
+		return
+	}
+
+	// Return successful response
+	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
+		"wlan_data": wlanData,
+		"attempts":  attempts,
+	})
+}
+
+// parseRetryConfig parses retry configuration from query parameters
+func parseRetryConfig(r *http.Request, deviceID string) (int, time.Duration) {
+	maxRetries := DefaultMaxRetries
+	retryDelay := DefaultRetryDelay
+
 	if mrStr := r.URL.Query().Get("max_retries"); mrStr != "" {
-		mr, err := strconv.Atoi(mrStr)
-		if err != nil {
-			logger.Warn("Invalid max_retries parameter (non-numeric), using default",
-				zap.String("value", mrStr),
-				zap.String("deviceID", deviceID))
-		} else if mr <= 0 || mr > MaxRetryAttempts {
-			logger.Warn("max_retries out of bounds, using default",
-				zap.Int("value", mr),
-				zap.Int("max", MaxRetryAttempts),
-				zap.String("deviceID", deviceID))
-		} else {
+		if mr, err := strconv.Atoi(mrStr); err != nil {
+			logger.Warn("Invalid max_retries parameter", zap.String("value", mrStr), zap.String("deviceID", deviceID))
+		} else if mr > 0 && mr <= MaxRetryAttempts {
 			maxRetries = mr
-		}
-	}
-
-	// Override retry delay if provided in milliseconds (with security bounds)
-	if rdStr := r.URL.Query().Get("retry_delay_ms"); rdStr != "" {
-		rd, err := strconv.Atoi(rdStr)
-		if err != nil {
-			logger.Warn("Invalid retry_delay_ms parameter (non-numeric), using default",
-				zap.String("value", rdStr),
-				zap.String("deviceID", deviceID))
-		} else if rd <= 0 || rd > MaxRetryDelayMs {
-			logger.Warn("retry_delay_ms out of bounds, using default",
-				zap.Int("value", rd),
-				zap.Int("max", MaxRetryDelayMs),
-				zap.String("deviceID", deviceID))
 		} else {
-			retryDelay = time.Duration(rd) * time.Millisecond
+			logger.Warn("max_retries out of bounds", zap.Int("value", mr), zap.String("deviceID", deviceID))
 		}
 	}
 
-	var wlanData []WLANConfig // to hold retrieved WLAN data
-	var err error             // to hold errors from API calls
-	refreshDone := false      // flag to ensure refresh is triggered only once
+	if rdStr := r.URL.Query().Get("retry_delay_ms"); rdStr != "" {
+		if rd, err := strconv.Atoi(rdStr); err != nil {
+			logger.Warn("Invalid retry_delay_ms parameter", zap.String("value", rdStr), zap.String("deviceID", deviceID))
+		} else if rd > 0 && rd <= MaxRetryDelayMs {
+			retryDelay = time.Duration(rd) * time.Millisecond
+		} else {
+			logger.Warn("retry_delay_ms out of bounds", zap.Int("value", rd), zap.String("deviceID", deviceID))
+		}
+	}
 
-	// --- Step 3: retry loop ---
+	return maxRetries, retryDelay
+}
+
+// executeWLANRetryLoop executes the WLAN data fetch with retry logic
+func executeWLANRetryLoop(ctx context.Context, deviceID string, maxRetries int, retryDelay time.Duration) ([]WLANConfig, int, error) {
+	refreshDone := false
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		select {
 		case <-ctx.Done():
-			sendError(w, http.StatusRequestTimeout, StatusTimeout, ErrOperationTimeout)
-			return
+			return nil, 0, context.DeadlineExceeded
 		default:
 		}
 
-		// clear cache before each attempt
 		deviceCacheInstance.clear(deviceID)
+		wlanData, err := getWLANData(ctx, deviceID)
 
-		// attempt to get WLAN data
-		wlanData, err = getWLANData(ctx, deviceID)
-
-		// handle errors
 		if err != nil {
-			// Check for context timeout explicitly
 			if errors.Is(err, context.DeadlineExceeded) {
-				sendError(w, http.StatusRequestTimeout, StatusTimeout, ErrOperationTimeout)
-				return
+				return nil, 0, context.DeadlineExceeded
 			}
-			// Other errors
-			logger.Error("Failed to get WLAN data (error)",
-				zap.String("deviceID", deviceID),
-				zap.Int("attempt", attempt+1),
-				zap.Error(err))
-			sendError(w, http.StatusInternalServerError, StatusInternalError, sanitizeErrorMessage(err))
-			return
+			logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Int("attempt", attempt+1), zap.Error(err))
+			return nil, 0, err
 		}
 
-		// if data found, return immediately
 		if len(wlanData) > 0 {
-			sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
-				"wlan_data": wlanData,
-				"attempts":  attempt + 1,
-			})
-			return
+			return wlanData, attempt + 1, nil
 		}
 
-		// Trigger refresh only once if no data found
 		if !refreshDone {
-			logger.Info("No WLAN data found, triggering refresh",
-				zap.String("deviceID", deviceID),
-				zap.Int("attempt", attempt+1))
+			logger.Info("No WLAN data found, triggering refresh", zap.String("deviceID", deviceID), zap.Int("attempt", attempt+1))
 			if err := refreshWLANConfig(ctx, deviceID); err != nil {
-				logger.Warn("Failed to refresh WLAN config",
-					zap.String("deviceID", deviceID),
-					zap.Error(err))
+				logger.Warn("Failed to refresh WLAN config", zap.String("deviceID", deviceID), zap.Error(err))
 			}
 			refreshDone = true
 		}
 
-		// wait before next attempt
 		time.Sleep(retryDelay)
 	}
 
-	// --- Step 4: fail after max retries ---
-	sendError(w, http.StatusNotFound, StatusNotFound,
-		fmt.Sprintf(ErrNoWLANDataFound, maxRetries))
+	return nil, maxRetries, fmt.Errorf("max retries exceeded")
+}
+
+// handleWLANRetryError handles errors from the WLAN retry loop
+func handleWLANRetryError(w http.ResponseWriter, err error, maxRetries int) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		sendError(w, http.StatusRequestTimeout, StatusTimeout, ErrOperationTimeout)
+		return
+	}
+	if err.Error() == "max retries exceeded" {
+		sendError(w, http.StatusNotFound, StatusNotFound, fmt.Sprintf(ErrNoWLANDataFound, maxRetries))
+		return
+	}
+	sendError(w, http.StatusInternalServerError, StatusInternalError, sanitizeErrorMessage(err))
 }
 
 // refreshSSIDHandler triggers a refresh of WLAN configuration data for a device

@@ -20,40 +20,44 @@ import (
 	_ "github.com/Cepat-Kilat-Teknologi/genieacs-relay/docs"
 )
 
-func runServer(addr string) error {
-	// load config
-	serverAddr = getEnv("SERVER_ADDR", addr)
-	geniesBaseURL = getEnv("GENIEACS_BASE_URL", DefaultGenieACSURL)
+// serverConfig holds all server configuration
+type serverConfig struct {
+	corsOrigins       []string
+	corsMaxAge        int
+	rateLimitRequests int
+	rateLimitWindow   time.Duration
+}
 
-	// Load NBI authentication config (for GenieACS API calls)
-	// By default, GenieACS NBI has no authentication, so NBI_AUTH defaults to false
+// loadNBIAuthConfig loads and validates NBI authentication configuration
+func loadNBIAuthConfig() error {
 	nbiAuth = getEnv(EnvNBIAuth, "false") == "true"
 	nbiAuthKey = getEnv(EnvNBIAuthKey, DefaultNBIAuthKey)
 
-	// Return error if NBI auth is enabled but NBI_AUTH_KEY is not set
 	if nbiAuth && nbiAuthKey == "" {
 		return fmt.Errorf("NBI_AUTH is enabled but NBI_AUTH_KEY is not set. " +
 			"Set NBI_AUTH_KEY environment variable or disable NBI_AUTH")
 	}
 
-	// Log NBI auth status
 	logger.Info("NBI authentication", zap.Bool("enabled", nbiAuth))
+	return nil
+}
 
-	// Load middleware authentication config (for incoming API requests)
+// loadMiddlewareAuthConfig loads and validates middleware authentication configuration
+func loadMiddlewareAuthConfig() error {
 	middlewareAuth = getEnv(EnvMiddlewareAuth, "false") == "true"
 	authKey = getEnv(EnvAuthKey, DefaultAuthKey)
 
-	// Return error if middleware auth is enabled but AUTH_KEY is not set
-	// This prevents the server from starting in an insecure state
 	if middlewareAuth && authKey == "" {
 		return fmt.Errorf("MIDDLEWARE_AUTH is enabled but AUTH_KEY is not set. " +
 			"Set AUTH_KEY environment variable or disable MIDDLEWARE_AUTH")
 	}
 
-	// Log middleware auth status
 	logger.Info("Middleware authentication", zap.Bool("enabled", middlewareAuth))
+	return nil
+}
 
-	// Load stale threshold config (default: 10 minutes)
+// loadStaleThresholdConfig loads stale threshold configuration
+func loadStaleThresholdConfig() {
 	staleThreshold = DefaultStaleThreshold
 	if staleMinStr := getEnv(EnvStaleThreshold, ""); staleMinStr != "" {
 		if staleMin, err := strconv.Atoi(staleMinStr); err == nil && staleMin > 0 {
@@ -61,48 +65,90 @@ func runServer(addr string) error {
 		}
 	}
 	logger.Info("Stale device threshold", zap.Duration("threshold", staleThreshold))
+}
 
-	// Load CORS config - default to "*" (allow all origins)
+// loadCORSConfig loads CORS configuration and returns origins slice
+func loadCORSConfig() []string {
 	originsStr := getEnv(EnvCORSAllowedOrigins, DefaultCORSAllowedOrigins)
 	corsOrigins := strings.Split(originsStr, ",")
-	// Trim spaces from each origin
 	for i := range corsOrigins {
 		corsOrigins[i] = strings.TrimSpace(corsOrigins[i])
 	}
+
 	if originsStr == "*" {
 		logger.Info("CORS enabled", zap.String("allowed_origins", "*"))
 	} else {
 		logger.Info("CORS enabled", zap.Strings("allowed_origins", corsOrigins))
 	}
+	return corsOrigins
+}
 
-	// start worker pool
-	taskWorkerPool.Start()
-	defer taskWorkerPool.Stop()
-
-	// Load rate limit configuration
+// loadRateLimitConfig loads rate limiting configuration
+func loadRateLimitConfig() (int, time.Duration) {
 	rateLimitRequests := DefaultRateLimitRequests
 	if rlReqStr := getEnv(EnvRateLimitRequests, ""); rlReqStr != "" {
 		if rlReq, err := strconv.Atoi(rlReqStr); err == nil && rlReq > 0 {
 			rateLimitRequests = rlReq
 		}
 	}
+
 	rateLimitWindow := time.Duration(DefaultRateLimitWindow) * time.Second
 	if rlWinStr := getEnv(EnvRateLimitWindow, ""); rlWinStr != "" {
 		if rlWin, err := strconv.Atoi(rlWinStr); err == nil && rlWin > 0 {
 			rateLimitWindow = time.Duration(rlWin) * time.Second
 		}
 	}
+
 	logger.Info("Rate limiting configured",
 		zap.Int("requests", rateLimitRequests),
 		zap.Duration("window", rateLimitWindow))
 
-	// Load CORS max-age configuration
+	return rateLimitRequests, rateLimitWindow
+}
+
+// loadCORSMaxAgeConfig loads CORS max-age configuration
+func loadCORSMaxAgeConfig() int {
 	corsMaxAge := DefaultCORSMaxAge
 	if corsMaxAgeStr := getEnv(EnvCORSMaxAge, ""); corsMaxAgeStr != "" {
 		if maxAge, err := strconv.Atoi(corsMaxAgeStr); err == nil && maxAge > 0 {
 			corsMaxAge = maxAge
 		}
 	}
+	return corsMaxAge
+}
+
+// loadServerConfig loads all server configuration
+func loadServerConfig(addr string) (*serverConfig, error) {
+	serverAddr = getEnv("SERVER_ADDR", addr)
+	geniesBaseURL = getEnv("GENIEACS_BASE_URL", DefaultGenieACSURL)
+
+	if err := loadNBIAuthConfig(); err != nil {
+		return nil, err
+	}
+
+	if err := loadMiddlewareAuthConfig(); err != nil {
+		return nil, err
+	}
+
+	loadStaleThresholdConfig()
+
+	return &serverConfig{
+		corsOrigins:       loadCORSConfig(),
+		corsMaxAge:        loadCORSMaxAgeConfig(),
+		rateLimitRequests: 0, // will be set below
+		rateLimitWindow:   0, // will be set below
+	}, nil
+}
+
+func runServer(addr string) error {
+	// Load all configuration
+	cfg, err := loadServerConfig(addr)
+	if err != nil {
+		return err
+	}
+
+	// Load rate limit config separately (needs to be used for middleware)
+	cfg.rateLimitRequests, cfg.rateLimitWindow = loadRateLimitConfig()
 
 	logger.Info("Starting server", zap.String("genieacs_url", geniesBaseURL))
 
@@ -111,7 +157,7 @@ func runServer(addr string) error {
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 	// Apply rate limiting middleware
-	rl := newRateLimiter(rateLimitRequests, rateLimitWindow)
+	rl := newRateLimiter(cfg.rateLimitRequests, cfg.rateLimitWindow)
 	rl.StartCleanup() // Start background cleanup to prevent memory leaks
 	defer rl.StopCleanup()
 	r.Use(rateLimitMiddleware(rl))
@@ -121,7 +167,7 @@ func runServer(addr string) error {
 	defer authTracker.StopCleanup()
 	r.Use(securityHeadersMiddleware)
 	// Apply CORS middleware
-	r.Use(corsMiddleware(corsOrigins, corsMaxAge))
+	r.Use(corsMiddleware(cfg.corsOrigins, cfg.corsMaxAge))
 
 	// Health check endpoint - intentionally outside authentication
 	// This allows load balancers and monitoring systems to check service health

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -49,61 +48,12 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply defaults for optional fields
-	authMode := createReq.AuthMode
-	if authMode == "" {
-		authMode = "WPA2" // Default to WPA2
-	}
-
-	encryption := createReq.Encryption
-	if encryption == "" {
-		encryption = "AES" // Default to AES
-	}
-
-	hidden := DefaultHiddenSSID
-	if createReq.Hidden != nil {
-		hidden = *createReq.Hidden
-	}
-
-	maxClients := DefaultMaxClients
-	if createReq.MaxClients != nil {
-		maxClients = *createReq.MaxClients
-	}
-
-	// Validate authentication mode
-	beaconType, validAuth := ValidateAuthMode(authMode)
-	if !validAuth {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidAuthMode)
+	// Apply defaults and validate auth configuration
+	cfg := ApplyCreateWLANDefaults(createReq.AuthMode, createReq.Encryption, createReq.Hidden, createReq.MaxClients)
+	beaconType, encryptionValue, errMsg := ValidateCreateWLANAuth(cfg, createReq.Password)
+	if errMsg != "" {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, errMsg)
 		return
-	}
-
-	// Validate encryption mode
-	encryptionValue, validEnc := ValidateEncryption(encryption)
-	if !validEnc {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidEncryption)
-		return
-	}
-
-	// Validate max clients
-	if maxClients < MinMaxClients || maxClients > MaxMaxClients {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidMaxClients)
-		return
-	}
-
-	// Validate password - required for non-Open authentication
-	if authMode != "Open" {
-		if createReq.Password == "" {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordRequiredAuth)
-			return
-		}
-		if len(createReq.Password) < MinPasswordLength {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooShort)
-			return
-		}
-		if len(createReq.Password) > MaxPasswordLength {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrPasswordTooLong)
-			return
-		}
 	}
 
 	// Get device ID from IP
@@ -127,32 +77,8 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build parameter values for creating WLAN
-	enablePath := fmt.Sprintf(PathWLANEnableFormat, wlan)
-	ssidPath := fmt.Sprintf(PathWLANSSIDFormat, wlan)
-	ssidAdvertisementPath := fmt.Sprintf(PathWLANSSIDAdvertisementFormat, wlan)
-	maxAssocDevicesPath := fmt.Sprintf(PathWLANMaxAssocDevicesFormat, wlan)
-	beaconTypePath := fmt.Sprintf(PathWLANBeaconTypeFormat, wlan)
-
-	parameterValues := [][]interface{}{
-		{enablePath, true, XSDBoolean},
-		{ssidPath, createReq.SSID, XSDString},
-		{ssidAdvertisementPath, !hidden, XSDBoolean}, // SSIDAdvertisementEnabled = true means visible (not hidden)
-		{maxAssocDevicesPath, maxClients, XSDUnsignedInt},
-		{beaconTypePath, beaconType, XSDString},
-	}
-
-	// Add password and encryption settings for non-Open authentication
-	if authMode != "Open" {
-		passwordPath := fmt.Sprintf(PathWLANPasswordFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{passwordPath, createReq.Password, XSDString})
-
-		// Set encryption and authentication parameters based on auth mode
-		securityParams := BuildWLANSecurityParams(wlan, authMode, encryptionValue)
-		parameterValues = append(parameterValues, securityParams...)
-	}
-
-	// Submit update and clear cache
+	// Build and submit parameter values
+	parameterValues := buildCreateWLANParams(wlan, createReq.SSID, createReq.Password, cfg, beaconType, encryptionValue)
 	SubmitWLANUpdate(deviceID, parameterValues)
 
 	// Determine the band for this WLAN
@@ -163,27 +89,45 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 		"wlan":        wlan,
 		"ssid":        createReq.SSID,
 		"band":        band,
-		"auth_mode":   authMode,
-		"encryption":  encryption,
-		"hidden":      hidden,
-		"max_clients": maxClients,
+		"auth_mode":   cfg.AuthMode,
+		"encryption":  cfg.Encryption,
+		"hidden":      cfg.Hidden,
+		"max_clients": cfg.MaxClients,
 	})
 
 	// Build response with applied settings
-	responseData := map[string]interface{}{
+	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
 		"message":     MsgWLANCreationSubmitted,
 		"device_id":   deviceID,
 		"wlan":        wlan,
 		"ssid":        createReq.SSID,
 		"band":        band,
 		"ip":          ip,
-		"hidden":      hidden,
-		"max_clients": maxClients,
-		"auth_mode":   authMode,
-		"encryption":  encryption,
+		"hidden":      cfg.Hidden,
+		"max_clients": cfg.MaxClients,
+		"auth_mode":   cfg.AuthMode,
+		"encryption":  cfg.Encryption,
+	})
+}
+
+// buildCreateWLANParams builds parameter values for WLAN creation
+func buildCreateWLANParams(wlan, ssid, password string, cfg CreateWLANConfig, beaconType, encryptionValue string) [][]interface{} {
+	parameterValues := [][]interface{}{
+		{fmt.Sprintf(PathWLANEnableFormat, wlan), true, XSDBoolean},
+		{fmt.Sprintf(PathWLANSSIDFormat, wlan), ssid, XSDString},
+		{fmt.Sprintf(PathWLANSSIDAdvertisementFormat, wlan), !cfg.Hidden, XSDBoolean},
+		{fmt.Sprintf(PathWLANMaxAssocDevicesFormat, wlan), cfg.MaxClients, XSDUnsignedInt},
+		{fmt.Sprintf(PathWLANBeaconTypeFormat, wlan), beaconType, XSDString},
 	}
 
-	sendResponse(w, http.StatusOK, StatusOK, responseData)
+	if cfg.AuthMode != "Open" {
+		passwordPath := fmt.Sprintf(PathWLANPasswordFormat, wlan)
+		parameterValues = append(parameterValues, []interface{}{passwordPath, password, XSDString})
+		securityParams := BuildWLANSecurityParams(wlan, cfg.AuthMode, encryptionValue)
+		parameterValues = append(parameterValues, securityParams...)
+	}
+
+	return parameterValues
 }
 
 // getAvailableWLANHandler returns available WLAN slots for a device
@@ -224,73 +168,35 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build used WLAN info and track used IDs
-	usedWLANIDs := make(map[int]bool)
-	var usedWLAN []UsedWLANInfo
-	for _, wlan := range wlanConfigs {
-		wlanID, err := strconv.Atoi(wlan.WLAN)
-		if err != nil {
-			continue // Skip invalid WLAN IDs
-		}
-		usedWLANIDs[wlanID] = true
-		usedWLAN = append(usedWLAN, UsedWLANInfo{
-			WLANID: wlanID,
-			SSID:   wlan.SSID,
-			Band:   wlan.Band,
-		})
-	}
-
-	// Calculate total slots based on band type
-	var total24GHz, total5GHz []int
-	for i := WLAN24GHzMin; i <= WLAN24GHzMax; i++ {
-		total24GHz = append(total24GHz, i)
-	}
-	if capability.IsDualBand {
-		for i := WLAN5GHzMin; i <= WLAN5GHzMax; i++ {
-			total5GHz = append(total5GHz, i)
-		}
-	}
-
 	// Calculate available slots
-	var available24GHz, available5GHz []int
-	for i := WLAN24GHzMin; i <= WLAN24GHzMax; i++ {
-		if !usedWLANIDs[i] {
-			available24GHz = append(available24GHz, i)
-		}
-	}
-	if capability.IsDualBand {
-		for i := WLAN5GHzMin; i <= WLAN5GHzMax; i++ {
-			if !usedWLANIDs[i] {
-				available5GHz = append(available5GHz, i)
-			}
-		}
-	}
+	slots := CalculateAvailableWLANSlots(capability, wlanConfigs)
 
 	// Build response
+	response := buildAvailableWLANResponse(deviceID, capability, slots)
+	sendResponse(w, http.StatusOK, StatusOK, response)
+}
+
+// buildAvailableWLANResponse builds the response for available WLAN slots
+func buildAvailableWLANResponse(deviceID string, capability *DeviceCapability, slots AvailableWLANSlots) AvailableWLANResponse {
 	response := AvailableWLANResponse{
 		DeviceID: deviceID,
 		Model:    capability.Model,
 		BandType: string(capability.BandType),
 	}
-	response.TotalSlots.Band24GHz = total24GHz
-	response.TotalSlots.Band5GHz = total5GHz
-	if response.TotalSlots.Band5GHz == nil {
-		response.TotalSlots.Band5GHz = []int{}
-	}
 
-	response.UsedWLAN = usedWLAN
+	// Set total slots with nil-safe defaults
+	response.TotalSlots.Band24GHz = slots.Total24GHz
+	response.TotalSlots.Band5GHz = ensureIntSlice(slots.Total5GHz)
+
+	// Set used WLAN with nil-safe default
+	response.UsedWLAN = slots.UsedWLAN
 	if response.UsedWLAN == nil {
 		response.UsedWLAN = []UsedWLANInfo{}
 	}
 
-	response.AvailableWLAN.Band24GHz = available24GHz
-	if response.AvailableWLAN.Band24GHz == nil {
-		response.AvailableWLAN.Band24GHz = []int{}
-	}
-	response.AvailableWLAN.Band5GHz = available5GHz
-	if response.AvailableWLAN.Band5GHz == nil {
-		response.AvailableWLAN.Band5GHz = []int{}
-	}
+	// Set available slots with nil-safe defaults
+	response.AvailableWLAN.Band24GHz = ensureIntSlice(slots.Available24GHz)
+	response.AvailableWLAN.Band5GHz = ensureIntSlice(slots.Available5GHz)
 
 	// Add configuration options for frontend
 	response.ConfigOptions.AuthModes = []string{"Open", "WPA", "WPA2", "WPA/WPA2"}
@@ -299,7 +205,15 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 	response.ConfigOptions.MaxClients.Max = MaxMaxClients
 	response.ConfigOptions.MaxClients.Default = DefaultMaxClients
 
-	sendResponse(w, http.StatusOK, StatusOK, response)
+	return response
+}
+
+// ensureIntSlice returns an empty slice if input is nil
+func ensureIntSlice(s []int) []int {
+	if s == nil {
+		return []int{}
+	}
+	return s
 }
 
 // updateWLANHandler updates an existing WLAN configuration
@@ -336,8 +250,7 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if at least one field is provided
-	if updateReq.SSID == nil && updateReq.Password == nil && updateReq.Hidden == nil &&
-		updateReq.MaxClients == nil && updateReq.AuthMode == nil && updateReq.Encryption == nil {
+	if !hasUpdateFields(updateReq) {
 		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrUpdateFieldRequired)
 		return
 	}
@@ -363,92 +276,15 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build parameter values for updating WLAN
-	var parameterValues [][]interface{}
-	updatedFields := make(map[string]interface{})
-
-	// Validate and add SSID if provided
-	if updateReq.SSID != nil {
-		ssid := *updateReq.SSID
-		if errMsg := ValidateSSID(ssid); errMsg != "" {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, errMsg)
-			return
-		}
-		ssidPath := fmt.Sprintf(PathWLANSSIDFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{ssidPath, ssid, XSDString})
-		updatedFields["ssid"] = ssid
-	}
-
-	// Validate and add password if provided
-	if updateReq.Password != nil {
-		password := *updateReq.Password
-		if errMsg := ValidatePassword(password); errMsg != "" {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, errMsg)
-			return
-		}
-		passwordPath := fmt.Sprintf(PathWLANPasswordFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{passwordPath, password, XSDString})
-		updatedFields["password"] = "********" // Mask password in response
-	}
-
-	// Add hidden SSID setting if provided
-	if updateReq.Hidden != nil {
-		hidden := *updateReq.Hidden
-		ssidAdvertisementPath := fmt.Sprintf(PathWLANSSIDAdvertisementFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{ssidAdvertisementPath, !hidden, XSDBoolean})
-		updatedFields["hidden"] = hidden
-	}
-
-	// Validate and add max clients if provided
-	if updateReq.MaxClients != nil {
-		maxClients := *updateReq.MaxClients
-		if maxClients < MinMaxClients || maxClients > MaxMaxClients {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidMaxClients)
-			return
-		}
-		maxAssocDevicesPath := fmt.Sprintf(PathWLANMaxAssocDevicesFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{maxAssocDevicesPath, maxClients, XSDUnsignedInt})
-		updatedFields["max_clients"] = maxClients
-	}
-
-	// Validate and add auth mode if provided
-	if updateReq.AuthMode != nil {
-		authMode := *updateReq.AuthMode
-		beaconType, validAuth := ValidateAuthMode(authMode)
-		if !validAuth {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidAuthMode)
-			return
-		}
-		beaconTypePath := fmt.Sprintf(PathWLANBeaconTypeFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{beaconTypePath, beaconType, XSDString})
-		updatedFields["auth_mode"] = authMode
-
-		// Set authentication mode parameters based on type
-		authModeParams := BuildAuthModeParams(wlan, authMode)
-		parameterValues = append(parameterValues, authModeParams...)
-	}
-
-	// Validate and add encryption if provided
-	if updateReq.Encryption != nil {
-		encryption := *updateReq.Encryption
-		encryptionValue, validEnc := ValidateEncryption(encryption)
-		if !validEnc {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidEncryption)
-			return
-		}
-
-		// Set encryption for both WPA and WPA2 paths to cover all cases
-		wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
-		ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
-		parameterValues = append(parameterValues,
-			[]interface{}{wpaEncryptionPath, encryptionValue, XSDString},
-			[]interface{}{ieee11iEncryptionPath, encryptionValue, XSDString},
-		)
-		updatedFields["encryption"] = encryption
+	// Process update fields
+	result := ProcessUpdateWLANFields(wlan, updateReq)
+	if result.ErrorMsg != "" {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, result.ErrorMsg)
+		return
 	}
 
 	// Submit update and clear cache
-	SubmitWLANUpdate(deviceID, parameterValues)
+	SubmitWLANUpdate(deviceID, result.Params)
 
 	// Determine the band for this WLAN
 	band := getWLANBandByID(wlanID)
@@ -457,20 +293,24 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 	AuditLogWithFields(AuditEventWLANUpdate, GetClientIP(r), deviceID, map[string]interface{}{
 		"wlan":           wlan,
 		"band":           band,
-		"updated_fields": updatedFields,
+		"updated_fields": result.UpdatedFields,
 	})
 
 	// Build response
-	responseData := map[string]interface{}{
+	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
 		"message":        MsgWLANUpdateSubmitted,
 		"device_id":      deviceID,
 		"wlan":           wlan,
 		"band":           band,
 		"ip":             ip,
-		"updated_fields": updatedFields,
-	}
+		"updated_fields": result.UpdatedFields,
+	})
+}
 
-	sendResponse(w, http.StatusOK, StatusOK, responseData)
+// hasUpdateFields checks if at least one update field is provided
+func hasUpdateFields(req UpdateWLANRequest) bool {
+	return req.SSID != nil || req.Password != nil || req.Hidden != nil ||
+		req.MaxClients != nil || req.AuthMode != nil || req.Encryption != nil
 }
 
 // deleteWLANHandler disables/deletes a WLAN configuration
@@ -578,8 +418,7 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if at least one field is provided
-	if optimizeReq.Channel == nil && optimizeReq.Mode == nil &&
-		optimizeReq.Bandwidth == nil && optimizeReq.TransmitPower == nil {
+	if !hasOptimizeFields(optimizeReq) {
 		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrNoOptimizeFields)
 		return
 	}
@@ -612,93 +451,35 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 		band = Band5GHz
 	}
 
-	// Build parameter values for optimization
-	var parameterValues [][]interface{}
-	updatedSettings := make(map[string]interface{})
-
-	// Validate and add channel if provided
-	if optimizeReq.Channel != nil {
-		channel := *optimizeReq.Channel
-		if err := ValidateWLANChannel(channel, is5GHz); err != nil {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
-			return
-		}
-
-		// Handle Auto channel setting
-		autoChannelPath := fmt.Sprintf(PathWLANAutoChannelEnableFormat, wlan)
-		if channel == ChannelAuto {
-			parameterValues = append(parameterValues, []interface{}{autoChannelPath, true, XSDBoolean})
-		} else {
-			// Set specific channel and disable auto channel
-			channelPath := fmt.Sprintf(PathWLANChannelFormat, wlan)
-			channelNum, _ := strconv.Atoi(channel)
-			parameterValues = append(parameterValues,
-				[]interface{}{autoChannelPath, false, XSDBoolean},
-				[]interface{}{channelPath, channelNum, XSDUnsignedInt},
-			)
-		}
-		updatedSettings["channel"] = channel
-	}
-
-	// Validate and add mode if provided
-	if optimizeReq.Mode != nil {
-		mode := *optimizeReq.Mode
-		tr069Mode, err := ValidateWLANMode(mode, is5GHz)
-		if err != nil {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
-			return
-		}
-
-		modePath := fmt.Sprintf(PathWLANOperatingStandardFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{modePath, tr069Mode, XSDString})
-		updatedSettings["mode"] = mode
-	}
-
-	// Validate and add bandwidth if provided
-	if optimizeReq.Bandwidth != nil {
-		bandwidth := *optimizeReq.Bandwidth
-		if err := ValidateWLANBandwidth(bandwidth, is5GHz); err != nil {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
-			return
-		}
-
-		bandwidthPath := fmt.Sprintf(PathWLANChannelBandwidthFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{bandwidthPath, bandwidth, XSDString})
-		updatedSettings["bandwidth"] = bandwidth
-	}
-
-	// Validate and add transmit power if provided
-	if optimizeReq.TransmitPower != nil {
-		power := *optimizeReq.TransmitPower
-		if !ValidTransmitPower[power] {
-			sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidTransmitPower)
-			return
-		}
-
-		powerPath := fmt.Sprintf(PathWLANTransmitPowerFormat, wlan)
-		parameterValues = append(parameterValues, []interface{}{powerPath, power, XSDUnsignedInt})
-		updatedSettings["transmit_power"] = power
+	// Process optimize fields
+	result := ProcessOptimizeWLANFields(wlan, optimizeReq, is5GHz)
+	if result.ErrorMsg != "" {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, result.ErrorMsg)
+		return
 	}
 
 	// Submit update and clear cache
-	SubmitWLANUpdate(deviceID, parameterValues)
+	SubmitWLANUpdate(deviceID, result.Params)
 
 	// Audit log for WLAN optimization
 	AuditLogWithFields(AuditEventWLANOptimize, GetClientIP(r), deviceID, map[string]interface{}{
 		"wlan":             wlan,
 		"band":             band,
-		"updated_settings": updatedSettings,
+		"updated_settings": result.UpdatedSettings,
 	})
 
 	// Build response
-	responseData := map[string]interface{}{
+	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
 		"message":          MsgWLANOptimizeSubmitted,
 		"device_id":        deviceID,
 		"wlan":             wlan,
 		"band":             band,
 		"ip":               ip,
-		"updated_settings": updatedSettings,
-	}
+		"updated_settings": result.UpdatedSettings,
+	})
+}
 
-	sendResponse(w, http.StatusOK, StatusOK, responseData)
+// hasOptimizeFields checks if at least one optimize field is provided
+func hasOptimizeFields(req OptimizeWLANRequest) bool {
+	return req.Channel != nil || req.Mode != nil || req.Bandwidth != nil || req.TransmitPower != nil
 }
