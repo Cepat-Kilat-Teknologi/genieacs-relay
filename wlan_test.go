@@ -470,19 +470,25 @@ func TestGetBand(t *testing.T) {
 			expected: "5GHz",
 		},
 		{
-			name: "Standard with n only (Unknown)",
+			name: "Standard with n only on key 3 (2.4GHz via key fallback)",
 			wlan: map[string]interface{}{
 				"Standard": map[string]interface{}{
 					"_value": "n",
 				},
 			},
 			wlanKey:  "3",
-			expected: "Unknown",
+			expected: "2.4GHz",
 		},
 		{
-			name:     "No Standard field (Unknown)",
+			name:     "No Standard field on key 3 (2.4GHz via key fallback)",
 			wlan:     map[string]interface{}{},
 			wlanKey:  "3",
+			expected: "2.4GHz",
+		},
+		{
+			name:     "Unknown band for out-of-range key",
+			wlan:     map[string]interface{}{},
+			wlanKey:  "99",
 			expected: "Unknown",
 		},
 	}

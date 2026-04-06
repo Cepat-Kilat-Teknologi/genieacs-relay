@@ -5,7 +5,7 @@ REGISTRY_USER   := cepatkilatteknologi
 IMAGE_NAME      := genieacs-relay
 TAG             := 1.1
 DOCKER_COMPOSE  := docker compose
-DOCKER_COMPOSE_PROD := docker compose -f example/docker/docker-compose.yml
+DOCKER_COMPOSE_PROD := docker compose -f examples/docker/docker-compose.yml
 BUILDX_PLATFORMS := linux/amd64,linux/arm64,linux/arm/v7
 GO_TEST_FLAGS   := -v -race -timeout=30s
 GO_COVER_FLAGS  := -coverprofile=coverage.out -covermode=atomic
@@ -171,7 +171,7 @@ lint:
 		golangci-lint run ./...; \
 	else \
 		echo "golangci-lint not installed. Installing..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.59.0; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$(go env GOPATH)/bin v2.11.4; \
 		golangci-lint run ./...; \
 	fi
 

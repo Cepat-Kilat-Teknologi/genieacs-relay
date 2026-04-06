@@ -21,10 +21,10 @@ func TestValidateIP(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("Valid IPv6", func(t *testing.T) {
-		// Use a valid non-loopback IPv6 address
+	t.Run("IPv6 rejected", func(t *testing.T) {
 		err := validateIP("2001:db8::1")
-		assert.NoError(t, err)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "IPv6 addresses are not supported")
 	})
 
 	t.Run("Invalid IP - not an IP", func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestValidateIP(t *testing.T) {
 // TestValidateWLANID tests the WLAN ID validation function
 func TestValidateWLANID(t *testing.T) {
 	t.Run("Valid WLAN IDs", func(t *testing.T) {
-		validIDs := []string{"1", "5", "10", "99"}
+		validIDs := []string{"1", "4", "5", "8"}
 		for _, id := range validIDs {
 			err := validateWLANID(id)
 			assert.NoError(t, err, "WLAN ID %s should be valid", id)
@@ -90,7 +90,7 @@ func TestValidateWLANID(t *testing.T) {
 	})
 
 	t.Run("Invalid WLAN ID - Out of range", func(t *testing.T) {
-		outOfRangeIDs := []string{"0", "-1", "100", "999"}
+		outOfRangeIDs := []string{"0", "-1", "9", "10", "99", "100"}
 		for _, id := range outOfRangeIDs {
 			err := validateWLANID(id)
 			assert.Error(t, err, "WLAN ID %s should be out of range", id)
@@ -226,7 +226,7 @@ func TestWLANIDValidationInHandlers(t *testing.T) {
 	t.Run("WLAN update rejects invalid WLAN ID", func(t *testing.T) {
 		// Note: URLs with path traversal like "../1" are handled by chi router differently
 		// and may result in 404, so we only test simple invalid values here
-		invalidWLANIDs := []string{"abc", "0", "100", "999"}
+		invalidWLANIDs := []string{"abc", "0", "9", "10", "100"}
 		for _, wlanID := range invalidWLANIDs {
 			body := `{"ssid": "TestSSID"}`
 			req := httptest.NewRequest("PUT", "/api/v1/genieacs/wlan/update/"+wlanID+"/"+mockDeviceIP, strings.NewReader(body))

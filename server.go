@@ -133,10 +133,8 @@ func loadServerConfig(addr string) (*serverConfig, error) {
 	loadStaleThresholdConfig()
 
 	return &serverConfig{
-		corsOrigins:       loadCORSConfig(),
-		corsMaxAge:        loadCORSMaxAgeConfig(),
-		rateLimitRequests: 0, // will be set below
-		rateLimitWindow:   0, // will be set below
+		corsOrigins: loadCORSConfig(),
+		corsMaxAge:  loadCORSMaxAgeConfig(),
 	}, nil
 }
 
@@ -151,6 +149,10 @@ func runServer(addr string) error {
 	cfg.rateLimitRequests, cfg.rateLimitWindow = loadRateLimitConfig()
 
 	logger.Info("Starting server", zap.String("genieacs_url", geniesBaseURL))
+
+	// Start worker pool for async task processing (setParameterValues, applyChanges, refreshWLAN)
+	taskWorkerPool.Start()
+	defer taskWorkerPool.Stop()
 
 	// router
 	r := chi.NewRouter()

@@ -79,7 +79,11 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build and submit parameter values
 	parameterValues := buildCreateWLANParams(wlan, createReq.SSID, createReq.Password, cfg, beaconType, encryptionValue)
-	SubmitWLANUpdate(deviceID, parameterValues)
+	if err := SubmitWLANUpdate(deviceID, parameterValues); err != nil {
+		logger.Error("Failed to submit WLAN create task", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		return
+	}
 
 	// Determine the band for this WLAN
 	band := getWLANBandByID(wlanID)
@@ -284,7 +288,11 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Submit update and clear cache
-	SubmitWLANUpdate(deviceID, result.Params)
+	if err := SubmitWLANUpdate(deviceID, result.Params); err != nil {
+		logger.Error("Failed to submit WLAN update task", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		return
+	}
 
 	// Determine the band for this WLAN
 	band := getWLANBandByID(wlanID)
@@ -338,6 +346,12 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Protect primary WLANs (ID 1 for 2.4GHz, ID 5 for 5GHz) from deletion
+	if wlanID == WLAN24GHzMin || wlanID == WLAN5GHzMin {
+		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrDeletePrimaryWLAN)
+		return
+	}
+
 	// Get device ID from IP
 	deviceID, ok := ExtractDeviceIDByIP(w, r)
 	if !ok {
@@ -366,7 +380,11 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Submit update and clear cache
-	SubmitWLANUpdate(deviceID, parameterValues)
+	if err := SubmitWLANUpdate(deviceID, parameterValues); err != nil {
+		logger.Error("Failed to submit WLAN delete task", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		return
+	}
 
 	// Determine the band for this WLAN
 	band := getWLANBandByID(wlanID)
@@ -459,7 +477,11 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Submit update and clear cache
-	SubmitWLANUpdate(deviceID, result.Params)
+	if err := SubmitWLANUpdate(deviceID, result.Params); err != nil {
+		logger.Error("Failed to submit WLAN optimize task", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		return
+	}
 
 	// Audit log for WLAN optimization
 	AuditLogWithFields(AuditEventWLANOptimize, GetClientIP(r), deviceID, map[string]interface{}{

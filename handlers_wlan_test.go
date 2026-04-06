@@ -278,7 +278,7 @@ func TestDeleteWLANHandlerErrors(t *testing.T) {
 
 		_, router := setupTestServer(t, mockNotFoundHandler)
 
-		req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/1/192.168.255.255", nil)
+		req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/2/192.168.255.255", nil)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
@@ -397,8 +397,8 @@ func TestSingleBandDeviceValidation(t *testing.T) {
 
 	_, router := setupTestServer(t, mockHandler)
 
-	t.Run("Delete WLAN 5 on single-band device", func(t *testing.T) {
-		req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/5/"+mockDeviceIP, nil)
+	t.Run("Delete WLAN 6 on single-band device", func(t *testing.T) {
+		req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/6/"+mockDeviceIP, nil)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
@@ -1479,8 +1479,20 @@ func TestCreateWLANHandlerValidationErrors(t *testing.T) {
 	})
 }
 
-// TestDeleteWLANHandlerSuccess tests successful delete
+// TestDeleteWLANHandlerSuccess tests successful delete of a non-primary WLAN
 func TestDeleteWLANHandlerSuccess(t *testing.T) {
+	// Mock device data with WLAN 2 enabled (non-primary, safe to delete)
+	mockDeviceWithWLAN2 := `{
+		"_id": "002568-BCM963268-684752",
+		"_deviceId": {"_ProductClass": "F670L"},
+		"InternetGatewayDevice": {
+			"DeviceInfo": {"ProductClass": {"_value": "F670L"}},
+			"LANDevice": {"1": {"WLANConfiguration": {
+				"1": {"Enable": {"_value": true}, "SSID": {"_value": "Primary"}, "Standard": {"_value": "b,g,n"}},
+				"2": {"Enable": {"_value": true}, "SSID": {"_value": "Guest"}, "Standard": {"_value": "b,g,n"}}
+			}}}
+		}
+	}`
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 			w.WriteHeader(http.StatusOK)
@@ -1489,7 +1501,7 @@ func TestDeleteWLANHandlerSuccess(t *testing.T) {
 		}
 		if strings.Contains(r.URL.Query().Get("query"), mockDeviceID) {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+			_, _ = w.Write([]byte("[" + mockDeviceWithWLAN2 + "]"))
 			return
 		}
 		if r.Method == "POST" && strings.Contains(r.URL.Path, "/tasks") {
@@ -1502,7 +1514,7 @@ func TestDeleteWLANHandlerSuccess(t *testing.T) {
 
 	_, router := setupTestServer(t, mockHandler)
 
-	req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/1/"+mockDeviceIP, nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/2/"+mockDeviceIP, nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -1573,7 +1585,7 @@ func TestDeleteWLANHandlerIsWLANValidError(t *testing.T) {
 
 	_, router := setupTestServer(t, mockHandler)
 
-	req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/1/"+mockDeviceIP, nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/2/"+mockDeviceIP, nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 

@@ -169,13 +169,13 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 
 	device := devices[0]
 
-	// Validate device is not stale (if staleThreshold is configured and _lastInform is available)
-	if staleThreshold > 0 && device.LastInform != nil {
-		// GenieACS stores _lastInform as ISO 8601 date string (e.g., "2025-01-16T10:30:00.000Z")
+	// Validate device is not stale (if staleThreshold is configured)
+	if staleThreshold > 0 {
+		if device.LastInform == nil {
+			return "", fmt.Errorf("device with IP %s has never connected to GenieACS", ip)
+		}
 		lastInformTime := *device.LastInform
 		timeSinceLastInform := time.Since(lastInformTime)
-
-		// Check if device is stale
 		if timeSinceLastInform > staleThreshold {
 			return "", fmt.Errorf(ErrDeviceStale, ip, formatDuration(timeSinceLastInform))
 		}

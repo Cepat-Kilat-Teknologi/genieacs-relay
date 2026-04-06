@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "genieacs-relay.fullname" . }}-test-health
+  labels:
+    {{- include "genieacs-relay.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: health-check
+      image: busybox:1.36
+      command: ['wget', '-q', '--spider', 'http://{{ include "genieacs-relay.fullname" . }}:{{ .Values.service.port }}/health']
+  restartPolicy: Never
