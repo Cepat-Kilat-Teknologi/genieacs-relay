@@ -16,7 +16,7 @@ env:
   GHCR_REGISTRY: ghcr.io
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
   # Go version
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   # ========================
@@ -42,7 +42,7 @@ jobs:
 
       - name: Run Linter
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.59.0
           golangci-lint run --timeout=5m --verbose
 
       - name: Run Govulncheck
@@ -133,7 +133,7 @@ jobs:
 
       # Build and push to both registries
       - name: Build & Push Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile

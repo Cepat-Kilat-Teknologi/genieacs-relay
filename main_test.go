@@ -56,10 +56,15 @@ func TestParsingErrors(t *testing.T) {
 		band = getBand(wlanData, "3")
 		assert.Equal(t, "5GHz", band)
 
+		// WLAN key 4 falls back to 2.4GHz band based on key range (1-4)
 		wlanData = map[string]interface{}{
 			"Standard": map[string]interface{}{"_value": "unknown-std"},
 		}
 		band = getBand(wlanData, "4")
+		assert.Equal(t, "2.4GHz", band)
+
+		// Out-of-range key with unknown standard returns Unknown
+		band = getBand(wlanData, "99")
 		assert.Equal(t, "Unknown", band)
 	})
 

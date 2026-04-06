@@ -58,9 +58,7 @@ func (wp *workerPool) worker() {
 		switch t.taskType {
 		case taskTypeSetParams:
 			err = setParameterValues(ctx, t.deviceID, t.params)
-		case taskTypeApplyChanges:
-			err = refreshWLANConfig(ctx, t.deviceID)
-		case taskTypeRefreshWLAN:
+		case taskTypeApplyChanges, taskTypeRefreshWLAN:
 			err = refreshWLANConfig(ctx, t.deviceID)
 		default:
 			err = fmt.Errorf("unknown task type: %s", t.taskType)
@@ -80,17 +78,17 @@ func (wp *workerPool) worker() {
 	}
 }
 
-// Submit adds a new task to the worker pool queue for asynchronous processing
-// This version uses non-blocking send to prevent deadlocks when queue is full
-func (wp *workerPool) Submit(deviceID, taskType string, params [][]interface{}) {
+// Submit adds a new task to the worker pool queue for asynchronous processing.
+// Returns true if the task was queued, false if the queue is full.
+func (wp *workerPool) Submit(deviceID, taskType string, params [][]interface{}) bool {
 	select {
 	case wp.queue <- task{deviceID, taskType, params}:
-		// Task successfully queued
+		return true
 	default:
-		// Queue is full, log warning
 		logger.Warn("Worker pool queue full, task dropped",
 			zap.String("deviceID", deviceID),
 			zap.String("taskType", taskType),
 		)
+		return false
 	}
 }

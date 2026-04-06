@@ -30,11 +30,7 @@ func (c *deviceCache) get(deviceID string) (map[string]interface{}, bool) {
 		return nil, false // Return empty result if not found or expired
 	}
 	// Return deep copy to prevent external modifications affecting cache
-	result := make(map[string]interface{}, len(cached.data))
-	for k, v := range cached.data {
-		result[k] = v
-	}
-	return result, true
+	return deepCopyMap(cached.data), true
 }
 
 // set stores device data in cache with current timestamp
@@ -57,4 +53,29 @@ func (c *deviceCache) clearAll() {
 	c.mu.Lock() // Acquire write lock
 	defer c.mu.Unlock()
 	c.data = make(map[string]cachedDeviceData) // Reinitialize empty cache map
+}
+
+// deepCopyMap creates a recursive deep copy of a map[string]interface{}
+func deepCopyMap(src map[string]interface{}) map[string]interface{} {
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = deepCopyValue(v)
+	}
+	return dst
+}
+
+// deepCopyValue recursively copies a value
+func deepCopyValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		return deepCopyMap(val)
+	case []interface{}:
+		dst := make([]interface{}, len(val))
+		for i, item := range val {
+			dst[i] = deepCopyValue(item)
+		}
+		return dst
+	default:
+		return v // primitives (string, bool, float64, nil) are immutable
+	}
 }

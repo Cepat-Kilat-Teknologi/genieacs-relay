@@ -165,11 +165,16 @@ func ParseJSONRequest(w http.ResponseWriter, r *http.Request, v interface{}) boo
 }
 
 // SubmitWLANUpdate submits parameter updates to a device and clears cache.
-// This is a common pattern used across WLAN handlers.
-func SubmitWLANUpdate(deviceID string, parameterValues [][]interface{}) {
-	taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues)
-	taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil)
+// Returns an error if the worker pool queue is full and cannot accept tasks.
+func SubmitWLANUpdate(deviceID string, parameterValues [][]interface{}) error {
+	if !taskWorkerPool.Submit(deviceID, taskTypeSetParams, parameterValues) {
+		return fmt.Errorf("worker pool queue full, unable to submit setParameterValues task")
+	}
+	if !taskWorkerPool.Submit(deviceID, taskTypeApplyChanges, nil) {
+		return fmt.Errorf("worker pool queue full, unable to submit applyChanges task")
+	}
 	deviceCacheInstance.clear(deviceID)
+	return nil
 }
 
 // --- WLAN Security Parameter Builders ---
@@ -499,7 +504,7 @@ func buildChannelParams(wlan, channel string) [][]interface{} {
 		return [][]interface{}{{autoChannelPath, true, XSDBoolean}}
 	}
 	channelPath := fmt.Sprintf(PathWLANChannelFormat, wlan)
-	channelNum, _ := strconv.Atoi(channel)
+	channelNum, _ := strconv.Atoi(channel) // safe: channel is pre-validated by ValidateWLANChannel
 	return [][]interface{}{
 		{autoChannelPath, false, XSDBoolean},
 		{channelPath, channelNum, XSDUnsignedInt},

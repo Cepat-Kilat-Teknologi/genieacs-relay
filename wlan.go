@@ -162,25 +162,31 @@ func getPassword(wlan map[string]interface{}) string {
 func getBand(wlan map[string]interface{}, wlanKey string) string {
 	// Determine band based on WLAN interface key (common convention)
 	if wlanKey == "1" {
-		return "2.4GHz" // Typically WLAN1 is 2.4GHz
+		return "2.4GHz"
 	} else if wlanKey == "5" {
-		return "5GHz" // Typically WLAN5 is 5GHz
+		return "5GHz"
 	}
-	// Fall back to Standard field if key-based detection fails
+	// Try Standard field for other WLAN keys
 	if stdMap, ok := wlan["Standard"].(map[string]interface{}); ok {
 		if std, ok := stdMap["_value"].(string); ok {
-			std = strings.ToLower(std) // Normalize to lowercase
-			// Check for 2.4GHz standards
+			std = strings.ToLower(std)
 			if strings.ContainsAny(std, "bg") {
 				return "2.4GHz"
 			}
-			// Check for 5GHz standards
-			if strings.ContainsAny(std, "ac") {
+			if strings.Contains(std, "ac") || strings.Contains(std, "ax") {
 				return "5GHz"
 			}
 		}
 	}
-	// Return unknown if band cannot be determined
+	// Fallback: use WLAN key range to determine band
+	if keyNum, err := strconv.Atoi(wlanKey); err == nil {
+		if keyNum >= WLAN24GHzMin && keyNum <= WLAN24GHzMax {
+			return "2.4GHz"
+		}
+		if keyNum >= WLAN5GHzMin && keyNum <= WLAN5GHzMax {
+			return "5GHz"
+		}
+	}
 	return "Unknown"
 }
 

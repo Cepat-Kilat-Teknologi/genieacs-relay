@@ -194,7 +194,7 @@ const (
 	ErrInvalidAPIKey        = "Invalid API key"
 	ErrDeviceStale          = "device with IP %s is stale (last seen: %s ago). The IP may have been reassigned to another device"
 	ErrInvalidIPAddress     = "invalid IP address format: %s"
-	ErrInvalidWLANID        = "WLAN ID must be a number between 1 and 99"
+	ErrInvalidWLANID        = "WLAN ID must be a number between 1 and 8"
 	ErrRequestBodyTooLarge  = "Request body too large"
 	ErrSSIDInvalidChars     = "SSID contains invalid characters"
 	ErrInvalidAuthMode      = "Invalid authentication mode. Valid values: Open, WPA, WPA2, WPA/WPA2"
@@ -211,6 +211,8 @@ const (
 	ErrUpdateFieldRequired  = "At least one field must be provided for update"
 	ErrGetDeviceCapability  = "Failed to get device capability"
 	ErrGetWLANData          = "Failed to get WLAN data"
+	ErrWorkerPoolBusy       = "Server is busy processing other requests. Please try again shortly."
+	ErrDeletePrimaryWLAN    = "Cannot delete primary WLAN (ID 1 or 5). This would disable the device's primary WiFi connectivity."
 )
 
 // HTTP status messages for authentication

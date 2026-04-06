@@ -135,9 +135,6 @@ func executeWLANRetryLoop(ctx context.Context, deviceID string, maxRetries int, 
 		wlanData, err := getWLANData(ctx, deviceID)
 
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return nil, 0, context.DeadlineExceeded
-			}
 			logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Int("attempt", attempt+1), zap.Error(err))
 			return nil, 0, err
 		}
@@ -154,7 +151,11 @@ func executeWLANRetryLoop(ctx context.Context, deviceID string, maxRetries int, 
 			refreshDone = true
 		}
 
-		time.Sleep(retryDelay)
+		select {
+		case <-ctx.Done():
+			return nil, 0, context.DeadlineExceeded
+		case <-time.After(retryDelay):
+		}
 	}
 
 	return nil, maxRetries, fmt.Errorf("max retries exceeded")
@@ -195,7 +196,10 @@ func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Submit refresh task to worker pool for asynchronous processing
-	taskWorkerPool.Submit(deviceID, taskTypeRefreshWLAN, nil)
+	if !taskWorkerPool.Submit(deviceID, taskTypeRefreshWLAN, nil) {
+		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		return
+	}
 	// Clear cached data for this device to force fresh data on next request
 	deviceCacheInstance.clear(deviceID)
 	// Return accepted response indicating task was queued

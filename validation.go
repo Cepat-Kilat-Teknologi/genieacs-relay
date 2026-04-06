@@ -31,19 +31,22 @@ func validateIP(ip string) error {
 		return errors.New("unspecified addresses are not allowed")
 	}
 
+	// Reject IPv6 — GenieACS NBI queries only search IPv4 WAN fields
+	if parsed.To4() == nil {
+		return errors.New("IPv6 addresses are not supported, use IPv4")
+	}
+
 	return nil
 }
 
-// validateWLANID validates that the WLAN ID is a numeric value between 1 and 99
-// This prevents path injection and ensures the WLAN ID is in a valid range
+// validateWLANID validates that the WLAN ID is a numeric value between 1 and 8
+// IDs 1-4 are for 2.4GHz, IDs 5-8 are for 5GHz (dual-band devices only)
 func validateWLANID(wlanID string) error {
-	// Check if it's a valid number
 	num, err := strconv.Atoi(wlanID)
 	if err != nil {
 		return errors.New(ErrInvalidWLANID)
 	}
-	// Check if it's in valid range (1-99)
-	if num < 1 || num > 99 {
+	if num < WLAN24GHzMin || num > WLAN5GHzMax {
 		return errors.New(ErrInvalidWLANID)
 	}
 	return nil

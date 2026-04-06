@@ -303,10 +303,13 @@ func (rl *rateLimiter) cleanup() {
 	}
 }
 
-// apiKeyAuthMiddleware validates X-API-Key header for incoming requests
-// Uses constant-time comparison to prevent timing attacks
-// Implements brute force protection with per-IP lockout after max failed attempts
-// Logs authentication events for security auditing
+// apiKeyAuthMiddleware validates X-API-Key header for incoming requests.
+// Uses constant-time comparison to prevent timing attacks.
+// Implements brute force protection with per-IP lockout after max failed attempts.
+//
+// SECURITY NOTE: X-Real-IP header is trusted if it contains a valid IP.
+// In multi-hop proxy environments, deploy behind a reverse proxy (nginx, envoy)
+// that strips and re-sets X-Real-IP from the actual client connection.
 func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get client IP for logging and rate limiting
@@ -448,9 +451,10 @@ func corsMiddleware(allowedOrigins []string, maxAge int) func(next http.Handler)
 // to protect against common web vulnerabilities like XSS, clickjacking, etc.
 func securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// HTTP Strict Transport Security (HSTS) - enforce HTTPS connections
-		// max-age=31536000 (1 year), includeSubDomains for all subdomains
-		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		// HTTP Strict Transport Security (HSTS) - only set when behind TLS
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		// Prevent MIME type sniffing
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		// Prevent clickjacking by denying iframe embedding

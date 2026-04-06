@@ -1,8 +1,8 @@
 services:
   api:
-    # Use pinned version for production, or 'latest' for development
-    # Alternative: ghcr.io/cepat-kilat-teknologi/genieacs-relay:1.0.0
-    image: cepatkilatteknologi/genieacs-relay:1.0.0
+    # Set RELAY_VERSION in .env or override: RELAY_VERSION=1.2.0 docker compose up
+    # Alternative registry: ghcr.io/cepat-kilat-teknologi/genieacs-relay
+    image: cepatkilatteknologi/genieacs-relay:${RELAY_VERSION:-latest}
     container_name: genieacs-relay
     env_file:
       - .env

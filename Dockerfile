@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: Development
-FROM golang:1.25-alpine AS development
+FROM golang:1.26-alpine AS development
 RUN apk add --no-cache git build-base
 RUN go install github.com/air-verse/air@latest
 WORKDIR /app
@@ -11,22 +11,21 @@ COPY . .
 CMD ["air", "-c", ".air.toml"]
 
 # Stage 2: Builder untuk multi-platform
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETARCH
 ARG TARGETOS
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-RUN go mod tidy
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-w -s -X main.version=${VERSION:-dev}" \
     -o /app/main .
 
 # Stage 3: Final image
-FROM alpine:3.19 AS production
+FROM alpine:3.21 AS production
 LABEL org.opencontainers.image.source="https://github.com/Cepat-Kilat-Teknologi/genieacs-relay"
-RUN apk add --no-cache tzdata ca-certificates curl \
+RUN apk add --no-cache tzdata ca-certificates \
     && cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime \
     && echo "Asia/Jakarta" > /etc/timezone \
     && apk del tzdata \
@@ -38,6 +37,6 @@ COPY --from=builder --chown=appuser:appgroup /app/main /app/main
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD wget -q --spider http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["/app/main"]
