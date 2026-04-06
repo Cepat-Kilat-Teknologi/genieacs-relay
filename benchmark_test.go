@@ -70,6 +70,6 @@ func BenchmarkSanitizeErrorMessage(b *testing.B) {
 // BenchmarkValidateWLANID benchmarks WLAN ID validation
 func BenchmarkValidateWLANID(b *testing.B) {
 	for b.Loop() {
-		validateWLANID("5")
+		_ = validateWLANID("5")
 	}
 }

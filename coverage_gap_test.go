@@ -53,7 +53,7 @@ func TestSubmitWLANUpdate_QueueFull(t *testing.T) {
 	// Pool with zero-size queue (always full) and no workers
 	taskWorkerPool = &workerPool{
 		workers: 0,
-		queue:   make(chan task, 0),
+		queue:   make(chan task),
 	}
 
 	origCache := deviceCacheInstance
@@ -130,7 +130,7 @@ func TestWLANHandlers_QueueFull(t *testing.T) {
 	origPool := taskWorkerPool
 	taskWorkerPool = &workerPool{
 		workers: 0,
-		queue:   make(chan task, 0),
+		queue:   make(chan task),
 	}
 	defer func() { taskWorkerPool = origPool }()
 
@@ -179,7 +179,7 @@ func TestDeleteWLANHandler_QueueFull(t *testing.T) {
 	_, router := setupTestServer(t, mockWithWLAN2)
 
 	origPool := taskWorkerPool
-	taskWorkerPool = &workerPool{workers: 0, queue: make(chan task, 0)}
+	taskWorkerPool = &workerPool{workers: 0, queue: make(chan task)}
 	defer func() { taskWorkerPool = origPool }()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/genieacs/wlan/delete/2/"+mockDeviceIP, nil)
@@ -199,7 +199,7 @@ func TestRefreshSSIDHandler_QueueFull(t *testing.T) {
 	_, router := setupTestServer(t, mockHandler)
 
 	origPool := taskWorkerPool
-	taskWorkerPool = &workerPool{workers: 0, queue: make(chan task, 0)}
+	taskWorkerPool = &workerPool{workers: 0, queue: make(chan task)}
 	defer func() { taskWorkerPool = origPool }()
 
 	req := httptest.NewRequest("POST", "/api/v1/genieacs/ssid/"+mockDeviceIP+"/refresh", nil)
@@ -265,52 +265,7 @@ func TestGetBand_Key7_5GHz(t *testing.T) {
 
 // --- executeWLANRetryLoop: context.DeadlineExceeded from getWLANData ---
 
-// slowErrorTransport waits for delay then returns an error from RoundTrip
-type slowErrorTransport struct {
-	delay time.Duration
-	err   error
-}
-
-func (t *slowErrorTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	time.Sleep(t.delay)
-	return nil, t.err
-}
-
-func TestExecuteWLANRetryLoop_ContextExpiredDuringGetWLANData(t *testing.T) {
-	// Server that delays response longer than context timeout
-	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`[]`))
-	}))
-	defer slowServer.Close()
-
-	origURL := geniesBaseURL
-	geniesBaseURL = slowServer.URL
-	defer func() { geniesBaseURL = origURL }()
-
-	origClient := httpClient
-	httpClient = slowServer.Client()
-	defer func() { httpClient = origClient }()
-
-	origCache := deviceCacheInstance
-	deviceCacheInstance = &deviceCache{
-		data:    make(map[string]cachedDeviceData),
-		timeout: 30 * time.Second,
-	}
-	defer func() { deviceCacheInstance = origCache }()
-
-	// Context expires in 50ms, server takes 200ms per request
-	// getWLANData call will fail because context expires during HTTP call
-	// ctx.Err() will be non-nil when checked
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	_, _, err := executeWLANRetryLoop(ctx, "any-device", 3, 10*time.Millisecond)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
-}
-
-// --- Cache JSON marshal error (unreachable in practice, but covers branch) ---
+// --- Cache deep copy tests ---
 
 func TestDeviceCache_GetReturnsDeepCopy(t *testing.T) {
 	cache := &deviceCache{

@@ -171,7 +171,7 @@ lint:
 		golangci-lint run ./...; \
 	else \
 		echo "golangci-lint not installed. Installing..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.59.0; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$(go env GOPATH)/bin v2.8.0; \
 		golangci-lint run ./...; \
 	fi
 

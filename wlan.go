@@ -161,9 +161,10 @@ func getPassword(wlan map[string]interface{}) string {
 // getBand determines the frequency band based on WLAN key and Standard field
 func getBand(wlan map[string]interface{}, wlanKey string) string {
 	// Determine band based on WLAN interface key (common convention)
-	if wlanKey == "1" {
+	switch wlanKey {
+	case "1":
 		return "2.4GHz"
-	} else if wlanKey == "5" {
+	case "5":
 		return "5GHz"
 	}
 	// Try Standard field for other WLAN keys
