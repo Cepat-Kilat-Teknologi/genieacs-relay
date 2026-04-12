@@ -75,6 +75,15 @@ Error code constants are defined in `error_codes.go`: `VALIDATION_ERROR`, `UNAUT
 
 ### Fixed
 
+- **Alpine base image security upgrade (CVE-2026-28390)** — Trivy image scan on
+  the post-merge edge build flagged 2 HIGH vulnerabilities in the alpine 3.21 base
+  (`libcrypto3`/`libssl3` 3.3.6-r0 — openssl NULL pointer dereference in CMS,
+  fixed in 3.3.7-r0). Added `apk update && apk upgrade --no-cache` as the first
+  step of the production stage so every rebuild picks up the latest patched
+  packages from the live alpine 3.21 repo without needing to chase minor base
+  image bumps. Local Trivy rescan after fix: **0 CRITICAL / 0 HIGH**. This fix
+  is included in the `v2.0.0` git tag (commit `317f15c`) so all published
+  `v2.0.0` Docker images already ship with the patched packages.
 - **`refreshDHCP` / `refreshWLANConfig` rejected HTTP 202 Accepted** — both functions
   checked `resp.StatusCode != http.StatusOK` which caused `/dhcp-client?refresh=true`
   and `/force/ssid` refresh path to always return 500 whenever GenieACS returned a
@@ -82,8 +91,6 @@ Error code constants are defined in `error_codes.go`: `VALIDATION_ERROR`, `UNAUT
   successfully queued). Fixed to accept any `status < 400` as success. Discovered
   during real-device integration testing on ZTE F670L with live genieacs-stack;
   prior CI tests mocked the HTTP response and never hit the real 202 case.
-  **This was the only runtime bug in the v2 release**; all other v2 work was
-  additive standardization.
 - **ldflags injection silently broken** — Dockerfile previously used
   `-X main.version=${VERSION:-dev}` where `VERSION` was never declared as an `ARG`,
   so shell expansion always emitted `dev`. Fixed via explicit `ARG APP_VERSION`,
@@ -164,13 +171,53 @@ own read endpoints to confirm the change is visible end-to-end.
 - [x] `X-Idempotency-Key` middleware (request-level, in-memory)
 - [x] Multi-arch Docker (amd64/arm64/arm/v7)
 - [x] zap logging with `service`, `version`, `module`, `request_id` base fields
-- [x] Test coverage ≥ 95% (actual: 98.1%)
+- [x] **Test coverage: 100.0%** (baseline match)
 - [x] `golangci-lint` v2 clean, `govulncheck` clean, `go test -race` clean
+- [x] Trivy image scan clean: 0 CRITICAL, 0 HIGH (after post-merge apk upgrade fix)
+
+### Release Timeline
+
+| Date (UTC) | Commit | Event |
+|---|---|---|
+| 2026-04-12 13:11 | `7d0b303` | PR #2 (v2.0.0 feat) squashed → `main` |
+| 2026-04-12 13:48 | `317f15c` | PR #3 (Dockerfile apk upgrade, CVE-2026-28390) squashed → `main` |
+| 2026-04-12 13:56 | `317f15c` | **Tag `v2.0.0` created and pushed** |
+| 2026-04-12 14:00 | — | GitHub Release `v2.0.0` published |
+| 2026-04-12 14:09 | `8704e46` | PR #4 (examples/ version pins to 2.0.0) squashed → `main` (post-release docs) |
+
+### Docker Images Published
+
+**Docker Hub:** `cepatkilatteknologi/genieacs-relay`
+**GHCR:** `ghcr.io/cepat-kilat-teknologi/genieacs-relay`
+
+Published tags (both registries):
+- `2.0.0`
+- `2.0`
+- `2`
+- `latest`
+- `edge` (built from `main`)
+
+Multi-arch: `linux/amd64`, `linux/arm64`, `linux/arm/v7`.
+
+```bash
+# Production pin
+docker pull cepatkilatteknologi/genieacs-relay:2.0.0
+
+# Verify
+docker run --rm -p 8080:8080 cepatkilatteknologi/genieacs-relay:2.0.0 &
+curl -s localhost:8080/version
+# {"version":"2.0.0","commit":"317f15c",...}
+```
+
+### Helm Chart
+
+Chart `genieacs-relay v0.2.0` (appVersion `2.0.0`) auto-released by the `Helm Chart Release` workflow when `examples/helm/genieacs-relay/Chart.yaml` was updated in PR #4.
 
 [adapter-std]: https://github.com/Cepat-Kilat-Teknologi/knowledge-base/blob/main/wiki/isp-adapter-standard.md
 [logging-std]: https://github.com/Cepat-Kilat-Teknologi/knowledge-base/blob/main/wiki/isp-logging-standard.md
 [freeradius-api]: https://github.com/Cepat-Kilat-Teknologi/freeradius-api
 [go-snmp-olt-zte-c320]: https://github.com/Cepat-Kilat-Teknologi/go-snmp-olt-zte-c320
+[write-olt-zte-c320-svc]: https://github.com/Cepat-Kilat-Teknologi/write-olt-zte-c320
 
 ## [2.x] and earlier
 
