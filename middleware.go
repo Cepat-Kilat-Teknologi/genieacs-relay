@@ -179,12 +179,13 @@ func AuditLog(eventType, clientIP, deviceID, details string) {
 
 // AuditLogWithFields logs security-relevant events with additional fields
 func AuditLogWithFields(eventType, clientIP, deviceID string, fields map[string]interface{}) {
-	zapFields := []zap.Field{
+	zapFields := make([]zap.Field, 0, 4+len(fields))
+	zapFields = append(zapFields,
 		zap.String("event", eventType),
 		zap.String("client_ip", clientIP),
 		zap.String("device_id", deviceID),
 		zap.Time("timestamp", time.Now()),
-	}
+	)
 
 	for k, v := range fields {
 		zapFields = append(zapFields, zap.Any(k, v))
@@ -328,7 +329,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 				zap.String("ip", clientIP),
 				zap.Duration("remaining", remaining))
 			w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
-			sendError(w, http.StatusTooManyRequests, "Too Many Requests",
+			sendError(w, r, http.StatusTooManyRequests, ErrCodeRateLimited,
 				"Too many failed authentication attempts. Please try again later.")
 			return
 		}
@@ -343,7 +344,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 			logger.Warn("Authentication failed: missing API key",
 				zap.String("ip", clientIP),
 				zap.String("method", r.Method))
-			sendError(w, http.StatusUnauthorized, StatusUnauthorized, ErrMissingAPIKey)
+			sendError(w, r, http.StatusUnauthorized, ErrCodeUnauthorized, ErrMissingAPIKey)
 			return
 		}
 
@@ -354,7 +355,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 			logger.Warn("Authentication failed: invalid API key",
 				zap.String("ip", clientIP),
 				zap.String("method", r.Method))
-			sendError(w, http.StatusUnauthorized, StatusUnauthorized, ErrInvalidAPIKey)
+			sendError(w, r, http.StatusUnauthorized, ErrCodeUnauthorized, ErrInvalidAPIKey)
 			return
 		}
 
@@ -385,7 +386,7 @@ func rateLimitMiddleware(rl *rateLimiter) func(next http.Handler) http.Handler {
 
 			// Check rate limit
 			if !rl.Allow(ip) {
-				sendError(w, http.StatusTooManyRequests, "Too Many Requests", "Rate limit exceeded. Please try again later.")
+				sendError(w, r, http.StatusTooManyRequests, ErrCodeRateLimited, "Rate limit exceeded. Please try again later.")
 				return
 			}
 

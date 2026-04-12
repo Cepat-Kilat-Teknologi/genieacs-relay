@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"go.uber.org/zap"
 )
 
 // getEnv retrieves environment variable value with fallback to default if not set
@@ -27,7 +25,7 @@ func initLoggerWrapper() error {
 	return nil
 }
 
-// Function to initialize logger (package-level variable for testing)
-var initLogger = func() (*zap.Logger, error) {
-	return zap.NewProduction() // Use production configuration for logger
-}
+// initLogger is the package-level logger factory, overridable in tests.
+// Delegates to initProductionLogger() which attaches the standardized base fields
+// (service, version) per isp-logging-standard. Tests override this to capture logs.
+var initLogger = initProductionLogger

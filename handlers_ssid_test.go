@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -158,7 +159,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		// Check for error response
 		if rr.Code != http.StatusOK {
-			t.Fatalf("Unexpected response status %d: %s", rr.Code, resp.Error)
+			t.Fatalf("Unexpected response status %d: %s", rr.Code, fmt.Sprint(resp.Data))
 		}
 
 		require.NotNil(t, resp.Data, "Response data should not be nil")
@@ -219,7 +220,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 
 		if rr.Code != http.StatusOK {
-			t.Fatalf("Unexpected response status %d: %s", rr.Code, resp.Error)
+			t.Fatalf("Unexpected response status %d: %s", rr.Code, fmt.Sprint(resp.Data))
 		}
 
 		data, ok := resp.Data.(map[string]interface{})
@@ -252,7 +253,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Equal(t, "Device not found", resp.Error)
+		assert.Equal(t, "Device not found", fmt.Sprint(resp.Data))
 	})
 
 	// Subtest: Timeout (covers errors.Is(err, context.DeadlineExceeded))
@@ -289,7 +290,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Equal(t, "Operation timed out while retrieving WLAN data", resp.Error)
+		assert.Equal(t, "Operation timed out while retrieving WLAN data", fmt.Sprint(resp.Data))
 	})
 
 	// Subtest: Custom retry parameters
@@ -374,7 +375,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Contains(t, resp.Error, "No WLAN data found after 2 attempts")
+		assert.Contains(t, fmt.Sprint(resp.Data), "No WLAN data found after 2 attempts")
 	})
 
 	// Subtest: Error getting WLAN data
@@ -403,7 +404,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.NotEmpty(t, resp.Error)
+		assert.NotEmpty(t, fmt.Sprint(resp.Data))
 	})
 
 	// Subtest: Refresh error but eventually succeeds
@@ -627,7 +628,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		assert.Equal(t, http.StatusRequestTimeout, rr.Code)
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Equal(t, "Operation timed out while retrieving WLAN data", resp.Error)
+		assert.Equal(t, "Operation timed out while retrieving WLAN data", fmt.Sprint(resp.Data))
 	})
 
 	// Subtest: max_retries out of bounds (negative)

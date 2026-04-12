@@ -238,7 +238,7 @@ func TestWLANIDValidationInHandlers(t *testing.T) {
 
 			var resp Response
 			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-			assert.Contains(t, resp.Error, ErrInvalidWLANID, "Error should mention invalid WLAN ID for %s", wlanID)
+			assert.Contains(t, fmt.Sprint(resp.Data), ErrInvalidWLANID, "Error should mention invalid WLAN ID for %s", wlanID)
 		}
 	})
 }
@@ -343,7 +343,7 @@ func TestSSIDCharacterValidationInHandler(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Contains(t, resp.Error, ErrSSIDInvalidChars)
+		assert.Contains(t, fmt.Sprint(resp.Data), ErrSSIDInvalidChars)
 	})
 
 	t.Run("SSID with non-ASCII characters is rejected", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestSSIDCharacterValidationInHandler(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Contains(t, resp.Error, ErrSSIDInvalidChars)
+		assert.Contains(t, fmt.Sprint(resp.Data), ErrSSIDInvalidChars)
 	})
 
 	t.Run("Valid SSID is accepted", func(t *testing.T) {

@@ -1,5 +1,10 @@
 # TODO — Agent Integration Readiness
 
+> **STATUS: COMPLETED in v2.0.0 (2026-04-12).**
+> All items below were resolved on the `feature/v3-standardization` branch.
+> See `CHANGELOG.md` v2.0.0 section for the full diff and `CLAUDE.md` for the
+> updated architecture notes. This file is retained as a historical record.
+
 Standardization tasks agar genieacs-relay siap diintegrasikan dengan billing-agent.
 Reference format: freeradius-api v1.2.0.
 

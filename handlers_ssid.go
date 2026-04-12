@@ -38,11 +38,11 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 500 if WLAN data retrieval fails
 		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, sanitizeErrorMessage(err))
 		return
 	}
 	// Return successful response with WLAN data
-	sendResponse(w, http.StatusOK, StatusOK, wlanData)
+	sendResponse(w, http.StatusOK, wlanData)
 }
 
 // getSSIDByIPForceHandler retrieves WLAN/SSID information, triggering refresh if needed
@@ -81,12 +81,12 @@ func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
 	// Execute retry loop
 	wlanData, attempts, err := executeWLANRetryLoop(ctx, deviceID, maxRetries, retryDelay)
 	if err != nil {
-		handleWLANRetryError(w, err, maxRetries)
+		handleWLANRetryError(w, r, err, maxRetries)
 		return
 	}
 
 	// Return successful response
-	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
+	sendResponse(w, http.StatusOK, map[string]interface{}{
 		"wlan_data": wlanData,
 		"attempts":  attempts,
 	})
@@ -162,16 +162,16 @@ func executeWLANRetryLoop(ctx context.Context, deviceID string, maxRetries int, 
 }
 
 // handleWLANRetryError handles errors from the WLAN retry loop
-func handleWLANRetryError(w http.ResponseWriter, err error, maxRetries int) {
+func handleWLANRetryError(w http.ResponseWriter, r *http.Request, err error, maxRetries int) {
 	if errors.Is(err, context.DeadlineExceeded) {
-		sendError(w, http.StatusRequestTimeout, StatusTimeout, ErrOperationTimeout)
+		sendError(w, r, http.StatusRequestTimeout, ErrCodeTimeout, ErrOperationTimeout)
 		return
 	}
 	if err.Error() == "max retries exceeded" {
-		sendError(w, http.StatusNotFound, StatusNotFound, fmt.Sprintf(ErrNoWLANDataFound, maxRetries))
+		sendError(w, r, http.StatusNotFound, ErrCodeNotFound, fmt.Sprintf(ErrNoWLANDataFound, maxRetries))
 		return
 	}
-	sendError(w, http.StatusInternalServerError, StatusInternalError, sanitizeErrorMessage(err))
+	sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, sanitizeErrorMessage(err))
 }
 
 // refreshSSIDHandler triggers a refresh of WLAN configuration data for a device
@@ -197,13 +197,13 @@ func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Submit refresh task to worker pool for asynchronous processing
 	if !taskWorkerPool.Submit(deviceID, taskTypeRefreshWLAN, nil) {
-		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		sendError(w, r, http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrWorkerPoolBusy)
 		return
 	}
 	// Clear cached data for this device to force fresh data on next request
 	deviceCacheInstance.clear(deviceID)
 	// Return accepted response indicating task was queued
-	sendResponse(w, http.StatusAccepted, StatusAccepted, map[string]string{
+	sendResponse(w, http.StatusAccepted, map[string]string{
 		"message": MsgRefreshSubmitted,
 	})
 }

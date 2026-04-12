@@ -51,36 +51,38 @@ func getDHCPClients(ctx context.Context, deviceID string) ([]DHCPClient, error) 
 	}
 
 	// Process each DHCP client entry
-	var clients []DHCPClient
+	clients := make([]DHCPClient, 0, len(hosts))
 	for _, host := range hosts {
 		// Type assert to map for individual host data
-		if hostData, ok := host.(map[string]interface{}); ok {
-			var client DHCPClient
-
-			// Extract MAC address from host data
-			if valMap, ok := hostData["MACAddress"].(map[string]interface{}); ok {
-				if val, ok := valMap["_value"].(string); ok {
-					client.MAC = val
-				}
-			}
-
-			// Extract hostname from host data
-			if valMap, ok := hostData["HostName"].(map[string]interface{}); ok {
-				if val, ok := valMap["_value"].(string); ok {
-					client.Hostname = val
-				}
-			}
-
-			// Extract IP address from host data
-			if valMap, ok := hostData["IPAddress"].(map[string]interface{}); ok {
-				if val, ok := valMap["_value"].(string); ok {
-					client.IP = val
-				}
-			}
-
-			// Add client to results slice
-			clients = append(clients, client)
+		hostData, ok := host.(map[string]interface{})
+		if !ok {
+			continue
 		}
+		var client DHCPClient
+
+		// Extract MAC address from host data
+		if valMap, ok := hostData["MACAddress"].(map[string]interface{}); ok {
+			if val, ok := valMap["_value"].(string); ok {
+				client.MAC = val
+			}
+		}
+
+		// Extract hostname from host data
+		if valMap, ok := hostData["HostName"].(map[string]interface{}); ok {
+			if val, ok := valMap["_value"].(string); ok {
+				client.Hostname = val
+			}
+		}
+
+		// Extract IP address from host data
+		if valMap, ok := hostData["IPAddress"].(map[string]interface{}); ok {
+			if val, ok := valMap["_value"].(string); ok {
+				client.IP = val
+			}
+		}
+
+		// Add client to results slice
+		clients = append(clients, client)
 	}
 	return clients, nil
 }
@@ -98,8 +100,10 @@ func refreshDHCP(ctx context.Context, deviceID string) error {
 	}
 	// Ensure the response body is properly closed
 	defer safeClose(resp.Body)
-	// Check for a successful HTTP response
-	if resp.StatusCode != http.StatusOK {
+	// GenieACS NBI returns 200 OK when ?connection_request succeeds (task applied synchronously)
+	// or 202 Accepted when the task is queued (connection request failed or is async).
+	// Both are successful task submissions per the NBI contract — only 4xx/5xx are errors.
+	if resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("refresh failed with status: %s", resp.Status)
 	}
 	return nil

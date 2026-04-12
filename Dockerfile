@@ -14,12 +14,19 @@ CMD ["air", "-c", ".air.toml"]
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETARCH
 ARG TARGETOS
+# Build metadata injected into the binary via ldflags. CI should pass APP_VERSION,
+# APP_COMMIT, and APP_BUILD_TIME so /version and the X-App-Version header return
+# real values instead of the "dev"/"none"/"unknown" defaults. See cmd/api/main.go
+# for the lowercase var targets — a casing mismatch makes -X silently no-op.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=none
+ARG APP_BUILD_TIME=unknown
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-    -ldflags="-w -s -X main.version=${VERSION:-dev}" \
+    -ldflags="-w -s -X main.version=${APP_VERSION} -X main.commit=${APP_COMMIT} -X main.buildTs=${APP_BUILD_TIME}" \
     -o /app/main .
 
 # Stage 3: Final image

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 // healthCheckHandler handles health check requests to verify service status
@@ -14,7 +17,29 @@ import (
 //	@Router			/health [get]
 func healthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	// Return simple health status response indicating service is operational
-	sendResponse(w, http.StatusOK, "OK", map[string]string{"status": "healthy"})
+	sendResponse(w, http.StatusOK, HealthResponse{Status: "healthy"})
+}
+
+// versionHandler returns build metadata injected via ldflags at compile time.
+//
+//	@Summary		Version info
+//	@Description	Returns binary build metadata (version, commit, build_time, api_version, uptime). Does not require authentication.
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	VersionResponse
+//	@Router			/version [get]
+func versionHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(VersionResponse{
+		Version:    BuildVersion(),
+		Commit:     BuildCommit(),
+		BuildTime:  BuildDate(),
+		APIVersion: APIVersion,
+		Uptime:     Uptime(),
+	}); err != nil {
+		logger.Error("Failed to encode version response", zap.Error(err))
+	}
 }
 
 // clearCacheHandler handles requests to clear device cache (specific device or all)
@@ -45,5 +70,5 @@ func clearCacheHandler(w http.ResponseWriter, r *http.Request) {
 		AuditLog(AuditEventCacheClear, clientIP, "", "All device cache cleared")
 	}
 	// Return success response indicating cache was cleared
-	sendResponse(w, http.StatusOK, StatusOK, map[string]string{"message": MsgCacheCleared})
+	sendResponse(w, http.StatusOK, map[string]string{"message": MsgCacheCleared})
 }

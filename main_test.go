@@ -231,7 +231,7 @@ func TestFullCoverageScenarios(t *testing.T) {
 		defer func() { logger = originalLogger }()
 
 		rr := httptest.NewRecorder()
-		sendResponse(rr, http.StatusOK, "OK", make(chan int))
+		sendResponse(rr, http.StatusOK, make(chan int))
 		assert.Contains(t, buffer.String(), "Failed to encode JSON response")
 	})
 
@@ -243,7 +243,8 @@ func TestFullCoverageScenarios(t *testing.T) {
 		defer func() { logger = originalLogger }()
 
 		errorWriter := &errorResponseWriter{}
-		sendError(errorWriter, http.StatusInternalServerError, "Error", "msg")
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		sendError(errorWriter, req, http.StatusInternalServerError, ErrCodeInternal, "msg")
 		assert.Contains(t, buffer.String(), "Failed to encode JSON error response")
 	})
 }

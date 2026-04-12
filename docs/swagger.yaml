@@ -88,6 +88,16 @@ definitions:
         description: MAC address of the client device
         type: string
     type: object
+  main.DependencyState:
+    description: Dependency reachability state for /readyz
+    properties:
+      error:
+        example: ""
+        type: string
+      state:
+        example: up
+        type: string
+    type: object
   main.DeviceCapabilityResponse:
     description: Device capability response
     properties:
@@ -158,18 +168,32 @@ definitions:
         description: 'Transmit power percentage: 0, 20, 40, 60, 80, 100'
         type: integer
     type: object
+  main.ReadinessResponse:
+    description: Readiness probe response including per-dependency health
+    properties:
+      dependencies:
+        additionalProperties:
+          $ref: '#/definitions/main.DependencyState'
+        type: object
+      status:
+        example: ready
+        type: string
+    type: object
   main.Response:
     properties:
       code:
         description: HTTP status code
         type: integer
       data:
-        description: Response payload data when successful
-      error:
-        description: Error description when operation fails
+        description: Response payload (success) OR error detail (string/field list)
+      error_code:
+        description: Machine-readable error code (VALIDATION_ERROR, NOT_FOUND, ...)
+        type: string
+      request_id:
+        description: Correlation ID from X-Request-ID header
         type: string
       status:
-        description: Status message (e.g., "OK", "Error")
+        description: '"success" for 2xx, HTTP reason phrase for errors'
         type: string
     type: object
   main.SSIDForceResponse:
@@ -213,11 +237,42 @@ definitions:
       wlan_id:
         type: integer
     type: object
+  main.VersionResponse:
+    description: Version and build metadata response
+    properties:
+      api_version:
+        example: v1
+        type: string
+      build_time:
+        example: "2026-04-12T05:34:07Z"
+        type: string
+      commit:
+        example: a2a62e0
+        type: string
+      uptime:
+        example: 2h15m30s
+        type: string
+      version:
+        example: 2.0.0
+        type: string
+    type: object
   main.WLANConfig:
     properties:
+      auth_mode:
+        description: Authentication mode (Open, WPA, WPA2, WPA/WPA2)
+        type: string
       band:
         description: Frequency band (2.4GHz, 5GHz, etc.)
         type: string
+      encryption:
+        description: Encryption mode (AES, TKIP, TKIP+AES)
+        type: string
+      hidden:
+        description: True if SSID is not broadcast
+        type: boolean
+      max_clients:
+        description: Maximum number of associated devices
+        type: integer
       password:
         description: Security key/password for the WLAN
         type: string
@@ -559,6 +614,51 @@ paths:
       summary: Health check
       tags:
       - Health
+  /healthz:
+    get:
+      description: Kubernetes liveness probe — returns 200 when the process is running.
+        Does not check downstream dependencies.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.HealthResponse'
+      summary: Liveness probe
+      tags:
+      - Health
+  /metrics:
+    get:
+      description: Prometheus exposition format for service metrics. No authentication
+        required.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+      summary: Prometheus metrics
+      tags:
+      - Health
+  /readyz:
+    get:
+      description: Kubernetes readiness probe — returns 200 when all upstream dependencies
+        (GenieACS) are reachable, 503 when any dependency is down. Results cached
+        with TTL to avoid probe storms.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.ReadinessResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ReadinessResponse'
+      summary: Readiness probe
+      tags:
+      - Health
   /ssid/{ip}:
     get:
       consumes:
@@ -657,6 +757,20 @@ paths:
       summary: Trigger SSID refresh
       tags:
       - SSID
+  /version:
+    get:
+      description: Returns binary build metadata (version, commit, build_time, api_version,
+        uptime). Does not require authentication.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.VersionResponse'
+      summary: Version info
+      tags:
+      - Health
   /wlan/available/{ip}:
     get:
       description: Returns available WLAN slots for creating new WiFi networks based

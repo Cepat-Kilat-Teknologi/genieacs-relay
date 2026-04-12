@@ -59,7 +59,7 @@ func TestExtractDeviceIDByIP_Integration(t *testing.T) {
 		r.Get("/test/{ip}", func(w http.ResponseWriter, r *http.Request) {
 			deviceID, ok := ExtractDeviceIDByIP(w, r)
 			if ok {
-				sendResponse(w, http.StatusOK, StatusOK, map[string]string{"device_id": deviceID})
+				sendResponse(w, http.StatusOK, map[string]string{"device_id": deviceID})
 			}
 		})
 

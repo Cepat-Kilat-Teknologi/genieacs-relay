@@ -54,10 +54,37 @@ const (
 // Authentication middleware configuration
 const (
 	// DefaultAuthKey is intentionally empty - MUST be set via AUTH_KEY environment variable when MIDDLEWARE_AUTH=true
-	DefaultAuthKey    = ""
+	DefaultAuthKey = ""
+	//nolint:gosec // G101: header name, not a credential
 	HeaderXAPIKey     = "X-API-Key"
 	EnvMiddlewareAuth = "MIDDLEWARE_AUTH"
 	EnvAuthKey        = "AUTH_KEY"
+)
+
+// Boolean string representations for env var parsing
+const (
+	BoolStrTrue  = "true"
+	BoolStrFalse = "false"
+)
+
+// API versioning
+const (
+	// APIVersion is the public API major version exposed via X-API-Version header and /version endpoint.
+	APIVersion = "v1"
+)
+
+// Standardized response status strings (per isp-adapter-standard)
+const (
+	StatusSuccess = "success"
+)
+
+// User-facing auth mode and encryption names (keys for ValidAuthModes/ValidEncryptions maps)
+const (
+	UIAuthModeOpen    = "Open"
+	UIAuthModeWPA     = "WPA"
+	UIAuthModeWPA2    = "WPA2"
+	UIAuthModeWPAWPA2 = "WPA/WPA2"
+	UIEncryptionAES   = "AES"
 )
 
 // NBI (Northbound Interface) authentication configuration
@@ -190,8 +217,6 @@ const (
 	ErrPasswordTooLong      = "Password must be at most 63 characters"
 	ErrWLANValidationFailed = "Could not verify WLAN status."
 	ErrOperationTimeout     = "Operation timed out while retrieving WLAN data"
-	ErrMissingAPIKey        = "Missing X-API-Key header"
-	ErrInvalidAPIKey        = "Invalid API key"
 	ErrDeviceStale          = "device with IP %s is stale (last seen: %s ago). The IP may have been reassigned to another device"
 	ErrInvalidIPAddress     = "invalid IP address format: %s"
 	ErrInvalidWLANID        = "WLAN ID must be a number between 1 and 8"
@@ -218,6 +243,14 @@ const (
 // HTTP status messages for authentication
 const (
 	StatusUnauthorized = "Unauthorized"
+)
+
+// Auth-related error message strings (extracted to separate block to satisfy gosec G101 nolint scoping)
+//
+//nolint:gosec // G101: error message strings, not credentials
+const (
+	ErrMissingAPIKey = "Missing X-API-Key header"
+	ErrInvalidAPIKey = "Invalid API key"
 )
 
 // Success messages
