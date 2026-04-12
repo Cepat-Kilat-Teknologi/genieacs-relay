@@ -1,6 +1,6 @@
 services:
   api:
-    # Set RELAY_VERSION in .env or override: RELAY_VERSION=1.2.0 docker compose up
+    # Set RELAY_VERSION in .env or override: RELAY_VERSION=2.0.0 docker compose up
     # Alternative registry: ghcr.io/cepat-kilat-teknologi/genieacs-relay
     image: cepatkilatteknologi/genieacs-relay:${RELAY_VERSION:-latest}
     container_name: genieacs-relay

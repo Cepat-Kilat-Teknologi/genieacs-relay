@@ -5,8 +5,8 @@ apiVersion: v2                    # Helm 3 uses apiVersion v2
 name: genieacs-relay              # Chart name (must match folder name)
 description: A lightweight relay service for managing TR-069 devices via GenieACS
 type: application                 # application or library
-version: 0.1.0                    # CHART version (not app), follows SemVer
-appVersion: "latest"              # Application version being deployed
+version: 0.2.0                    # CHART version (not app), follows SemVer
+appVersion: "2.0.0"               # Application version being deployed (genieacs-relay semver)
 
 # Maintainer information
 maintainers:

@@ -36,7 +36,7 @@ spec:
         - name: replicaCount
           value: "3"
         - name: image.tag
-          value: "1.0.0"  # Pin to specific version
+          value: "2.0.0"  # Pin to specific version
         - name: config.genieacsBaseUrl
           value: "http://genieacs-nbi.genieacs-prod:7557"
         - name: config.nbiAuth.enabled
