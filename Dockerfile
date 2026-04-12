@@ -32,7 +32,13 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 # Stage 3: Final image
 FROM alpine:3.21 AS production
 LABEL org.opencontainers.image.source="https://github.com/Cepat-Kilat-Teknologi/genieacs-relay"
-RUN apk add --no-cache tzdata ca-certificates \
+# Force package upgrade to pick up the latest patched security packages. The alpine:3.21
+# base image ships a snapshot at tag time, so CVEs fixed AFTER the tag's mint date (e.g.
+# CVE-2026-28390 in libcrypto3/libssl3, fixed in 3.3.7-r0 while base still has 3.3.6-r0)
+# require an explicit `apk upgrade` against the live 3.21 repo. This keeps us on the
+# alpine 3.21 track without chasing minor base bumps every time a new CVE lands.
+RUN apk update && apk upgrade --no-cache \
+    && apk add --no-cache tzdata ca-certificates \
     && cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime \
     && echo "Asia/Jakarta" > /etc/timezone \
     && apk del tzdata \
