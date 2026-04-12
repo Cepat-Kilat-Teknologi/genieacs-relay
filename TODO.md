@@ -26,9 +26,30 @@ Reference format: freeradius-api v1.2.0.
   - [ ] Update `sendResponse()` in `response.go`
   - [ ] Update tests
 
-## Priority 2: Request ID / Correlation Tracing
+## Priority 2: Logging Standardization
 
-### 2.1 Propagate X-Request-ID to structured logs
+Reference: `~/Projects/architecture-isp-app/docs/LOGGING.md`
+
+### 2.0 Standardize log schema per LOGGING.md
+- **Files:** `main.go`, `config.go`, all handler/service files
+- **Current:** zap.NewProduction() — sudah JSON, tapi belum lengkap
+- **Tasks:**
+  - [ ] Centralize logger init di `logger.go` (saat ini inline di `config.go`)
+  - [ ] Add required base fields: `service`, `version`, `module`
+  - [ ] Add `WithRequestID(ctx)` helper function
+  - [ ] Ensure ISO8601 UTC timestamps dengan ms precision
+  - [ ] Rename keys to snake_case (audit existing camelCase if any)
+  - [ ] Add `_ms` suffix untuk semua duration fields
+  - [ ] Use `_bytes` suffix untuk semua size fields
+  - [ ] Use standard field names: `username`, `groupname`, `ip`, `device_id`, `operation`
+  - [ ] Error logs must include `error`, `error_code`, `operation`
+  - [ ] Skip logging for `/health`, `/healthz`, `/readyz`, `/metrics` endpoints
+  - [ ] Audit log middleware untuk POST/PUT/DELETE operations
+  - [ ] Mask sensitive fields (`api_key`, `password`, `token`)
+
+## Priority 3: Request ID / Correlation Tracing
+
+### 3.1 Propagate X-Request-ID to structured logs
 - **File:** `middleware.go`, all handlers
 - **Current:** chi middleware.RequestID generates ID but not used in zap logs
 - **Tasks:**
@@ -37,7 +58,7 @@ Reference format: freeradius-api v1.2.0.
   - [ ] Include `request_id` field in error responses
   - [ ] Include `request_id` in audit log entries (`AuditLog`, `AuditLogWithFields`)
 
-### 2.2 Forward X-Request-ID to GenieACS calls
+### 3.2 Forward X-Request-ID to GenieACS calls
 - **File:** `client.go`
 - **Current:** HTTP calls to GenieACS do not include request ID
 - **Tasks:**
@@ -45,15 +66,15 @@ Reference format: freeradius-api v1.2.0.
   - [ ] Set `X-Request-ID` header on outbound GenieACS HTTP requests
   - [ ] Log request ID in GenieACS call debug logs
 
-## Priority 3: Health Endpoints
+## Priority 4: Health Endpoints
 
-### 3.1 Add `/healthz` endpoint (liveness)
+### 4.1 Add `/healthz` endpoint (liveness)
 - **Current:** `/health` exists, returns `{"status":"healthy"}`
 - **Tasks:**
   - [ ] Rename or alias `/health` → `/healthz` (keep `/health` as alias)
   - [ ] Ensure minimal response: `{"status":"healthy"}`
 
-### 3.2 Add `/readyz` endpoint (readiness)
+### 4.2 Add `/readyz` endpoint (readiness)
 - **Current:** Does not exist
 - **Tasks:**
   - [ ] Add `GET /readyz` endpoint (unauthenticated, outside `/api/v1/`)
@@ -61,9 +82,9 @@ Reference format: freeradius-api v1.2.0.
   - [ ] Response: `{"status":"ready", "genieacs":"connected"}` or 503 if unreachable
   - [ ] Update Dockerfile healthcheck to use `/healthz`
 
-## Priority 4: Idempotency
+## Priority 5: Idempotency
 
-### 4.1 Add idempotency for async WLAN operations
+### 5.1 Add idempotency for async WLAN operations
 - **File:** `worker.go`, `handlers_wlan.go`
 - **Current:** WLAN create/update/delete submitted to worker pool without dedup
 - **Tasks:**
@@ -73,9 +94,9 @@ Reference format: freeradius-api v1.2.0.
   - [ ] Store result after successful operation
   - [ ] TTL: 1 hour (WLAN operations are infrequent)
 
-## Priority 5: Dependencies & Security
+## Priority 6: Dependencies & Security
 
-### 5.1 Update dependencies
+### 6.1 Update dependencies
 - **Tasks:**
   - [ ] `go get -u github.com/go-chi/chi/v5` (v5.2.3 → v5.2.5)
   - [ ] `go get -u github.com/go-openapi/jsonpointer` (v0.22.4 → v0.22.5)
@@ -83,24 +104,24 @@ Reference format: freeradius-api v1.2.0.
   - [ ] `go mod tidy`
   - [ ] Run `govulncheck ./...`
 
-### 5.2 golangci-lint v2 config
+### 6.2 golangci-lint v2 config
 - **Tasks:**
   - [ ] Update `.golangci.yml` to v2 format (add `version: "2"`)
   - [ ] Verify `make lint` passes with 0 issues
 
-## Priority 6: Documentation
+## Priority 7: Documentation
 
-### 6.1 Update API_REFERENCE.md
+### 7.1 Update API_REFERENCE.md
 - [ ] Document new response format with `error_code`
 - [ ] Document `X-Request-ID` header behavior
 - [ ] Document `/healthz` and `/readyz` endpoints
 - [ ] Document idempotency key usage
 
-### 6.2 Regenerate Swagger
+### 7.2 Regenerate Swagger
 - [ ] `make swagger` after response format changes
 - [ ] Verify swagger UI reflects new format
 
-### 6.3 Update CHANGELOG.md
+### 7.3 Update CHANGELOG.md
 - [ ] Add standardization changes under new version
 
 ---
