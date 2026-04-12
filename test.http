@@ -1,0 +1,176 @@
+### genieacs-relay v2.0.0 — REST Client smoke test suite
+### Usage: install "REST Client" VS Code extension and click "Send Request" on each block.
+###
+### Tested against a real ZTE F670L on 2026-04-12:
+###   - genieacs-stack running locally (ports 3000/7547/7557/7567)
+###   - device 10.90.4.173 provisioned via CWMP
+###   - genieacs-relay built with -ldflags "-X main.version=2.0.0-integration ..."
+###
+### NOTE: GenieACS connection_request callback may fail with "Incorrect connection
+### request credentials" until the inform provision script has run once and set
+### the device's CR username/password. Tasks queued via setParameterValues (no
+### ?connection_request) apply on the next periodic inform (default 5 min).
+
+@base = http://localhost:18099
+@apiKey =
+@deviceIP = 10.90.4.173
+@deviceID = C6B2D2-F670L-ZTEEQFLN6212992
+@wlan = 2
+
+### --- Unauthenticated public endpoints ---
+
+### Health (liveness alias, backwards compat)
+GET {{base}}/health
+
+### Healthz (k8s liveness probe)
+GET {{base}}/healthz
+
+### Readyz (k8s readiness probe — returns 503 if GenieACS unreachable)
+GET {{base}}/readyz
+
+### Version (build metadata — ldflags injected)
+GET {{base}}/version
+
+### Metrics (Prometheus exposition)
+GET {{base}}/metrics
+
+### --- Standard-envelope contract probe (produces deliberate 404) ---
+### Verifies error_code + request_id echoed back in body per isp-adapter-standard §1
+GET {{base}}/api/v1/genieacs/ssid/999.999.999.999
+X-API-Key: {{apiKey}}
+X-Request-ID: contract-probe-404
+
+### --- Standard-envelope contract probe (produces deliberate 400) ---
+### Invalid WLAN ID format
+GET {{base}}/api/v1/genieacs/wlan/available/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: contract-probe-happy
+
+### --- WLAN CRUD happy path (requires real GenieACS + connected ONU) ---
+
+### List available WLAN slots
+GET {{base}}/api/v1/genieacs/wlan/available/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: wlan-available-01
+
+### Get WLAN configs
+GET {{base}}/api/v1/genieacs/ssid/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: ssid-get-01
+
+### Get WLAN configs with force-refresh retry loop
+GET {{base}}/api/v1/genieacs/force/ssid/{{deviceIP}}?max_retries=3&retry_delay_ms=2000
+X-API-Key: {{apiKey}}
+X-Request-ID: ssid-force-01
+
+### Create WLAN (POST, with idempotency key)
+### After this runs, GenieACS will queue setParameterValues tasks. Verify via:
+###   curl http://localhost:7557/tasks/?query=%7B%22device%22%3A%22{{deviceID}}%22%7D
+### The change is applied on the next periodic inform (~5 min).
+POST {{base}}/api/v1/genieacs/wlan/create/{{wlan}}/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: wlan-create-01
+X-Idempotency-Key: wlan-create-{{wlan}}-{{deviceIP}}-01
+Content-Type: application/json
+
+{
+  "ssid": "RelayTest24",
+  "password": "RelayTestPass123",
+  "auth_mode": "WPA2",
+  "encryption": "AES",
+  "hidden": false,
+  "max_clients": 10
+}
+
+### Retry the same create — MUST replay cached response, NOT re-execute
+### (same X-Idempotency-Key within 7-day TTL)
+POST {{base}}/api/v1/genieacs/wlan/create/{{wlan}}/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: wlan-create-01-retry
+X-Idempotency-Key: wlan-create-{{wlan}}-{{deviceIP}}-01
+Content-Type: application/json
+
+{
+  "ssid": "TestGuestNetwork",
+  "password": "securePass123",
+  "auth_mode": "WPA2",
+  "encryption": "AES"
+}
+
+### Update WLAN (SSID rename + max_clients bump)
+### After this runs, re-query /ssid/{{deviceIP}} after next inform (~5 min) to verify.
+PUT {{base}}/api/v1/genieacs/wlan/update/{{wlan}}/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: wlan-update-01
+X-Idempotency-Key: wlan-update-{{wlan}}-{{deviceIP}}-01
+Content-Type: application/json
+
+{
+  "ssid": "RelayTest24Renamed",
+  "max_clients": 20
+}
+
+### Optimize WLAN radio
+PUT {{base}}/api/v1/genieacs/wlan/optimize/{{wlan}}/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: wlan-optimize-01
+X-Idempotency-Key: wlan-optimize-{{wlan}}-{{deviceIP}}-01
+Content-Type: application/json
+
+{
+  "channel": "Auto",
+  "bandwidth": "20MHz",
+  "transmit_power": 100
+}
+
+### Delete (disable) WLAN
+DELETE {{base}}/api/v1/genieacs/wlan/delete/{{wlan}}/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: wlan-delete-01
+X-Idempotency-Key: wlan-delete-{{wlan}}-{{deviceIP}}-01
+
+### --- Device / DHCP endpoints ---
+
+### Get device capability
+GET {{base}}/api/v1/genieacs/capability/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: capability-01
+
+### Get DHCP clients
+GET {{base}}/api/v1/genieacs/dhcp-client/{{deviceIP}}
+X-API-Key: {{apiKey}}
+X-Request-ID: dhcp-01
+
+### Get DHCP clients (force refresh from device)
+GET {{base}}/api/v1/genieacs/dhcp-client/{{deviceIP}}?refresh=true
+X-API-Key: {{apiKey}}
+X-Request-ID: dhcp-refresh-01
+
+### Refresh SSID/WLAN data (async)
+POST {{base}}/api/v1/genieacs/ssid/{{deviceIP}}/refresh
+X-API-Key: {{apiKey}}
+X-Request-ID: ssid-refresh-01
+X-Idempotency-Key: ssid-refresh-{{deviceIP}}-01
+
+### --- Cache management ---
+
+### Clear specific device cache
+POST {{base}}/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZTEGCFLN794B3A1
+X-API-Key: {{apiKey}}
+X-Request-ID: cache-clear-01
+
+### Clear all caches
+POST {{base}}/api/v1/genieacs/cache/clear
+X-API-Key: {{apiKey}}
+X-Request-ID: cache-clear-all
+
+### --- Auth failure probes ---
+
+### Missing API key → 401 UNAUTHORIZED
+GET {{base}}/api/v1/genieacs/ssid/{{deviceIP}}
+X-Request-ID: auth-missing-01
+
+### Invalid API key → 401 UNAUTHORIZED
+GET {{base}}/api/v1/genieacs/ssid/{{deviceIP}}
+X-API-Key: wrong-key
+X-Request-ID: auth-invalid-01

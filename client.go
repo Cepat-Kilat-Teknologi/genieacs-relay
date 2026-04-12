@@ -34,7 +34,8 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 		bodyReader = bytes.NewReader(jsonPayload)
 	}
 	// Create HTTP POST request with context
-	req, err := http.NewRequestWithContext(ctx, "POST", urlQ, bodyReader)
+	//nolint:gosec // G107: URL built from trusted internal config (geniesBaseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlQ, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +43,10 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 	req.Header.Set("Content-Type", "application/json")
 	// Add authentication header only if NBI auth is enabled
 	if nbiAuth && nbiAuthKey != "" {
-		req.Header.Set("X-API-Key", nbiAuthKey)
+		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
 	// Execute HTTP request and return response
-	return httpClient.Do(req)
+	return httpClient.Do(req) //nolint:gosec // G107: URL built from trusted internal config (geniesBaseURL)
 }
 
 // deviceIDQuery represents the MongoDB query structure for device ID lookup
@@ -68,14 +69,15 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 	}
 	urlQ := fmt.Sprintf("%s/devices/?query=%s", geniesBaseURL, url.QueryEscape(string(queryBytes)))
 	// Create HTTP request with context for cancellation
-	req, err := http.NewRequestWithContext(ctx, "GET", urlQ, nil)
+	//nolint:gosec // G107: URL built from trusted internal config (geniesBaseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlQ, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 
 	// Add authentication header only if NBI auth is enabled
 	if nbiAuth && nbiAuthKey != "" {
-		req.Header.Set("X-API-Key", nbiAuthKey)
+		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
 	resp, err := httpClient.Do(req) // Execute HTTP request
 	if err != nil {
@@ -133,13 +135,14 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	// Build URL with query parameter - include _lastInform for stale device validation
 	urlQ := fmt.Sprintf("%s/devices/?query=%s&projection=_id,_lastInform", geniesBaseURL, url.QueryEscape(query))
 	// Create HTTP GET request
-	req, err := http.NewRequestWithContext(ctx, "GET", urlQ, nil)
+	//nolint:gosec // G107: URL built from trusted internal config (geniesBaseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlQ, http.NoBody)
 	if err != nil {
 		return "", err
 	}
 	// Add authentication header only if NBI auth is enabled
 	if nbiAuth && nbiAuthKey != "" {
-		req.Header.Set("X-API-Key", nbiAuthKey)
+		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
 	// Execute HTTP request
 	resp, err := httpClient.Do(req)
@@ -203,7 +206,7 @@ func setParameterValues(ctx context.Context, deviceID string, parameterValues []
 		// Read response body for detailed error information
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			return fmt.Errorf("set parameter values failed with status: %s (failed to read response body: %v)", resp.Status, readErr)
+			return fmt.Errorf("set parameter values failed with status: %s (failed to read response body: %w)", resp.Status, readErr)
 		}
 		return fmt.Errorf("set parameter values failed with status: %s, response: %s", resp.Status, string(body))
 	}

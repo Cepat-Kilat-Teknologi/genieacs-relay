@@ -73,7 +73,7 @@ func TestAPIKeyAuthMiddleware_MissingKey(t *testing.T) {
 	var resp Response
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.Equal(t, StatusUnauthorized, resp.Status)
-	assert.Equal(t, ErrMissingAPIKey, resp.Error)
+	assert.Equal(t, ErrMissingAPIKey, fmt.Sprint(resp.Data))
 }
 
 func TestAPIKeyAuthMiddleware_InvalidKey(t *testing.T) {
@@ -105,7 +105,7 @@ func TestAPIKeyAuthMiddleware_InvalidKey(t *testing.T) {
 	var resp Response
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.Equal(t, StatusUnauthorized, resp.Status)
-	assert.Equal(t, ErrInvalidAPIKey, resp.Error)
+	assert.Equal(t, ErrInvalidAPIKey, fmt.Sprint(resp.Data))
 }
 
 // TestConstantTimeAPIKeyComparison verifies the constant-time comparison is being used
@@ -244,7 +244,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Contains(t, resp.Error, "Rate limit exceeded")
+		assert.Contains(t, fmt.Sprint(resp.Data), "Rate limit exceeded")
 	})
 
 	t.Run("Uses X-Real-IP header when present", func(t *testing.T) {

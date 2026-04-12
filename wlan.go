@@ -23,8 +23,10 @@ func refreshWLANConfig(ctx context.Context, deviceID string) error {
 	}
 	// Ensure response body is closed
 	defer safeClose(resp.Body)
-	// Check for HTTP errors
-	if resp.StatusCode != http.StatusOK {
+	// GenieACS NBI returns 200 OK when ?connection_request succeeds (task applied synchronously)
+	// or 202 Accepted when the task is queued (connection request failed or is async).
+	// Both are successful task submissions per the NBI contract — only 4xx/5xx are errors.
+	if resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("refresh failed with status: %s", resp.Status)
 	}
 	return nil
@@ -163,9 +165,9 @@ func getBand(wlan map[string]interface{}, wlanKey string) string {
 	// Determine band based on WLAN interface key (common convention)
 	switch wlanKey {
 	case "1":
-		return "2.4GHz"
+		return Band2_4GHz
 	case "5":
-		return "5GHz"
+		return Band5GHz
 	}
 	// Try Standard field for other WLAN keys
 	if stdMap, ok := wlan["Standard"].(map[string]interface{}); ok {

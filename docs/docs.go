@@ -376,6 +376,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/healthz": {
+            "get": {
+                "description": "Kubernetes liveness probe — returns 200 when the process is running. Does not check downstream dependencies.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Liveness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics": {
+            "get": {
+                "description": "Prometheus exposition format for service metrics. No authentication required.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Prometheus metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Kubernetes readiness probe — returns 200 when all upstream dependencies (GenieACS) are reachable, 503 when any dependency is down. Results cached with TTL to avoid probe storms.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Readiness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.ReadinessResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ReadinessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/ssid/{ip}": {
             "get": {
                 "security": [
@@ -528,6 +591,26 @@ const docTemplate = `{
                         "description": "Too Many Requests",
                         "schema": {
                             "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/version": {
+            "get": {
+                "description": "Returns binary build metadata (version, commit, build_time, api_version, uptime). Does not require authentication.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Version info",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.VersionResponse"
                         }
                     }
                 }
@@ -1125,6 +1208,20 @@ const docTemplate = `{
                 }
             }
         },
+        "main.DependencyState": {
+            "description": "Dependency reachability state for /readyz",
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": ""
+                },
+                "state": {
+                    "type": "string",
+                    "example": "up"
+                }
+            }
+        },
         "main.DeviceCapabilityResponse": {
             "description": "Device capability response",
             "type": "object",
@@ -1221,6 +1318,22 @@ const docTemplate = `{
                 }
             }
         },
+        "main.ReadinessResponse": {
+            "description": "Readiness probe response including per-dependency health",
+            "type": "object",
+            "properties": {
+                "dependencies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/main.DependencyState"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ready"
+                }
+            }
+        },
         "main.Response": {
             "type": "object",
             "properties": {
@@ -1229,14 +1342,18 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "data": {
-                    "description": "Response payload data when successful"
+                    "description": "Response payload (success) OR error detail (string/field list)"
                 },
-                "error": {
-                    "description": "Error description when operation fails",
+                "error_code": {
+                    "description": "Machine-readable error code (VALIDATION_ERROR, NOT_FOUND, ...)",
+                    "type": "string"
+                },
+                "request_id": {
+                    "description": "Correlation ID from X-Request-ID header",
                     "type": "string"
                 },
                 "status": {
-                    "description": "Status message (e.g., \"OK\", \"Error\")",
+                    "description": "\"success\" for 2xx, HTTP reason phrase for errors",
                     "type": "string"
                 }
             }
@@ -1300,12 +1417,54 @@ const docTemplate = `{
                 }
             }
         },
+        "main.VersionResponse": {
+            "description": "Version and build metadata response",
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "type": "string",
+                    "example": "v1"
+                },
+                "build_time": {
+                    "type": "string",
+                    "example": "2026-04-12T05:34:07Z"
+                },
+                "commit": {
+                    "type": "string",
+                    "example": "a2a62e0"
+                },
+                "uptime": {
+                    "type": "string",
+                    "example": "2h15m30s"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "2.0.0"
+                }
+            }
+        },
         "main.WLANConfig": {
             "type": "object",
             "properties": {
+                "auth_mode": {
+                    "description": "Authentication mode (Open, WPA, WPA2, WPA/WPA2)",
+                    "type": "string"
+                },
                 "band": {
                     "description": "Frequency band (2.4GHz, 5GHz, etc.)",
                     "type": "string"
+                },
+                "encryption": {
+                    "description": "Encryption mode (AES, TKIP, TKIP+AES)",
+                    "type": "string"
+                },
+                "hidden": {
+                    "description": "True if SSID is not broadcast",
+                    "type": "boolean"
+                },
+                "max_clients": {
+                    "description": "Maximum number of associated devices",
+                    "type": "integer"
                 },
                 "password": {
                     "description": "Security key/password for the WLAN",

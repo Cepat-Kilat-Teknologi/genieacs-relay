@@ -58,7 +58,7 @@ func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) 
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		sendError(w, http.StatusNotFound, StatusNotFound, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusNotFound, ErrCodeNotFound, sanitizeErrorMessage(err))
 		return "", false
 	}
 	return deviceID, true
@@ -73,11 +73,11 @@ func ValidateWLANAndRespond(w http.ResponseWriter, r *http.Request, deviceID, wl
 			zap.String("deviceID", deviceID),
 			zap.String("wlan", wlan),
 			zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, ErrWLANValidationFailed)
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrWLANValidationFailed)
 		return false
 	}
 	if !valid {
-		sendError(w, http.StatusNotFound, StatusNotFound,
+		sendError(w, r, http.StatusNotFound, ErrCodeNotFound,
 			fmt.Sprintf("WLAN ID %s does not exist or is not enabled on this device.", wlan))
 		return false
 	}
@@ -90,7 +90,7 @@ func ValidateWLANAndRespond(w http.ResponseWriter, r *http.Request, deviceID, wl
 func ExtractAndValidateWLANID(w http.ResponseWriter, r *http.Request) (string, int, bool) {
 	wlan := chi.URLParam(r, "wlan")
 	if err := validateWLANID(wlan); err != nil {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidWLANID)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ErrInvalidWLANID)
 		return "", 0, false
 	}
 	// Already validated, safe to ignore error
@@ -108,11 +108,11 @@ func CheckWLANNotExistsAndRespond(w http.ResponseWriter, r *http.Request, device
 			zap.String("deviceID", deviceID),
 			zap.String("wlan", wlan),
 			zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, ErrWLANCheckFailed)
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrWLANCheckFailed)
 		return false
 	}
 	if valid {
-		sendError(w, http.StatusConflict, StatusConflict, fmt.Sprintf(ErrWLANAlreadyExists, wlan))
+		sendError(w, r, http.StatusConflict, ErrCodeConflict, fmt.Sprintf(ErrWLANAlreadyExists, wlan))
 		return false
 	}
 	return true
@@ -129,11 +129,11 @@ func CheckWLANExistsAndRespond(w http.ResponseWriter, r *http.Request, deviceID,
 			zap.String("deviceID", deviceID),
 			zap.String("wlan", wlan),
 			zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, ErrWLANCheckFailed)
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrWLANCheckFailed)
 		return false
 	}
 	if !valid {
-		sendError(w, http.StatusNotFound, StatusNotFound, fmt.Sprintf(notFoundMsg, wlan))
+		sendError(w, r, http.StatusNotFound, ErrCodeNotFound, fmt.Sprintf(notFoundMsg, wlan))
 		return false
 	}
 	return true
@@ -147,7 +147,7 @@ func ParseJSONRequest(w http.ResponseWriter, r *http.Request, v interface{}) boo
 	// Validate Content-Type header to prevent non-JSON payloads
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "" && !strings.HasPrefix(contentType, "application/json") {
-		sendError(w, http.StatusUnsupportedMediaType, "Unsupported Media Type", ErrInvalidContentType)
+		sendError(w, r, http.StatusUnsupportedMediaType, ErrCodeValidation, ErrInvalidContentType)
 		return false
 	}
 
@@ -155,10 +155,10 @@ func ParseJSONRequest(w http.ResponseWriter, r *http.Request, v interface{}) boo
 
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		if err.Error() == ErrBodyTooLarge {
-			sendError(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", ErrRequestBodyTooLarge)
+			sendError(w, r, http.StatusRequestEntityTooLarge, ErrCodeValidation, ErrRequestBodyTooLarge)
 			return false
 		}
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrInvalidJSON)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ErrInvalidJSON)
 		return false
 	}
 	return true
@@ -185,21 +185,21 @@ func BuildWLANSecurityParams(wlan, authMode, encryptionValue string) [][]interfa
 	var params [][]interface{}
 
 	switch authMode {
-	case "WPA":
+	case UIAuthModeWPA:
 		wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
 		wpaAuthModePath := fmt.Sprintf(PathWLANWPAAuthModeFormat, wlan)
 		params = append(params,
 			[]interface{}{wpaEncryptionPath, encryptionValue, XSDString},
 			[]interface{}{wpaAuthModePath, WPAAuthModePSK, XSDString},
 		)
-	case "WPA2":
+	case UIAuthModeWPA2:
 		ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
 		ieee11iAuthModePath := fmt.Sprintf(PathWLAN11iAuthModeFormat, wlan)
 		params = append(params,
 			[]interface{}{ieee11iEncryptionPath, encryptionValue, XSDString},
 			[]interface{}{ieee11iAuthModePath, WPAAuthModePSK, XSDString},
 		)
-	case "WPA/WPA2":
+	case UIAuthModeWPAWPA2:
 		wpaEncryptionPath := fmt.Sprintf(PathWLANWPAEncryptionModesFormat, wlan)
 		wpaAuthModePath := fmt.Sprintf(PathWLANWPAAuthModeFormat, wlan)
 		ieee11iEncryptionPath := fmt.Sprintf(PathWLAN11iEncryptionModesFormat, wlan)
@@ -310,10 +310,10 @@ func ApplyCreateWLANDefaults(authMode, encryption string, hidden *bool, maxClien
 	}
 
 	if cfg.AuthMode == "" {
-		cfg.AuthMode = "WPA2"
+		cfg.AuthMode = UIAuthModeWPA2
 	}
 	if cfg.Encryption == "" {
-		cfg.Encryption = "AES"
+		cfg.Encryption = UIEncryptionAES
 	}
 	if hidden != nil {
 		cfg.Hidden = *hidden
@@ -343,7 +343,7 @@ func ValidateCreateWLANAuth(cfg CreateWLANConfig, password string) (string, stri
 	}
 
 	// Validate password for non-Open authentication
-	if cfg.AuthMode != "Open" {
+	if cfg.AuthMode != UIAuthModeOpen {
 		if password == "" {
 			return "", "", ErrPasswordRequiredAuth
 		}

@@ -64,6 +64,17 @@ var (
 	staleThreshold time.Duration // Threshold for considering device as stale (default: 10 minutes)
 )
 
+// ldflags injection targets. These MUST remain lowercase to match
+// `go build -ldflags "-X main.version=... -X main.commit=... -X main.buildTs=..."`.
+// Silent failure mode: if the Dockerfile mis-spells the target name (e.g. main.Version),
+// Go ignores the -X flag and these stay at their defaults. Always verify with
+// `curl /version` after a real Docker build, not just by reading the Dockerfile.
+var (
+	version = "dev"
+	commit  = "none"
+	buildTs = "unknown"
+)
+
 // Pre-initialized variables and instances for modularity
 var (
 	// jsonMarshal is a package-level variable for JSON marshaling (allows test mocking)
@@ -117,6 +128,10 @@ var (
 
 // --- Main Application Entry Point ---
 func main() {
+	// Propagate ldflags-injected build metadata into buildinfo vars
+	// so handlers and /version endpoint can expose real values.
+	setBuildInfo(version, commit, buildTs)
+
 	_ = initLoggerWrapper()
 
 	defer func() {

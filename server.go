@@ -30,7 +30,7 @@ type serverConfig struct {
 
 // loadNBIAuthConfig loads and validates NBI authentication configuration
 func loadNBIAuthConfig() error {
-	nbiAuth = getEnv(EnvNBIAuth, "false") == "true"
+	nbiAuth = getEnv(EnvNBIAuth, BoolStrFalse) == BoolStrTrue
 	nbiAuthKey = getEnv(EnvNBIAuthKey, DefaultNBIAuthKey)
 
 	if nbiAuth && nbiAuthKey == "" {
@@ -44,7 +44,7 @@ func loadNBIAuthConfig() error {
 
 // loadMiddlewareAuthConfig loads and validates middleware authentication configuration
 func loadMiddlewareAuthConfig() error {
-	middlewareAuth = getEnv(EnvMiddlewareAuth, "false") == "true"
+	middlewareAuth = getEnv(EnvMiddlewareAuth, BoolStrFalse) == BoolStrTrue
 	authKey = getEnv(EnvAuthKey, DefaultAuthKey)
 
 	if middlewareAuth && authKey == "" {
@@ -154,9 +154,25 @@ func runServer(addr string) error {
 	taskWorkerPool.Start()
 	defer taskWorkerPool.Stop()
 
+	// Register Prometheus collectors once at startup.
+	registerMetrics()
+
 	// router
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
+	// chi.RequestID generates the correlation ID; requestIDMiddleware bridges it into our
+	// typed context key so WithRequestIDLogger(ctx) and error bodies can include it.
+	// structuredLoggerMiddleware replaces chi's middleware.Logger so we can emit zap-structured
+	// logs with request_id and skip noisy health/probe paths.
+	r.Use(
+		middleware.RequestID,
+		requestIDMiddleware,
+		middleware.RealIP,
+		apiVersionHeadersMiddleware,
+		structuredLoggerMiddleware,
+		metricsMiddleware,
+		auditMiddleware,
+		middleware.Recoverer,
+	)
 	r.Use(middleware.Timeout(60 * time.Second))
 	// Apply rate limiting middleware
 	rl := newRateLimiter(cfg.rateLimitRequests, cfg.rateLimitWindow)
@@ -171,10 +187,21 @@ func runServer(addr string) error {
 	// Apply CORS middleware
 	r.Use(corsMiddleware(cfg.corsOrigins, cfg.corsMaxAge))
 
-	// Health check endpoint - intentionally outside authentication
+	// Health check endpoints - intentionally outside authentication
 	// This allows load balancers and monitoring systems to check service health
 	// without requiring API credentials. It returns minimal info (status only).
-	r.Get("/health", healthCheckHandler)
+	r.Get("/health", healthCheckHandler) // backwards-compat liveness alias
+	r.Get("/healthz", healthzHandler)    // k8s liveness probe
+	r.Get("/ready", readyzHandler)       // Fiber-convention readiness alias
+	r.Get("/readyz", readyzHandler)      // k8s readiness probe with cached GenieACS ping
+
+	// Version endpoint - build metadata exposed publicly for release verification.
+	// Returns real ldflags-injected values when built via Docker CI pipeline,
+	// or "dev"/"none"/"unknown" defaults when built locally without ldflags.
+	r.Get("/version", versionHandler)
+
+	// Prometheus metrics endpoint - unauthenticated per isp-adapter-standard §5.
+	r.Handle("/metrics", metricsHandler())
 
 	// Swagger documentation endpoint - also outside authentication
 	// Allows developers to access API documentation without credentials
@@ -185,6 +212,10 @@ func runServer(addr string) error {
 		if middlewareAuth {
 			r.Use(apiKeyAuthMiddleware)
 		}
+		// Idempotency middleware for write operations. Clients (billing-agent saga retries,
+		// NATS redelivery) send X-Idempotency-Key; repeated keys replay the cached response
+		// within the TTL window, preventing duplicate WLAN provisioning jobs.
+		r.Use(idempotencyMiddleware(defaultIdempotencyStore))
 		r.Get("/ssid/{ip}", getSSIDByIPHandler)
 		r.Get("/force"+"/ssid/{ip}", getSSIDByIPForceHandler)
 		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
@@ -231,5 +262,4 @@ func runServer(addr string) error {
 		logger.Info("Server exited properly")
 		return nil
 	}
-
 }

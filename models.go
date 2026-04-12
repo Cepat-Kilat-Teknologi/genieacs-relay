@@ -61,12 +61,15 @@ type OptimizeWLANRequest struct {
 
 // --- API Response Models ---
 
-// Response represents standardized API response format for all endpoints
+// Response represents standardized API response format per isp-adapter-standard.
+// Success: {"status":"success", "data":..., "code":200}
+// Error:   {"status":"Bad Request", "error_code":"VALIDATION_ERROR", "data":..., "request_id":"...", "code":400}
 type Response struct {
-	Code   int         `json:"code"`            // HTTP status code
-	Status string      `json:"status"`          // Status message (e.g., "OK", "Error")
-	Data   interface{} `json:"data,omitempty"`  // Response payload data when successful
-	Error  string      `json:"error,omitempty"` // Error description when operation fails
+	Code      int         `json:"code"`                 // HTTP status code
+	Status    string      `json:"status"`               // "success" for 2xx, HTTP reason phrase for errors
+	ErrorCode string      `json:"error_code,omitempty"` // Machine-readable error code (VALIDATION_ERROR, NOT_FOUND, ...)
+	Data      interface{} `json:"data,omitempty"`       // Response payload (success) OR error detail (string/field list)
+	RequestID string      `json:"request_id,omitempty"` // Correlation ID from X-Request-ID header
 }
 
 // UsedWLANInfo contains information about a WLAN slot that is in use
@@ -108,6 +111,8 @@ type AvailableWLANResponse struct {
 // Compile-time check to ensure Swagger types are valid (prevents "unused" warnings)
 var (
 	_ = HealthResponse{}
+	_ = ReadinessResponse{}
+	_ = VersionResponse{}
 	_ = MessageResponse{}
 	_ = SSIDForceResponse{}
 	_ = DeviceCapabilityResponse{}
@@ -121,6 +126,30 @@ var (
 // @Description Health check response data
 type HealthResponse struct {
 	Status string `json:"status" example:"healthy"`
+}
+
+// ReadinessResponse represents readiness check response with per-dependency state.
+// @Description Readiness probe response including per-dependency health
+type ReadinessResponse struct {
+	Status       string                     `json:"status" example:"ready"`
+	Dependencies map[string]DependencyState `json:"dependencies"`
+}
+
+// DependencyState represents a single downstream dependency's current reachability state.
+// @Description Dependency reachability state for /readyz
+type DependencyState struct {
+	State string `json:"state" example:"up"`
+	Error string `json:"error,omitempty" example:""`
+}
+
+// VersionResponse represents build metadata exposed via /version endpoint.
+// @Description Version and build metadata response
+type VersionResponse struct {
+	Version    string `json:"version" example:"2.0.0"`
+	Commit     string `json:"commit" example:"a2a62e0"`
+	BuildTime  string `json:"build_time" example:"2026-04-12T05:34:07Z"`
+	APIVersion string `json:"api_version" example:"v1"`
+	Uptime     string `json:"uptime" example:"2h15m30s"`
 }
 
 // MessageResponse represents a simple message response

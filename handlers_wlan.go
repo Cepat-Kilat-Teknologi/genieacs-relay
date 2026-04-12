@@ -44,7 +44,7 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Validate SSID
 	if errMsg := ValidateSSID(createReq.SSID); errMsg != "" {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, errMsg)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, errMsg)
 		return
 	}
 
@@ -52,7 +52,7 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 	cfg := ApplyCreateWLANDefaults(createReq.AuthMode, createReq.Encryption, createReq.Hidden, createReq.MaxClients)
 	beaconType, encryptionValue, errMsg := ValidateCreateWLANAuth(cfg, createReq.Password)
 	if errMsg != "" {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, errMsg)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, errMsg)
 		return
 	}
 
@@ -68,7 +68,7 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 			zap.String("deviceID", deviceID),
 			zap.Int("wlanID", wlanID),
 			zap.Error(err))
-		sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, sanitizeErrorMessage(err))
 		return
 	}
 
@@ -81,7 +81,7 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 	parameterValues := buildCreateWLANParams(wlan, createReq.SSID, createReq.Password, cfg, beaconType, encryptionValue)
 	if err := SubmitWLANUpdate(deviceID, parameterValues); err != nil {
 		logger.Error("Failed to submit WLAN create task", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		sendError(w, r, http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrWorkerPoolBusy)
 		return
 	}
 
@@ -100,7 +100,7 @@ func createWLANHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Build response with applied settings
-	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
+	sendResponse(w, http.StatusOK, map[string]interface{}{
 		"message":     MsgWLANCreationSubmitted,
 		"device_id":   deviceID,
 		"wlan":        wlan,
@@ -124,7 +124,7 @@ func buildCreateWLANParams(wlan, ssid, password string, cfg CreateWLANConfig, be
 		{fmt.Sprintf(PathWLANBeaconTypeFormat, wlan), beaconType, XSDString},
 	}
 
-	if cfg.AuthMode != "Open" {
+	if cfg.AuthMode != UIAuthModeOpen {
 		passwordPath := fmt.Sprintf(PathWLANPasswordFormat, wlan)
 		parameterValues = append(parameterValues, []interface{}{passwordPath, password, XSDString})
 		securityParams := BuildWLANSecurityParams(wlan, cfg.AuthMode, encryptionValue)
@@ -160,7 +160,7 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 	capability, err := getDeviceCapability(r.Context(), deviceID)
 	if err != nil {
 		logger.Error("Failed to get device capability", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, ErrGetDeviceCapability)
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrGetDeviceCapability)
 		return
 	}
 
@@ -168,7 +168,7 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 	wlanConfigs, err := getWLANData(r.Context(), deviceID)
 	if err != nil {
 		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, ErrGetWLANData)
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrGetWLANData)
 		return
 	}
 
@@ -177,7 +177,7 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	response := buildAvailableWLANResponse(deviceID, capability, slots)
-	sendResponse(w, http.StatusOK, StatusOK, response)
+	sendResponse(w, http.StatusOK, response)
 }
 
 // buildAvailableWLANResponse builds the response for available WLAN slots
@@ -203,8 +203,8 @@ func buildAvailableWLANResponse(deviceID string, capability *DeviceCapability, s
 	response.AvailableWLAN.Band5GHz = ensureIntSlice(slots.Available5GHz)
 
 	// Add configuration options for frontend
-	response.ConfigOptions.AuthModes = []string{"Open", "WPA", "WPA2", "WPA/WPA2"}
-	response.ConfigOptions.Encryptions = []string{"AES", "TKIP", "TKIP+AES"}
+	response.ConfigOptions.AuthModes = []string{UIAuthModeOpen, UIAuthModeWPA, UIAuthModeWPA2, UIAuthModeWPAWPA2}
+	response.ConfigOptions.Encryptions = []string{UIEncryptionAES, "TKIP", "TKIP+AES"}
 	response.ConfigOptions.MaxClients.Min = MinMaxClients
 	response.ConfigOptions.MaxClients.Max = MaxMaxClients
 	response.ConfigOptions.MaxClients.Default = DefaultMaxClients
@@ -255,7 +255,7 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Check if at least one field is provided
 	if !hasUpdateFields(updateReq) {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrUpdateFieldRequired)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ErrUpdateFieldRequired)
 		return
 	}
 
@@ -271,7 +271,7 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 			zap.String("deviceID", deviceID),
 			zap.Int("wlanID", wlanID),
 			zap.Error(err))
-		sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, sanitizeErrorMessage(err))
 		return
 	}
 
@@ -283,14 +283,14 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 	// Process update fields
 	result := ProcessUpdateWLANFields(wlan, updateReq)
 	if result.ErrorMsg != "" {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, result.ErrorMsg)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, result.ErrorMsg)
 		return
 	}
 
 	// Submit update and clear cache
 	if err := SubmitWLANUpdate(deviceID, result.Params); err != nil {
 		logger.Error("Failed to submit WLAN update task", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		sendError(w, r, http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrWorkerPoolBusy)
 		return
 	}
 
@@ -305,7 +305,7 @@ func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Build response
-	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
+	sendResponse(w, http.StatusOK, map[string]interface{}{
 		"message":        MsgWLANUpdateSubmitted,
 		"device_id":      deviceID,
 		"wlan":           wlan,
@@ -348,7 +348,7 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Protect primary WLANs (ID 1 for 2.4GHz, ID 5 for 5GHz) from deletion
 	if wlanID == WLAN24GHzMin || wlanID == WLAN5GHzMin {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrDeletePrimaryWLAN)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ErrDeletePrimaryWLAN)
 		return
 	}
 
@@ -364,7 +364,7 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 			zap.String("deviceID", deviceID),
 			zap.Int("wlanID", wlanID),
 			zap.Error(err))
-		sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, sanitizeErrorMessage(err))
 		return
 	}
 
@@ -382,7 +382,7 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 	// Submit update and clear cache
 	if err := SubmitWLANUpdate(deviceID, parameterValues); err != nil {
 		logger.Error("Failed to submit WLAN delete task", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		sendError(w, r, http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrWorkerPoolBusy)
 		return
 	}
 
@@ -393,7 +393,7 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 	AuditLog(AuditEventWLANDelete, GetClientIP(r), deviceID,
 		fmt.Sprintf("WLAN %s deleted (band: %s)", wlan, band))
 
-	sendResponse(w, http.StatusOK, StatusOK, map[string]string{
+	sendResponse(w, http.StatusOK, map[string]string{
 		"message":   MsgWLANDeletionSubmitted,
 		"device_id": deviceID,
 		"wlan":      wlan,
@@ -437,7 +437,7 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Check if at least one field is provided
 	if !hasOptimizeFields(optimizeReq) {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, ErrNoOptimizeFields)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ErrNoOptimizeFields)
 		return
 	}
 
@@ -453,7 +453,7 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 			zap.String("deviceID", deviceID),
 			zap.Int("wlanID", wlanID),
 			zap.Error(err))
-		sendError(w, http.StatusBadRequest, StatusBadRequest, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, sanitizeErrorMessage(err))
 		return
 	}
 
@@ -472,14 +472,14 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 	// Process optimize fields
 	result := ProcessOptimizeWLANFields(wlan, optimizeReq, is5GHz)
 	if result.ErrorMsg != "" {
-		sendError(w, http.StatusBadRequest, StatusBadRequest, result.ErrorMsg)
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, result.ErrorMsg)
 		return
 	}
 
 	// Submit update and clear cache
 	if err := SubmitWLANUpdate(deviceID, result.Params); err != nil {
 		logger.Error("Failed to submit WLAN optimize task", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusServiceUnavailable, "Service Unavailable", ErrWorkerPoolBusy)
+		sendError(w, r, http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrWorkerPoolBusy)
 		return
 	}
 
@@ -491,7 +491,7 @@ func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Build response
-	sendResponse(w, http.StatusOK, StatusOK, map[string]interface{}{
+	sendResponse(w, http.StatusOK, map[string]interface{}{
 		"message":          MsgWLANOptimizeSubmitted,
 		"device_id":        deviceID,
 		"wlan":             wlan,

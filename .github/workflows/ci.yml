@@ -131,14 +131,31 @@ jobs:
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
+      # Capture build metadata once for ldflags injection.
+      - name: Compute build metadata
+        id: meta-build
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          # Prefer semver tag for APP_VERSION on tag builds, fall back to branch+sha.
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            echo "app_version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_version=${REF_NAME}-${GH_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          fi
+
       # Build and push to both registries
       - name: Build & Push Docker Image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           target: production
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: |
             ${{ steps.meta-dockerhub.outputs.tags }}
@@ -147,7 +164,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VERSION=${{ github.ref_name }}
+            APP_VERSION=${{ steps.meta-build.outputs.app_version }}
+            APP_COMMIT=${{ github.sha }}
+            APP_BUILD_TIME=${{ steps.meta-build.outputs.build_time }}
+
+      # Compute a lowercase + tagged image ref for Trivy. Docker reference parsers
+      # reject uppercase org names (e.g. Cepat-Kilat-Teknologi), so we force lower.
+      - name: Compute Trivy image ref
+        id: trivy-ref
+        env:
+          DH_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+        run: |
+          lower_repo=$(echo "$DH_IMAGE" | tr '[:upper:]' '[:lower:]')
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            tag="${REF_NAME#v}"
+          elif [[ "$REF" == "refs/heads/main" ]]; then
+            tag="edge"
+          else
+            tag="develop"
+          fi
+          echo "ref=${lower_repo}:${tag}" >> "$GITHUB_OUTPUT"
+
+      # Trivy image scan (best-effort; fail the job only on CRITICAL/HIGH findings).
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.trivy-ref.outputs.ref }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+
+      # SARIF upload is best-effort: repos without GitHub Advanced Security return
+      # "Resource not accessible by integration". The scan itself still gates the
+      # build above; this step is purely for Security tab ingestion when available.
+      - name: Upload Trivy SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
 
   # ========================
   # Job 3: Create GitHub Release (only on tags)

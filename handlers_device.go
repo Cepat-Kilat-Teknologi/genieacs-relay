@@ -34,7 +34,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 		if err := refreshDHCP(r.Context(), deviceID); err != nil {
 			// Log error and return 500 if refresh fails
 			logger.Info("DHCP refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
-			sendError(w, http.StatusInternalServerError, StatusInternalError, ErrRefreshFailed)
+			sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrRefreshFailed)
 			return
 		}
 	}
@@ -43,11 +43,11 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log error and return 500 if DHCP data retrieval fails
 		logger.Info("Failed to get DHCP clients", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, sanitizeErrorMessage(err))
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, sanitizeErrorMessage(err))
 		return
 	}
 	// Return successful response with DHCP client data
-	sendResponse(w, http.StatusOK, StatusOK, dhcpClients)
+	sendResponse(w, http.StatusOK, dhcpClients)
 }
 
 // getDeviceCapabilityHandler retrieves the wireless capability of a device (single-band or dual-band)
@@ -76,9 +76,9 @@ func getDeviceCapabilityHandler(w http.ResponseWriter, r *http.Request) {
 	capability, err := getDeviceCapability(r.Context(), deviceID)
 	if err != nil {
 		logger.Error("Failed to get device capability", zap.String("deviceID", deviceID), zap.Error(err))
-		sendError(w, http.StatusInternalServerError, StatusInternalError, ErrDeviceCapability)
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrDeviceCapability)
 		return
 	}
 
-	sendResponse(w, http.StatusOK, StatusOK, capability)
+	sendResponse(w, http.StatusOK, capability)
 }

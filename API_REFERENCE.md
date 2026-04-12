@@ -1,6 +1,7 @@
 # GenieACS Relay API Reference
 
-**Last Updated:** January 18, 2026
+**Version:** 2.0.0 — aligned with `isp-adapter-standard` and `isp-logging-standard`
+**Last Updated:** 2026-04-12
 
 This document provides complete API reference with request/response examples for all GenieACS Relay endpoints.
 
@@ -10,26 +11,93 @@ This document provides complete API reference with request/response examples for
 
 ---
 
-## Table of Contents
+## v2.0.0 Response Envelope — Standard Contract
 
-1. [Health Check](#1-health-check)
-2. [SSID Endpoints](#2-ssid-endpoints)
-3. [DHCP Client Endpoints](#3-dhcp-client-endpoints)
-4. [Device Capability Endpoints](#4-device-capability-endpoints)
-5. [WLAN Available Endpoints](#5-wlan-available-endpoints)
-6. [WLAN Create Endpoints](#6-wlan-create-endpoints)
-7. [WLAN Update Endpoints](#7-wlan-update-endpoints)
-8. [WLAN Delete Endpoints](#8-wlan-delete-endpoints)
-9. [WLAN Optimize Endpoints](#9-wlan-optimize-endpoints)
-10. [Cache Endpoints](#10-cache-endpoints)
-11. [Error Cases](#11-error-cases)
-12. [Authentication Error Cases](#12-authentication-error-cases-middleware_authtrue)
+All endpoints follow a uniform JSON envelope per `isp-adapter-standard`.
+This is a **breaking change** from v2.x, which used `"status":"OK"` and a flat `error` string.
+
+### Success envelope (2xx)
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": <resource payload>
+}
+```
+
+### Error envelope (4xx/5xx)
+```json
+{
+  "code": 400,
+  "status": "Bad Request",
+  "error_code": "VALIDATION_ERROR",
+  "data": "<human-readable message>",
+  "request_id": "<correlation id echoed from X-Request-ID>"
+}
+```
+
+### Error codes
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `VALIDATION_ERROR` | 400, 413, 415 | Input failed validation |
+| `UNAUTHORIZED` | 401 | Missing or invalid API key |
+| `FORBIDDEN` | 403 | Access denied |
+| `NOT_FOUND` | 404 | Resource / device not found |
+| `CONFLICT` | 409 | Resource already exists (e.g. WLAN slot in use) |
+| `TIMEOUT` | 408 | Upstream request timed out |
+| `RATE_LIMITED` | 429 | Rate limit exceeded |
+| `INTERNAL_ERROR` | 500 | Unhandled server error |
+| `SERVICE_UNAVAILABLE` | 503 | Worker pool saturated or upstream down |
+
+### Standard response headers
+
+Every response carries:
+
+| Header | Value | Purpose |
+|---|---|---|
+| `X-API-Version` | `v1` | Public API major version |
+| `X-App-Version` | semver | Binary version from ldflags (`curl /version` to verify) |
+| `X-Build-Commit` | git short SHA | Binary build commit |
+| `X-Request-ID` | correlation ID | Echoed from request or auto-generated |
+
+### Idempotency (`X-Idempotency-Key`)
+
+POST/PUT/PATCH/DELETE requests under `/api/v1/genieacs/*` accept an optional
+`X-Idempotency-Key` header. The first request with a given key is executed
+and its response cached; subsequent requests with the same key within a
+7-day TTL replay the cached response without re-executing. Saga-style
+retries from billing-agent are safe by design.
+
+Server errors (5xx) are NOT cached — they remain retryable.
 
 ---
 
-## 1. Health Check
+## Table of Contents
+
+1. [Health / Liveness Probes](#1-health--liveness-probes)
+2. [Readiness Probes](#2-readiness-probes)
+3. [Version Endpoint](#3-version-endpoint)
+4. [Metrics Endpoint](#4-metrics-endpoint)
+5. [SSID Endpoints](#5-ssid-endpoints)
+6. [DHCP Client Endpoints](#6-dhcp-client-endpoints)
+7. [Device Capability Endpoints](#7-device-capability-endpoints)
+8. [WLAN Available Endpoints](#8-wlan-available-endpoints)
+9. [WLAN Create Endpoints](#9-wlan-create-endpoints)
+10. [WLAN Update Endpoints](#10-wlan-update-endpoints)
+11. [WLAN Delete Endpoints](#11-wlan-delete-endpoints)
+12. [WLAN Optimize Endpoints](#12-wlan-optimize-endpoints)
+13. [Cache Endpoints](#13-cache-endpoints)
+14. [Error Cases](#14-error-cases)
+15. [Authentication Error Cases](#15-authentication-error-cases-middleware_authtrue)
+
+---
+
+## 1. Health / Liveness Probes
 
 ### GET /health
+
+Backwards-compatible liveness alias. Public, no authentication required.
 
 **Request:**
 ```http
@@ -40,16 +108,106 @@ GET http://localhost:8080/health
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "status": "healthy"
   }
 }
 ```
 
+### GET /healthz
+
+Kubernetes liveness probe. Identical payload; returns 200 as long as the HTTP server is accepting connections.
+
+```http
+GET http://localhost:8080/healthz
+```
+
 ---
 
-## 2. SSID Endpoints
+## 2. Readiness Probes
+
+### GET /readyz
+
+Kubernetes readiness probe. Checks upstream GenieACS NBI reachability with a cached 5-second TTL probe (prevents probe storms on k8s). Returns 200 when ready, 503 when GenieACS is unreachable.
+
+**Request:**
+```http
+GET http://localhost:8080/readyz
+```
+
+**Response (200 ready):**
+```json
+{
+  "status": "ready",
+  "dependencies": {
+    "genieacs": {
+      "state": "up"
+    }
+  }
+}
+```
+
+**Response (503 not_ready):**
+```json
+{
+  "status": "not_ready",
+  "dependencies": {
+    "genieacs": {
+      "state": "down",
+      "error": "request failed: Get \"http://localhost:7557/\": dial tcp: connect: connection refused"
+    }
+  }
+}
+```
+
+### GET /ready
+
+Alias of `/readyz` (Fiber convention). Same response shape.
+
+---
+
+## 3. Version Endpoint
+
+### GET /version
+
+Build metadata injected at compile time via `-ldflags`. Returns real values only when built through the CI Docker pipeline or manual `-ldflags`; local dev builds show `"dev"` / `"none"` / `"unknown"` defaults.
+
+**Request:**
+```http
+GET http://localhost:8080/version
+```
+
+**Response (200 OK):**
+```json
+{
+  "version": "2.0.0",
+  "commit": "a2a62e0",
+  "build_time": "2026-04-12T12:00:00Z",
+  "api_version": "v1",
+  "uptime": "2h15m30s"
+}
+```
+
+> **Tip:** after any Docker build, `curl /version` is the fastest way to verify ldflags injection actually worked — a silently-broken Dockerfile will return `"dev"` here.
+
+---
+
+## 4. Metrics Endpoint
+
+### GET /metrics
+
+Prometheus exposition format. Public (no authentication). Used by Prometheus scrape jobs every 15s.
+
+**Standard collectors:**
+- `http_requests_total{method, path, status}` — uses chi RoutePattern labels (e.g. `/api/v1/genieacs/wlan/create/{wlan}/{ip}`) to prevent cardinality explosion from IPs-in-path
+- `http_request_duration_seconds_bucket{method, path, le}` — latency histogram
+- `http_requests_in_flight` — current active requests gauge
+- `go_*` / `process_*` — default Go runtime collectors
+
+---
+
+## 5. SSID Endpoints
 
 ### GET /api/v1/genieacs/ssid/{ip}
 
@@ -64,7 +222,7 @@ GET http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": [
     {
       "wlan": "1",
@@ -126,7 +284,7 @@ GET http://localhost:8080/api/v1/genieacs/force/ssid/10.90.14.41
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "attempts": 1,
     "wlan_data": [
@@ -168,7 +326,7 @@ GET http://localhost:8080/api/v1/genieacs/force/ssid/10.90.14.41?max_retries=5&r
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "attempts": 2,
     "wlan_data": [
@@ -219,7 +377,7 @@ POST http://localhost:8080/api/v1/genieacs/ssid/10.90.14.41/refresh
 
 ---
 
-## 3. DHCP Client Endpoints
+## 6. DHCP Client Endpoints
 
 ### GET /api/v1/genieacs/dhcp-client/{ip}
 
@@ -234,7 +392,7 @@ GET http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.14.41
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": [
     {
       "mac": "6c:3b:6b:7a:52:b0",
@@ -258,7 +416,7 @@ GET http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.14.41?refresh=true
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": [
     {
       "mac": "6c:3b:6b:7a:52:b0",
@@ -271,7 +429,7 @@ GET http://localhost:8080/api/v1/genieacs/dhcp-client/10.90.14.41?refresh=true
 
 ---
 
-## 4. Device Capability Endpoints
+## 7. Device Capability Endpoints
 
 ### GET /api/v1/genieacs/capability/{ip}
 
@@ -286,7 +444,7 @@ GET http://localhost:8080/api/v1/genieacs/capability/10.90.14.41
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "model": "F670L",
     "band_type": "dualband",
@@ -297,7 +455,7 @@ GET http://localhost:8080/api/v1/genieacs/capability/10.90.14.41
 
 ---
 
-## 5. WLAN Available Endpoints
+## 8. WLAN Available Endpoints
 
 ### GET /api/v1/genieacs/wlan/available/{ip}
 
@@ -312,7 +470,7 @@ GET http://localhost:8080/api/v1/genieacs/wlan/available/10.90.14.41
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
     "model": "F670L",
@@ -362,7 +520,7 @@ GET http://localhost:8080/api/v1/genieacs/wlan/available/10.90.14.41
 
 ---
 
-## 6. WLAN Create Endpoints
+## 9. WLAN Create Endpoints
 
 ### POST /api/v1/genieacs/wlan/create/{wlan}/{ip}
 
@@ -387,7 +545,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "auth_mode": "WPA2",
     "band": "2.4GHz",
@@ -422,7 +580,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "auth_mode": "WPA2",
     "band": "5GHz",
@@ -460,7 +618,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "auth_mode": "WPA2",
     "band": "2.4GHz",
@@ -495,7 +653,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "auth_mode": "Open",
     "band": "5GHz",
@@ -533,7 +691,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "auth_mode": "WPA/WPA2",
     "band": "5GHz",
@@ -551,7 +709,7 @@ Content-Type: application/json
 
 ---
 
-## 7. WLAN Update Endpoints
+## 10. WLAN Update Endpoints
 
 ### PUT /api/v1/genieacs/wlan/update/{wlan}/{ip}
 
@@ -572,7 +730,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "2.4GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -603,7 +761,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "2.4GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -634,7 +792,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "2.4GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -651,7 +809,7 @@ Content-Type: application/json
 
 ---
 
-## 8. WLAN Delete Endpoints
+## 11. WLAN Delete Endpoints
 
 ### DELETE /api/v1/genieacs/wlan/delete/{wlan}/{ip}
 
@@ -666,7 +824,7 @@ DELETE http://localhost:8080/api/v1/genieacs/wlan/delete/4/10.90.14.41
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "2.4GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -679,7 +837,7 @@ DELETE http://localhost:8080/api/v1/genieacs/wlan/delete/4/10.90.14.41
 
 ---
 
-## 9. WLAN Optimize Endpoints
+## 12. WLAN Optimize Endpoints
 
 ### PUT /api/v1/genieacs/wlan/optimize/{wlan}/{ip}
 
@@ -703,7 +861,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "2.4GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -737,7 +895,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "5GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -771,7 +929,7 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "band": "2.4GHz",
     "device_id": "001141-F670L-ZTEGCFLN794B3A1",
@@ -787,7 +945,7 @@ Content-Type: application/json
 
 ---
 
-## 10. Cache Endpoints
+## 13. Cache Endpoints
 
 ### POST /api/v1/genieacs/cache/clear
 
@@ -802,7 +960,7 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "message": "Cache cleared"
   }
@@ -822,7 +980,7 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZT
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": {
     "message": "Cache cleared"
   }
@@ -831,7 +989,7 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZT
 
 ---
 
-## 11. Error Cases
+## 14. Error Cases
 
 ### Invalid IP Address Format
 
@@ -1388,7 +1546,7 @@ Content-Type: application/json
 
 ---
 
-## 12. Authentication Error Cases (MIDDLEWARE_AUTH=true)
+## 15. Authentication Error Cases (MIDDLEWARE_AUTH=true)
 
 When `MIDDLEWARE_AUTH=true` is enabled, API key authentication is required for all `/api/v1/genieacs/*` endpoints.
 
@@ -1440,7 +1598,7 @@ X-API-Key: YourSecretKey
 ```json
 {
   "code": 200,
-  "status": "OK",
+  "status": "success",
   "data": [
     {
       "wlan": "1",

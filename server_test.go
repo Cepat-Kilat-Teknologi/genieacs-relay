@@ -668,7 +668,7 @@ func TestRouterWithMiddlewareEnabled(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 		var resp Response
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-		assert.Equal(t, ErrMissingAPIKey, resp.Error)
+		assert.Equal(t, ErrMissingAPIKey, fmt.Sprint(resp.Data))
 	})
 
 	// Test 2: Request with valid API key should succeed
