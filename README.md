@@ -8,18 +8,25 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/Cepat-Kilat-Teknologi/genieacs-relay)](https://goreportcard.com/report/github.com/Cepat-Kilat-Teknologi/genieacs-relay)
 
 A lightweight **Relay** for managing devices via **GenieACS**, built with **Go**.
-This service provides endpoints for retrieving and updating device SSID, WiFi passwords, and DHCP clients.
+This service provides HTTP endpoints for CPE lifecycle operations
+(reboot, DHCP refresh, optical health read), SSID/WLAN management, device
+capability detection, and DHCP client retrieval — all via the GenieACS NBI.
 
-> **v2.0.0 released 2026-04-12** — adapter is now aligned with
-> `isp-adapter-standard` + `isp-logging-standard` and ready for integration
-> with `billing-agent`. Fourth compliant adapter after `freeradius-api` v1.2.0,
-> `go-snmp-olt-zte-c320` v3.0.0, and `write-olt-zte-c320-svc` v3.0.0.
+> **v2.1.0 released 2026-04-15** — CPE lifecycle operations (reboot,
+> dedicated DHCP refresh) + optical interface health (TX/RX power,
+> temperature, voltage, bias current) across 5 vendor parameter paths
+> (ZTE CT-COM EPON/GPON, Huawei HW_DEBUG, Realtek EPON, standard TR-181).
+> 100% unit-test coverage on the main package. See
+> [`CHANGELOG.md`](CHANGELOG.md) `[2.1.0]` section for full details.
 >
-> **Breaking change**: response envelope shape changed (`status:"OK"` → `status:"success"`,
-> error responses now include `error_code` + `request_id`). Major version bump from
-> v1.0.1 per [semantic versioning](https://semver.org/spec/v2.0.0.html). See
-> [`CHANGELOG.md`](CHANGELOG.md) v2.0.0 section for the full migration table and
-> [`CONTRIBUTING.md`](CONTRIBUTING.md#versioning-policy) for the project versioning rules.
+> **v2.0.0 released 2026-04-12** — adapter aligned with
+> `isp-adapter-standard` + `isp-logging-standard`, ready for integration
+> with `isp-agent`. Fourth compliant adapter after `freeradius-api` v1.2.0,
+> `go-snmp-olt-zte-c320` v3.0.0, and `write-olt-zte-c320-svc` v3.0.0.
+> **Breaking change** in v2.0.0: response envelope shape changed
+> (`status:"OK"` → `status:"success"`, error responses now include
+> `error_code` + `request_id`). See
+> [`CHANGELOG.md`](CHANGELOG.md) v2.0.0 section for the migration table.
 
 ---
 
@@ -54,6 +61,28 @@ This service provides endpoints for retrieving and updating device SSID, WiFi pa
 - **ONU/ONT Band Detection** - Automatic detection of single-band and dual-band devices
 - **API Key Authentication** - Protect sensitive endpoints with API keys
 - **Cross-band Validation** - Prevent cross-band SSID/password updates
+
+### v2.1.0 Features (2026-04-15)
+
+- **`POST /reboot/{ip}`** — TR-069 Reboot RPC with `?connection_request`
+  semantics. Returns `202 Accepted` when the task is submitted to the
+  GenieACS NBI. Actual CPE reboot takes 30–90 seconds — callers should
+  not block waiting for reconnect.
+- **`POST /dhcp/{ip}/refresh`** — dedicated DHCP host cache refresh.
+  Reuses the internal refresh routine but exposes it as a clean
+  POST-for-side-effect primitive distinct from the read-with-refresh
+  pattern of `GET /dhcp-client/{ip}?refresh=true`.
+- **`GET /optical/{ip}`** — reads CPE optical interface health
+  (TX/RX power dBm, temperature °C, voltage V, bias current mA) with
+  automatic vendor detection across 5 parameter paths: ZTE CT-COM EPON,
+  ZTE CT-COM GPON, Huawei HW_DEBUG, Realtek EPON, standard TR-181.
+  Vendor-aware health classification (`no_signal` / `critical` /
+  `warning` / `good` / `overload`) with env-tunable thresholds
+  (`OPTICAL_RX_NO_SIGNAL_DBM`, `_CRITICAL_DBM`, `_WARNING_DBM`,
+  `_OVERLOAD_DBM`). Returns `404 OPTICAL_NOT_SUPPORTED` on CPE models
+  that don't expose any known optical parameter tree.
+- **100% unit-test coverage** on the main package, including fixture-
+  driven tests for every vendor extractor.
 
 ### v2.0.0 Standardization Features
 

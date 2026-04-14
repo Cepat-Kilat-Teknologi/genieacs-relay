@@ -1,10 +1,13 @@
 # TODO — genieacs-relay roadmap
 
-## v2.1.0 — CPE lifecycle operations + optical health (DONE on main, awaiting tag)
+## v2.1.0 — CPE lifecycle operations + optical health ✅ RELEASED 2026-04-15
 
-**Status (2026-04-14):** all 3 endpoints implemented + tested + lint
-clean + vulncheck clean. Merged on main via PR (TBD). Awaiting explicit
-`git tag v2.1.0` + Docker push to ship.
+**Status (2026-04-15):** ✅ **SHIPPED.** All items complete. Tag `v2.1.0`
+pushed, CI release workflow green (Docker multi-arch + GitHub release +
+codecov 100% on main package). Post-release hardening commit `8a66b64`
+closed the remaining coverage gaps (3 new handlers + optical + reboot
+transport + loadOpticalThresholdConfig parse error branch) bringing
+main-package coverage from 97.0% to 100.0% via `-coverpkg` scoping.
 
 - [x] **2.1.1** `POST /api/v1/genieacs/reboot/{ip}` — CPE reboot via
       TR-069 Reboot RPC. `reboot.go` + handler + route + tests.
@@ -18,14 +21,21 @@ clean + vulncheck clean. Merged on main via PR (TBD). Awaiting explicit
       `?refresh=true` for guaranteed-fresh reads. Configurable health
       thresholds via env vars. Manual validation against real CPE
       pending first ISP pilot deployment.
-- [x] **2.1.4** Updated `CHANGELOG.md` `[Unreleased]` section + this
-      `TODO.md` + `CLAUDE.md` outstanding-work note + `.env.example`
-      with new optical threshold env vars.
+- [x] **2.1.4** `CHANGELOG.md [2.1.0]` + this `TODO.md` + `CLAUDE.md`
+      outstanding-work note + `.env.example` with new optical
+      threshold env vars + `README.md` v2.1.0 feature section +
+      `API_REFERENCE.md` §14-16 full endpoint documentation.
 - [x] **2.1.5** Tests pass, lint clean (0 issues), vulncheck clean
       (0 vulnerabilities).
-- [ ] **2.1.6** Tag `v2.1.0` + push Docker image to
-      `cepatkilatteknologi/genieacs-relay:2.1.0` + create GitHub
-      release notes. Awaits explicit instruction.
+- [x] **2.1.6** Tag `v2.1.0` pushed, CI release workflow green —
+      Docker image published to
+      `cepatkilatteknologi/genieacs-relay:2.1.0` (multi-arch) +
+      GitHub release published at
+      `https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/releases/tag/v2.1.0`.
+- [x] **2.1.7** (post-release hardening) main-package coverage
+      closed to **100.0%** via `test(v2.1.0): close coverage gaps`
+      commit. `docs/docs.go` (auto-generated swagger) excluded from
+      coverage scope via `-coverpkg`.
 
 **Original v2.1.0 spec preserved below for historical reference / merge
 review context.**

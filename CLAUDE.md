@@ -23,8 +23,14 @@ When releasing a new version or making substantive changes:
    **all 7 CPE workflows** in isp-agent v0.1.0, breaking changes have
    high blast radius
 
-**v2.1.0 status (2026-04-14):** All 3 v2.1 endpoints implemented and
-merged on main, awaiting tag + Docker push:
+**v2.1.0 status (2026-04-15): ✅ SHIPPED.** Tag `v2.1.0` pushed, CI
+release workflow green, Docker image multi-arch published at
+`cepatkilatteknologi/genieacs-relay:2.1.0`, GitHub release at
+`https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/releases/tag/v2.1.0`.
+Main-package coverage is **100.0%** (auto-generated `docs/docs.go`
+swagger excluded via `-coverpkg` scoping).
+
+New endpoints shipped in v2.1.0:
 - `POST /api/v1/genieacs/reboot/{ip}` — TR-069 Reboot RPC
 - `POST /api/v1/genieacs/dhcp/{ip}/refresh` — dedicated DHCP host refresh
 - `GET /api/v1/genieacs/optical/{ip}` — read TX/RX power + temp +
@@ -33,8 +39,8 @@ merged on main, awaiting tag + Docker push:
   health classification thresholds
 
 These unblock isp-agent v0.2+ `RestartOnu`, `RefreshDhcpStatus`, and a
-new `GetOpticalHealth` workflow. See `CHANGELOG.md` `[Unreleased]`
-section for full detail and `TODO.md` for the v2.1.0 checklist.
+new `GetOpticalHealth` workflow. See `CHANGELOG.md [2.1.0]` for full
+detail and `API_REFERENCE.md` §14-16 for per-endpoint specs.
 
 ## Versioning Policy
 
@@ -43,9 +49,10 @@ via `/version`, `X-App-Version` response header, and Docker image tag) is the si
 source of truth for "what did this change cost clients?":
 
 - **MAJOR (X.y.z)** — breaking changes. Any client-visible change that would force
-  `billing-agent` or other consumers to update integration code. Current: **v2.0.0**.
+  `isp-agent` or other consumers to update integration code. Current major: **v2**.
 - **MINOR (x.Y.z)** — backwards-compatible additions (new endpoint, new optional
-  field, new header, new metric, new env var with default).
+  field, new header, new metric, new env var with default). Current: **v2.1.0**
+  released 2026-04-15 (reboot + DHCP refresh + optical health endpoints).
 - **PATCH (x.y.Z)** — bug fixes only, no API change.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) §Versioning Policy for the full rules table,
@@ -53,11 +60,16 @@ version history, and rules of thumb for edge cases.
 
 ## Project Overview
 
-REST API adapter that sits between [billing-agent](https://github.com/Cepat-Kilat-Teknologi/billing-agent)
-and **GenieACS** (TR-069 ACS server). Translates internal HTTP calls into GenieACS REST API
-tasks, with an async worker pool for slow WLAN provisioning operations. Fourth compliant
-adapter in the ISP billing architecture (after freeradius-api v1.2.0, go-snmp-olt-zte-c320 v3.0.0,
-and write-olt-zte-c320-svc v3.0.0). Current release: **v2.0.0** (local semver track — see CONTRIBUTING.md).
+REST API adapter that sits between [isp-agent](https://github.com/Cepat-Kilat-Teknologi/isp-agent)
+Temporal workflow activities and **GenieACS** (TR-069 ACS server). Translates
+internal HTTP calls into GenieACS NBI tasks, with an async worker pool for
+slow WLAN provisioning operations.
+
+**Tier 4 core adapter** in the ISP SaaS 7-plane topology, sitting at Plane 3
+(agent side) alongside `freeradius-api` and `olt-executor`. Current release:
+**v2.1.0** released 2026-04-15 — added CPE lifecycle operations (reboot +
+dedicated DHCP refresh) and optical interface health endpoints across 5
+vendor parameter paths. See `CHANGELOG.md [2.1.0]` for detail.
 
 - **Module path:** `github.com/Cepat-Kilat-Teknologi/genieacs-relay`
 - **Go version:** 1.26.2
@@ -69,21 +81,26 @@ and write-olt-zte-c320-svc v3.0.0). Current release: **v2.0.0** (local semver tr
 ## Architecture
 
 ```
-billing-agent (future v2)
+isp-agent (Temporal worker, Plane 3 / Tier 3)
        │
        │ HTTP /api/v1/genieacs/*
        ▼
-genieacs-relay  ← THIS adapter
+genieacs-relay  ← THIS adapter (Plane 3 / Tier 4 core adapter)
        │
        │ HTTP NBI (+ X-Request-ID forwarding)
        ▼
 GenieACS server → TR-069 devices (ONUs)
 ```
 
-NOT in billing-agent v1 scope — the `activate_customer` workflow uses freeradius-api + write-olt-svc
-only because the OLT auto-pushes OMCI to ONUs during registration. genieacs-relay becomes relevant
-for v2 workflows: `change_wlan_ssid`, `change_wlan_password`, force-provisioning, device firmware
-polling. The standardization work done for v2.0.0 is proactive readiness.
+Powers all 7 CPE workflows in isp-agent v0.1.0 (ChangeWLANSSID,
+ChangeWLANPassword, CreateWLAN, DeleteWLAN, OptimizeWLAN,
+ForceSSIDRefresh, GetDeviceCapability). The v2.1.0 endpoints
+(reboot, DHCP refresh, optical health) are ready for future
+`RestartOnu`, `RefreshDhcpStatus`, and `GetOpticalStats` workflows
+in isp-agent v2+. genieacs-relay is NOT in the `activate_customer`
+path — that workflow uses freeradius-api + OLT writes because the
+OLT auto-pushes OMCI during registration. genieacs-relay is relevant
+for the CPE operational workflows above.
 
 ## Module Map (flat package main layout)
 
@@ -296,6 +313,9 @@ kill %1
 | PUT    | /wlan/update/{wlan}/{ip}   | Update existing WLAN                     |
 | DELETE | /wlan/delete/{wlan}/{ip}   | Disable WLAN (soft delete)               |
 | PUT    | /wlan/optimize/{wlan}/{ip} | Optimize radio settings                  |
+| POST   | /reboot/{ip}               | **v2.1.0** — TR-069 Reboot RPC           |
+| POST   | /dhcp/{ip}/refresh         | **v2.1.0** — Dedicated DHCP cache refresh|
+| GET    | /optical/{ip}              | **v2.1.0** — CPE optical TX/RX/temp/voltage/bias (5-vendor auto-detect) |
 
 ## Environment Configuration
 
@@ -314,9 +334,16 @@ kill %1
 - `RATE_LIMIT_WINDOW` (default `60` seconds)
 - `STALE_THRESHOLD_MINUTES` (default `30`)
 
+**v2.1.0 optical health classification thresholds (dBm, all negative):**
+- `OPTICAL_RX_NO_SIGNAL_DBM` (default `-30.0`) — below this = laser dead / fiber disconnected
+- `OPTICAL_RX_CRITICAL_DBM` (default `-27.0`) — `(-30, -27]` = critical
+- `OPTICAL_RX_WARNING_DBM` (default `-24.0`) — `(-27, -24]` = warning
+- `OPTICAL_RX_OVERLOAD_DBM` (default `-8.0`) — above this = saturation
+- Invalid values log a warning and fall back to the default
+
 ## Related Documentation
 
-- `CHANGELOG.md` — v2.0.0 breaking changes, added endpoints, fixed ldflags bug
+- `CHANGELOG.md` — v2.1.0 added endpoints, v2.0.0 breaking changes, ldflags fix
 - `API_REFERENCE.md` — full endpoint reference with examples
 - `test.http` — REST Client (VS Code) smoke test suite
 - `k6-load-test.js` — k6 load test scenarios (health + contract only, no real GenieACS)

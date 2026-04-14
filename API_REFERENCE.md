@@ -88,8 +88,11 @@ Server errors (5xx) are NOT cached — they remain retryable.
 11. [WLAN Delete Endpoints](#11-wlan-delete-endpoints)
 12. [WLAN Optimize Endpoints](#12-wlan-optimize-endpoints)
 13. [Cache Endpoints](#13-cache-endpoints)
-14. [Error Cases](#14-error-cases)
-15. [Authentication Error Cases](#15-authentication-error-cases-middleware_authtrue)
+14. [CPE Reboot Endpoint (v2.1.0)](#14-cpe-reboot-endpoint-v210)
+15. [DHCP Refresh Endpoint (v2.1.0)](#15-dhcp-refresh-endpoint-v210)
+16. [Optical Health Endpoint (v2.1.0)](#16-optical-health-endpoint-v210)
+17. [Error Cases](#17-error-cases)
+18. [Authentication Error Cases](#18-authentication-error-cases-middleware_authtrue)
 
 ---
 
@@ -989,7 +992,182 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZT
 
 ---
 
-## 14. Error Cases
+## 14. CPE Reboot Endpoint (v2.1.0)
+
+### POST /api/v1/genieacs/reboot/{ip}
+
+Triggers a **TR-069 Reboot RPC** against the CPE identified by IP.
+The call is dispatched through the GenieACS NBI as a `{"name":"reboot"}`
+task with `?connection_request` so the call blocks until either the
+task is applied synchronously (200 OK) or queued asynchronously when
+the connection request fails (202 Accepted). Both status codes indicate
+successful task submission per the NBI contract.
+
+Actual CPE reboot takes 30-90 seconds before the device reconnects to
+the ACS. Callers (typically the future `RestartOnu` workflow in
+`isp-agent` v2+) should **NOT** block waiting for the device to come
+back — the workflow's retry policy or a follow-up health check is the
+right tool for that.
+
+Idempotency middleware applies via the `/api/v1/genieacs` route group,
+so double-clicks within the dedup TTL window replay the same response.
+
+**Request:**
+```http
+POST http://localhost:8080/api/v1/genieacs/reboot/192.168.1.100
+X-API-Key: your-api-key
+X-Idempotency-Key: cmd_abc123
+```
+
+**Success Response (202 Accepted):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "message": "Reboot task submitted. CPE will reconnect to the ACS in approximately 30-90 seconds."
+  },
+  "request_id": "..."
+}
+```
+
+**Error Responses:**
+| Code | error_code | Cause |
+|---|---|---|
+| 400 | `INVALID_IP` | malformed IP in path |
+| 404 | `DEVICE_NOT_FOUND` | no device indexed with that IP in GenieACS |
+| 500 | `REBOOT_FAILED` | NBI returned 4xx/5xx, task rejected |
+
+---
+
+## 15. DHCP Refresh Endpoint (v2.1.0)
+
+### POST /api/v1/genieacs/dhcp/{ip}/refresh
+
+Forces GenieACS to refresh the `LANDevice.1` (DHCP host) subtree on the
+CPE. This is the dedicated endpoint for the side-effect "force refresh"
+— distinct from the read endpoint `GET /dhcp-client/{ip}?refresh=true`
+which mixes read and side-effect semantics.
+
+Use case: future `RefreshDhcpStatus` workflow in `isp-agent` that
+triggers a refresh now and reads the fresh DHCP client list on a
+follow-up call. The device cache is cleared so the next
+`GET /dhcp-client/{ip}` fetches the fresh post-refresh tree from
+GenieACS.
+
+**Request:**
+```http
+POST http://localhost:8080/api/v1/genieacs/dhcp/192.168.1.100/refresh
+X-API-Key: your-api-key
+X-Idempotency-Key: cmd_abc124
+```
+
+**Success Response (202 Accepted):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "message": "DHCP refresh task submitted. Read /dhcp-client/{ip} after ~5s for updated data."
+  },
+  "request_id": "..."
+}
+```
+
+**Error Responses:**
+| Code | error_code | Cause |
+|---|---|---|
+| 400 | `INVALID_IP` | malformed IP in path |
+| 404 | `DEVICE_NOT_FOUND` | no device indexed with that IP |
+| 500 | `REFRESH_FAILED` | NBI task submission failed |
+
+---
+
+## 16. Optical Health Endpoint (v2.1.0)
+
+### GET /api/v1/genieacs/optical/{ip}
+
+Reads **optical interface health metrics** from the CPE — TX power,
+RX power, temperature, voltage, and bias current. Vendor detection
+picks the correct TR-069 parameter path automatically across **5
+vendor variants**:
+
+| Vendor | Parameter path |
+|---|---|
+| ZTE CT-COM EPON | `InternetGatewayDevice.X_CT-COM_EponInterfaceConfig.Stats` |
+| ZTE CT-COM GPON | `InternetGatewayDevice.X_CT-COM_GponInterfaceConfig.Stats` |
+| Huawei HW_DEBUG | `InternetGatewayDevice.X_HW_DEBUG.AdminTR069.OpticalDiagnostic` |
+| Realtek EPON | `InternetGatewayDevice.X_Realtek_EponInterfaceConfig.Stats` |
+| Standard TR-181 | `Device.Optical.Interface.1.Stats` |
+
+Detection order matches typical Indonesian ISP deployment frequency
+(most ZTE F670L/F660 ONTs in residential PON). First vendor extractor
+that returns a populated struct wins.
+
+**Vendor-aware health classification** derives a categorical `health`
+field from the raw RX power reading:
+
+| Health | RX power range (dBm) | Interpretation |
+|---|---|---|
+| `no_signal` | ≤ `OPTICAL_RX_NO_SIGNAL_DBM` (default -30) | fiber disconnected / laser dead |
+| `critical` | `(-30, -27]` | immediate attention needed |
+| `warning` | `(-27, -24]` | degrading |
+| `good` | `(-24, -8]` | normal operation |
+| `overload` | `> OPTICAL_RX_OVERLOAD_DBM` (default -8) | too close / saturation |
+
+Thresholds are env-tunable via `OPTICAL_RX_NO_SIGNAL_DBM`,
+`OPTICAL_RX_CRITICAL_DBM`, `OPTICAL_RX_WARNING_DBM`,
+`OPTICAL_RX_OVERLOAD_DBM`. Invalid values fall back to the defaults
+and log a warning.
+
+**Request (read cached):**
+```http
+GET http://localhost:8080/api/v1/genieacs/optical/192.168.1.100
+X-API-Key: your-api-key
+```
+
+**Request (force refresh before reading — slower but guaranteed fresh):**
+```http
+GET http://localhost:8080/api/v1/genieacs/optical/192.168.1.100?refresh=true
+X-API-Key: your-api-key
+```
+
+With `?refresh=true`, the relay first triggers GenieACS `refreshObject`
+tasks against every known optical subtree, clears the local cache, and
+then reads the fresh device tree. As long as at least one subtree
+accepts the refresh task the call proceeds.
+
+**Success Response (200 OK):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": {
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "source": "zte-ct-com-epon",
+    "rx_power_dbm": -21.3,
+    "tx_power_dbm": 2.5,
+    "health": "good",
+    "temperature_c": 45.0,
+    "voltage_v": 3.3,
+    "bias_current_ma": 12.0,
+    "fetched_at": "2026-04-15T13:00:00Z"
+  },
+  "request_id": "..."
+}
+```
+
+**Error Responses:**
+| Code | error_code | Cause |
+|---|---|---|
+| 400 | `INVALID_IP` | malformed IP in path |
+| 404 | `DEVICE_NOT_FOUND` | no device indexed with that IP |
+| 404 | `OPTICAL_NOT_SUPPORTED` | device found but no known optical parameter tree |
+| 500 | `OPTICAL_READ_FAILED` | GenieACS device fetch or refresh failed |
+
+---
+
+## 17. Error Cases
 
 ### Invalid IP Address Format
 
@@ -1546,7 +1724,7 @@ Content-Type: application/json
 
 ---
 
-## 15. Authentication Error Cases (MIDDLEWARE_AUTH=true)
+## 18. Authentication Error Cases (MIDDLEWARE_AUTH=true)
 
 When `MIDDLEWARE_AUTH=true` is enabled, API key authentication is required for all `/api/v1/genieacs/*` endpoints.
 
