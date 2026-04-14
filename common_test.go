@@ -115,6 +115,10 @@ func setupTestServer(t *testing.T, mockHandler http.Handler) (*httptest.Server, 
 		r.Put("/wlan/update/{wlan}/{ip}", updateWLANHandler)
 		r.Delete("/wlan/delete/{wlan}/{ip}", deleteWLANHandler)
 		r.Put("/wlan/optimize/{wlan}/{ip}", optimizeWLANHandler)
+		// v2.1.0 — CPE lifecycle + optical
+		r.Post("/reboot/{ip}", rebootDeviceHandler)
+		r.Post("/dhcp/{ip}/refresh", refreshDHCPHandler)
+		r.Get("/optical/{ip}", getOpticalStatsHandler)
 	})
 	r.Get("/health", healthCheckHandler)
 

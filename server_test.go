@@ -776,3 +776,26 @@ func TestRunServer_EnvVarParsing(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+// --- v2.1.0 loadOpticalThresholdConfig tests ---
+
+func TestLoadOpticalThresholdConfig_InvalidFloat(t *testing.T) {
+	// Non-numeric env value should trip the strconv.ParseFloat error
+	// branch; the function must warn + fall back to the default.
+	t.Setenv(EnvOpticalRxWarningDBm, "not-a-float")
+	origWarning := opticalRxWarningDBm
+	t.Cleanup(func() { opticalRxWarningDBm = origWarning })
+
+	loadOpticalThresholdConfig()
+	assert.InDelta(t, DefaultOpticalRxWarningDBm, opticalRxWarningDBm, 0.001,
+		"invalid env value should fall back to default")
+}
+
+func TestLoadOpticalThresholdConfig_ValidFloat(t *testing.T) {
+	t.Setenv(EnvOpticalRxCriticalDBm, "-28.5")
+	origCritical := opticalRxCriticalDBm
+	t.Cleanup(func() { opticalRxCriticalDBm = origCritical })
+
+	loadOpticalThresholdConfig()
+	assert.InDelta(t, -28.5, opticalRxCriticalDBm, 0.001)
+}

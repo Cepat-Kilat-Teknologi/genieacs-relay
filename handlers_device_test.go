@@ -241,3 +241,187 @@ func TestGetDeviceIDByIPInvalidJSONHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
+
+// --- v2.1.0 handler tests (reboot, refreshDHCP, opticalStats) ---
+
+func mockDeviceLookupHandler(t *testing.T, statusForTasks int) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/devices") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
+			return
+		}
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/tasks") {
+			w.WriteHeader(statusForTasks)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+}
+
+func TestRebootDeviceHandler_Success(t *testing.T) {
+	_, router := setupTestServer(t, mockDeviceLookupHandler(t, http.StatusOK))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/genieacs/reboot/"+mockDeviceIP, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusAccepted, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Reboot")
+}
+
+func TestRebootDeviceHandler_NBIFailure(t *testing.T) {
+	_, router := setupTestServer(t, mockDeviceLookupHandler(t, http.StatusInternalServerError))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/genieacs/reboot/"+mockDeviceIP, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestRebootDeviceHandler_InvalidIP(t *testing.T) {
+	_, router := setupTestServer(t, mockDeviceLookupHandler(t, http.StatusOK))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/genieacs/reboot/not-an-ip", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.NotEqual(t, http.StatusAccepted, rr.Code)
+}
+
+func TestRefreshDHCPHandler_Success(t *testing.T) {
+	_, router := setupTestServer(t, mockDeviceLookupHandler(t, http.StatusOK))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/genieacs/dhcp/"+mockDeviceIP+"/refresh", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusAccepted, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DHCP")
+}
+
+func TestRefreshDHCPHandler_NBIFailure(t *testing.T) {
+	_, router := setupTestServer(t, mockDeviceLookupHandler(t, http.StatusInternalServerError))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/genieacs/dhcp/"+mockDeviceIP+"/refresh", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestRefreshDHCPHandler_InvalidIP(t *testing.T) {
+	_, router := setupTestServer(t, mockDeviceLookupHandler(t, http.StatusOK))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/genieacs/dhcp/bad.ip/refresh", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.NotEqual(t, http.StatusAccepted, rr.Code)
+}
+
+// opticalDeviceHandlerZTE responds to the device-data lookup with a ZTE
+// CT-COM EPON optical tree so getOpticalStats returns successfully.
+func opticalDeviceHandlerZTE(t *testing.T) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/devices") {
+			body := `[{
+				"_id": "` + mockDeviceID + `",
+				"_lastInform": "2026-04-15T13:00:00.000Z",
+				"InternetGatewayDevice": {
+					"X_CT-COM_EponInterfaceConfig": {
+						"Stats": {
+							"TxPower":     {"_value": 2.5,  "_type": "xsd:float"},
+							"RxPower":     {"_value": -21.3,"_type": "xsd:float"},
+							"Temperature": {"_value": 45.0, "_type": "xsd:float"},
+							"Voltage":     {"_value": 3.3,  "_type": "xsd:float"},
+							"BiasCurrent": {"_value": 12.0, "_type": "xsd:float"}
+						}
+					}
+				}
+			}]`
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
+				return
+			}
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/tasks") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+}
+
+func TestGetOpticalStatsHandler_Success(t *testing.T) {
+	_, router := setupTestServer(t, opticalDeviceHandlerZTE(t))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/genieacs/optical/"+mockDeviceIP, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "rx_power_dbm")
+}
+
+func TestGetOpticalStatsHandler_WithRefresh(t *testing.T) {
+	_, router := setupTestServer(t, opticalDeviceHandlerZTE(t))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/genieacs/optical/"+mockDeviceIP+"?refresh=true", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestGetOpticalStatsHandler_RefreshFailure(t *testing.T) {
+	_, router := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/devices") {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
+				return
+			}
+			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/genieacs/optical/"+mockDeviceIP+"?refresh=true", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestGetOpticalStatsHandler_NotSupported(t *testing.T) {
+	_, router := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/devices") {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
+				return
+			}
+			_, _ = w.Write([]byte(`[{"_id":"` + mockDeviceID + `","InternetGatewayDevice":{}}]`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/genieacs/optical/"+mockDeviceIP, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "OPTICAL_NOT_SUPPORTED")
+}
+
+func TestGetOpticalStatsHandler_GenericError(t *testing.T) {
+	_, router := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/devices") {
+			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
+				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/genieacs/optical/"+mockDeviceIP, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestGetOpticalStatsHandler_InvalidIP(t *testing.T) {
+	_, router := setupTestServer(t, opticalDeviceHandlerZTE(t))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/genieacs/optical/not-an-ip", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.NotEqual(t, http.StatusOK, rr.Code)
+}

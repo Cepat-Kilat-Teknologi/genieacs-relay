@@ -410,3 +410,74 @@ func TestRefreshOpticalStats_PartialSuccess(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, len(opticalSubtreePathsToRefresh), callCount, "all subtrees should be tried even on partial failure")
 }
+
+// --- v2.1.0 coverage closure tests ---
+
+func TestReadFloat_Int64Value(t *testing.T) {
+	// The int64 branch fires when GenieACS serializes an integer
+	// parameter as int64 (e.g. after json.UseNumber). Since
+	// json.Unmarshal into interface{} never produces int64 directly,
+	// we construct the map manually to exercise that code path.
+	parent := map[string]interface{}{
+		"BiasCurrent": map[string]interface{}{"_value": int64(42)},
+	}
+	assert.InDelta(t, 42.0, readFloat(parent, "BiasCurrent"), 0.001)
+}
+
+func TestRefreshOneOpticalSubtree_TransportError(t *testing.T) {
+	// Point at a closed server so postJSONRequest returns a transport
+	// error — covers the `if err != nil` path.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv.Close()
+	geniesBaseURL = srv.URL
+
+	_, err := refreshOneOpticalSubtree(context.Background(), mockDeviceID, "TestSubtree")
+	require.Error(t, err)
+}
+
+func TestRefreshOpticalStats_TransportErrorFallback(t *testing.T) {
+	// Every subtree attempt returns a transport error, so lastErr is
+	// set via the err branch (not the status branch).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv.Close()
+	geniesBaseURL = srv.URL
+
+	err := refreshOpticalStats(context.Background(), mockDeviceID)
+	require.Error(t, err)
+}
+
+func TestRefreshOpticalStats_EmptySubtreeList(t *testing.T) {
+	// Swap the package-level subtree list to an empty slice so the
+	// loop makes zero attempts and successCount stays at 0 with
+	// lastErr also nil — this exercises the `if lastErr == nil`
+	// defensive branch that otherwise is unreachable.
+	orig := opticalSubtreePathsToRefresh
+	opticalSubtreePathsToRefresh = nil
+	t.Cleanup(func() { opticalSubtreePathsToRefresh = orig })
+
+	err := refreshOpticalStats(context.Background(), mockDeviceID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no subtrees attempted")
+}
+
+func TestOpticalStatsJSONShape(t *testing.T) {
+	// Sanity: the serialized envelope keys are snake_case so admin-UI
+	// callers can rely on the naming.
+	stats := OpticalStats{
+		DeviceID:      mockDeviceID,
+		Source:        "zte-ct-com-epon",
+		RxPowerDBm:    -21.3,
+		TxPowerDBm:    2.5,
+		Health:        "good",
+		TemperatureC:  45.0,
+		VoltageV:      3.3,
+		BiasCurrentMA: 12.0,
+		FetchedAt:     "2026-04-15T13:00:00Z",
+	}
+	raw, err := json.Marshal(stats)
+	require.NoError(t, err)
+	s := string(raw)
+	for _, key := range []string{"rx_power_dbm", "tx_power_dbm", "health", "source"} {
+		assert.Contains(t, s, key)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- rebootDevice unit tests ---
@@ -92,4 +93,17 @@ func TestRebootDevice(t *testing.T) {
 		// We assert the inner literal is present somewhere in the captured body.
 		assert.Contains(t, string(capturedBody), `"name": "reboot"`)
 	})
+}
+
+// --- v2.1.0 reboot transport gap ---
+
+func TestRebootDevice_TransportError(t *testing.T) {
+	// Point at a closed server so postJSONRequest returns a transport
+	// error — covers the `if err != nil` path in rebootDevice.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv.Close()
+	geniesBaseURL = srv.URL
+
+	err := rebootDevice(context.Background(), mockDeviceID)
+	require.Error(t, err)
 }
