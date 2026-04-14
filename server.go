@@ -117,6 +117,39 @@ func loadCORSMaxAgeConfig() int {
 	return corsMaxAge
 }
 
+// loadOpticalThresholdConfig reads the four optical health classification
+// thresholds from env vars OPTICAL_RX_NO_SIGNAL_DBM / _CRITICAL_DBM /
+// _WARNING_DBM / _OVERLOAD_DBM. Invalid or empty env vars fall back to
+// the package-level defaults from constants.go. Logged once at startup
+// so ops can verify the active classification policy.
+func loadOpticalThresholdConfig() {
+	parseFloat := func(envName string, defaultVal float64) float64 {
+		raw := getEnv(envName, "")
+		if raw == "" {
+			return defaultVal
+		}
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			logger.Warn("Invalid optical threshold env var, using default",
+				zap.String("env", envName),
+				zap.String("value", raw),
+				zap.Float64("default", defaultVal),
+				zap.Error(err))
+			return defaultVal
+		}
+		return v
+	}
+	opticalRxNoSignalDBm = parseFloat(EnvOpticalRxNoSignalDBm, DefaultOpticalRxNoSignalDBm)
+	opticalRxCriticalDBm = parseFloat(EnvOpticalRxCriticalDBm, DefaultOpticalRxCriticalDBm)
+	opticalRxWarningDBm = parseFloat(EnvOpticalRxWarningDBm, DefaultOpticalRxWarningDBm)
+	opticalRxOverloadDBm = parseFloat(EnvOpticalRxOverloadDBm, DefaultOpticalRxOverloadDBm)
+	logger.Info("Optical health thresholds (dBm)",
+		zap.Float64("no_signal", opticalRxNoSignalDBm),
+		zap.Float64("critical", opticalRxCriticalDBm),
+		zap.Float64("warning", opticalRxWarningDBm),
+		zap.Float64("overload", opticalRxOverloadDBm))
+}
+
 // loadServerConfig loads all server configuration
 func loadServerConfig(addr string) (*serverConfig, error) {
 	serverAddr = getEnv("SERVER_ADDR", addr)
@@ -131,6 +164,7 @@ func loadServerConfig(addr string) (*serverConfig, error) {
 	}
 
 	loadStaleThresholdConfig()
+	loadOpticalThresholdConfig()
 
 	return &serverConfig{
 		corsOrigins: loadCORSConfig(),
@@ -220,7 +254,11 @@ func runServer(addr string) error {
 		r.Get("/force"+"/ssid/{ip}", getSSIDByIPForceHandler)
 		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
 		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
+		r.Post("/dhcp/{ip}/refresh", refreshDHCPHandler)
 		r.Post("/cache/clear", clearCacheHandler)
+		// CPE lifecycle operations (v2.1.0)
+		r.Post("/reboot/{ip}", rebootDeviceHandler)
+		r.Get("/optical/{ip}", getOpticalStatsHandler)
 		// Device capability and WLAN management endpoints
 		r.Get("/capability/{ip}", getDeviceCapabilityHandler)
 		r.Get("/wlan/available/{ip}", getAvailableWLANHandler)

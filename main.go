@@ -62,6 +62,18 @@ var (
 	middlewareAuth bool          // Whether API key authentication middleware is enabled
 	authKey        string        // API key for authenticating incoming requests
 	staleThreshold time.Duration // Threshold for considering device as stale (default: 10 minutes)
+
+	// Optical interface health classification thresholds (dBm).
+	// Used by classifyOpticalHealth in optical.go to bucket the raw
+	// RxPower reading into "good" / "warning" / "critical" / "no_signal".
+	// All values are negative (PON optical signals are attenuated).
+	// Defaults match typical PON ONT operating ranges; per-deployment
+	// tuning via env OPTICAL_RX_NO_SIGNAL_DBM, OPTICAL_RX_CRITICAL_DBM,
+	// OPTICAL_RX_WARNING_DBM, OPTICAL_RX_OVERLOAD_DBM.
+	opticalRxNoSignalDBm = DefaultOpticalRxNoSignalDBm
+	opticalRxCriticalDBm = DefaultOpticalRxCriticalDBm
+	opticalRxWarningDBm  = DefaultOpticalRxWarningDBm
+	opticalRxOverloadDBm = DefaultOpticalRxOverloadDBm
 )
 
 // ldflags injection targets. These MUST remain lowercase to match

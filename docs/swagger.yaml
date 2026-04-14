@@ -152,6 +152,58 @@ definitions:
         example: Operation completed successfully
         type: string
     type: object
+  main.OpticalStats:
+    properties:
+      bias_current_ma:
+        description: |-
+          BiasCurrentMA — laser driver bias current in milliamps. Normal
+          range is roughly 5-30 mA depending on optics module. Rising bias
+          over time indicates laser aging.
+        type: number
+      device_id:
+        type: string
+      fetched_at:
+        description: |-
+          FetchedAt — RFC3339 timestamp of when the data was read from
+          GenieACS. Combine with `?refresh=true` for guaranteed freshness.
+        type: string
+      health:
+        description: |-
+          Health — categorical classification derived from RxPowerDBm using
+          configurable thresholds. Values: "good", "warning", "critical",
+          "no_signal", "unknown".
+        type: string
+      rx_power_dbm:
+        description: |-
+          RxPowerDBm — optical receive power in dBm. Normal PON ONU range
+          is roughly -8 to -27 dBm depending on splitter ratio + distance.
+          Below -27: marginal. Below -30: no signal (fiber broken/disconnected).
+          Above -8: overloaded (CPE may be too close to OLT or splitter ratio wrong).
+        type: number
+      source:
+        description: |-
+          Source — which parameter tree the values came from. Useful for
+          debugging and vendor-mix analytics. Possible values:
+          "zte_ct_com_epon", "zte_ct_com_gpon", "huawei_hw_debug",
+          "realtek_epon", "standard_tr181".
+        type: string
+      temperature_c:
+        description: |-
+          TemperatureC — internal optics module temperature in Celsius.
+          Normal range is 0-80°C. Above 85°C may trigger thermal shutdown.
+        type: number
+      tx_power_dbm:
+        description: |-
+          TxPowerDBm — optical transmit power in dBm. Normal PON ONU range
+          is roughly -1 to +5 dBm. Lower values may indicate laser bias
+          degradation or power supply issues.
+        type: number
+      voltage_v:
+        description: |-
+          VoltageV — optics module supply voltage in Volts. Normal range
+          is 3.0-3.6V (3.3V nominal). Out-of-range = power supply issue.
+        type: number
+    type: object
   main.OptimizeWLANRequest:
     properties:
       bandwidth:
@@ -530,6 +582,56 @@ paths:
       summary: Get DHCP clients
       tags:
       - Device
+  /dhcp/{ip}/refresh:
+    post:
+      description: Forces GenieACS to refresh the LANDevice.1 (DHCP host) subtree
+        on the CPE. Use this when you want the side effect of "fetch fresh DHCP data"
+        without fetching the data immediately. Read the refreshed data via GET /dhcp-client/{ip}
+        after this returns.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.MessageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Trigger DHCP client cache refresh
+      tags:
+      - Device
   /force/ssid/{ip}:
     get:
       consumes:
@@ -640,6 +742,61 @@ paths:
       summary: Prometheus metrics
       tags:
       - Health
+  /optical/{ip}:
+    get:
+      description: Reads optical interface health metrics from the CPE. Vendor detection
+        picks the correct TR-069 parameter path automatically. Use ?refresh=true to
+        force a fresh fetch from the CPE before reading (slower but guaranteed fresh).
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Force refresh data from CPE before reading
+        in: query
+        name: refresh
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.OpticalStats'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Device not found OR optical interface not supported by this
+            CPE model
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get CPE optical interface stats (TX/RX power, temperature, voltage,
+        bias current)
+      tags:
+      - Device
   /readyz:
     get:
       description: Kubernetes readiness probe — returns 200 when all upstream dependencies
@@ -659,6 +816,56 @@ paths:
       summary: Readiness probe
       tags:
       - Health
+  /reboot/{ip}:
+    post:
+      description: Triggers a TR-069 Reboot RPC against the CPE identified by IP.
+        The actual CPE reboot takes 30-90 seconds before the device reconnects to
+        the ACS. Callers should NOT block waiting for the device to come back — this
+        endpoint returns as soon as the task is submitted to GenieACS.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.MessageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Reboot CPE
+      tags:
+      - Device
   /ssid/{ip}:
     get:
       consumes:

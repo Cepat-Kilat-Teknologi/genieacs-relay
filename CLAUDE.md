@@ -1,5 +1,41 @@
 # CLAUDE.md — genieacs-relay
 
+> **READ FIRST (AI agents):** `~/Projects/knowledge-base/BOOTSTRAP.md` is
+> the canonical cold-start doc for this platform. This repo is 1 of 5
+> HTTP adapters subordinate to [[isp-agent]]. Current platform state:
+> `~/Projects/knowledge-base/STATUS.md`.
+
+## Wiki Update Discipline (HARD RULE)
+
+**"Release done" ≠ "tag pushed". Release done = tag + wiki + platform status
+all updated together.**
+
+When releasing a new version or making substantive changes:
+
+1. `CHANGELOG.md` — move Unreleased to `[vX.Y.Z] — DATE`
+2. Git tag + push: `git tag -a vX.Y.Z && git push origin vX.Y.Z`
+3. Verify release workflow success (multi-arch Docker + GitHub Release)
+4. **Wiki entity page**: `~/Projects/knowledge-base/wiki/genieacs-relay.md`
+5. **Platform status**: `~/Projects/knowledge-base/STATUS.md`
+6. **Platform changelog**: `~/Projects/knowledge-base/PLATFORM_CHANGELOG.md`
+7. **Dependency manifest**: `~/Projects/knowledge-base/platform-deps.yaml`
+8. If breaking change: notify isp-agent dev lead — genieacs-relay powers
+   **all 7 CPE workflows** in isp-agent v0.1.0, breaking changes have
+   high blast radius
+
+**v2.1.0 status (2026-04-14):** All 3 v2.1 endpoints implemented and
+merged on main, awaiting tag + Docker push:
+- `POST /api/v1/genieacs/reboot/{ip}` — TR-069 Reboot RPC
+- `POST /api/v1/genieacs/dhcp/{ip}/refresh` — dedicated DHCP host refresh
+- `GET /api/v1/genieacs/optical/{ip}` — read TX/RX power + temp +
+  voltage + bias current with vendor auto-detection (ZTE CT-COM EPON/GPON,
+  Huawei HW_DEBUG, Realtek EPON, standard TR-181) and configurable
+  health classification thresholds
+
+These unblock isp-agent v0.2+ `RestartOnu`, `RefreshDhcpStatus`, and a
+new `GetOpticalHealth` workflow. See `CHANGELOG.md` `[Unreleased]`
+section for full detail and `TODO.md` for the v2.1.0 checklist.
+
 ## Versioning Policy
 
 This project follows **Semantic Versioning 2.0.0** strictly. Binary version (reported

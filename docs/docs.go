@@ -242,6 +242,83 @@ const docTemplate = `{
                 }
             }
         },
+        "/dhcp/{ip}/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Forces GenieACS to refresh the LANDevice.1 (DHCP host) subtree on the CPE. Use this when you want the side effect of \"fetch fresh DHCP data\" without fetching the data immediately. Read the refreshed data via GET /dhcp-client/{ip} after this returns.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Device"
+                ],
+                "summary": "Trigger DHCP client cache refresh",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/force/ssid/{ip}": {
             "get": {
                 "security": [
@@ -413,6 +490,89 @@ const docTemplate = `{
                 }
             }
         },
+        "/optical/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Reads optical interface health metrics from the CPE. Vendor detection picks the correct TR-069 parameter path automatically. Use ?refresh=true to force a fresh fetch from the CPE before reading (slower but guaranteed fresh).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Device"
+                ],
+                "summary": "Get CPE optical interface stats (TX/RX power, temperature, voltage, bias current)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Force refresh data from CPE before reading",
+                        "name": "refresh",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.OpticalStats"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Device not found OR optical interface not supported by this CPE model",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/readyz": {
             "get": {
                 "description": "Kubernetes readiness probe — returns 200 when all upstream dependencies (GenieACS) are reachable, 503 when any dependency is down. Results cached with TTL to avoid probe storms.",
@@ -434,6 +594,83 @@ const docTemplate = `{
                         "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/main.ReadinessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/reboot/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Triggers a TR-069 Reboot RPC against the CPE identified by IP. The actual CPE reboot takes 30-90 seconds before the device reconnects to the ACS. Callers should NOT block waiting for the device to come back — this endpoint returns as soon as the task is submitted to GenieACS.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Device"
+                ],
+                "summary": "Reboot CPE",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
                         }
                     }
                 }
@@ -1294,6 +1531,46 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "Operation completed successfully"
+                }
+            }
+        },
+        "main.OpticalStats": {
+            "type": "object",
+            "properties": {
+                "bias_current_ma": {
+                    "description": "BiasCurrentMA — laser driver bias current in milliamps. Normal\nrange is roughly 5-30 mA depending on optics module. Rising bias\nover time indicates laser aging.",
+                    "type": "number"
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "fetched_at": {
+                    "description": "FetchedAt — RFC3339 timestamp of when the data was read from\nGenieACS. Combine with ` + "`" + `?refresh=true` + "`" + ` for guaranteed freshness.",
+                    "type": "string"
+                },
+                "health": {
+                    "description": "Health — categorical classification derived from RxPowerDBm using\nconfigurable thresholds. Values: \"good\", \"warning\", \"critical\",\n\"no_signal\", \"unknown\".",
+                    "type": "string"
+                },
+                "rx_power_dbm": {
+                    "description": "RxPowerDBm — optical receive power in dBm. Normal PON ONU range\nis roughly -8 to -27 dBm depending on splitter ratio + distance.\nBelow -27: marginal. Below -30: no signal (fiber broken/disconnected).\nAbove -8: overloaded (CPE may be too close to OLT or splitter ratio wrong).",
+                    "type": "number"
+                },
+                "source": {
+                    "description": "Source — which parameter tree the values came from. Useful for\ndebugging and vendor-mix analytics. Possible values:\n\"zte_ct_com_epon\", \"zte_ct_com_gpon\", \"huawei_hw_debug\",\n\"realtek_epon\", \"standard_tr181\".",
+                    "type": "string"
+                },
+                "temperature_c": {
+                    "description": "TemperatureC — internal optics module temperature in Celsius.\nNormal range is 0-80°C. Above 85°C may trigger thermal shutdown.",
+                    "type": "number"
+                },
+                "tx_power_dbm": {
+                    "description": "TxPowerDBm — optical transmit power in dBm. Normal PON ONU range\nis roughly -1 to +5 dBm. Lower values may indicate laser bias\ndegradation or power supply issues.",
+                    "type": "number"
+                },
+                "voltage_v": {
+                    "description": "VoltageV — optics module supply voltage in Volts. Normal range\nis 3.0-3.6V (3.3V nominal). Out-of-range = power supply issue.",
+                    "type": "number"
                 }
             }
         },

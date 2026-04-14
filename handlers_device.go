@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 
 	"go.uber.org/zap"
@@ -48,6 +49,131 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Return successful response with DHCP client data
 	sendResponse(w, http.StatusOK, dhcpClients)
+}
+
+// rebootDeviceHandler triggers a TR-069 Reboot RPC against the CPE
+//
+//	@Summary		Reboot CPE
+//	@Description	Triggers a TR-069 Reboot RPC against the CPE identified by IP. The actual CPE reboot takes 30-90 seconds before the device reconnects to the ACS. Callers should NOT block waiting for the device to come back — this endpoint returns as soon as the task is submitted to GenieACS.
+//	@Tags			Device
+//	@Produce		json
+//	@Param			ip	path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		202	{object}	Response{data=MessageResponse}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		429	{object}	Response
+//	@Failure		500	{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/reboot/{ip} [post]
+func rebootDeviceHandler(w http.ResponseWriter, r *http.Request) {
+	deviceID, ok := ExtractDeviceIDByIP(w, r)
+	if !ok {
+		return
+	}
+	if err := rebootDevice(r.Context(), deviceID); err != nil {
+		logger.Error("Reboot task submission failed", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrRebootFailed)
+		return
+	}
+	// Clear cached device data — the post-reboot device tree will look
+	// different and we don't want stale cached values lingering.
+	deviceCacheInstance.clear(deviceID)
+	sendResponse(w, http.StatusAccepted, map[string]string{
+		"message": MsgRebootSubmitted,
+	})
+}
+
+// refreshDHCPHandler triggers a refresh of the LANDevice.1 (DHCP host)
+// subtree on the CPE. This is the dedicated endpoint for the side-effect
+// "force refresh" — distinct from the read endpoint
+// GET /dhcp-client/{ip}?refresh=true which uses the same internal refresh
+// function but mixes read and side-effect semantics.
+//
+//	@Summary		Trigger DHCP client cache refresh
+//	@Description	Forces GenieACS to refresh the LANDevice.1 (DHCP host) subtree on the CPE. Use this when you want the side effect of "fetch fresh DHCP data" without fetching the data immediately. Read the refreshed data via GET /dhcp-client/{ip} after this returns.
+//	@Tags			Device
+//	@Produce		json
+//	@Param			ip	path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		202	{object}	Response{data=MessageResponse}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		429	{object}	Response
+//	@Failure		500	{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/dhcp/{ip}/refresh [post]
+func refreshDHCPHandler(w http.ResponseWriter, r *http.Request) {
+	deviceID, ok := ExtractDeviceIDByIP(w, r)
+	if !ok {
+		return
+	}
+	if err := refreshDHCP(r.Context(), deviceID); err != nil {
+		logger.Error("DHCP refresh task submission failed", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrRefreshFailed)
+		return
+	}
+	// Clear cached device data so the next /dhcp-client/{ip} read fetches
+	// the fresh post-refresh tree from GenieACS.
+	deviceCacheInstance.clear(deviceID)
+	sendResponse(w, http.StatusAccepted, map[string]string{
+		"message": MsgDHCPRefreshSubmitted,
+	})
+}
+
+// getOpticalStatsHandler reads optical interface stats (TX/RX power,
+// temperature, voltage, bias current) from the CPE. Vendor detection
+// picks the right parameter path (ZTE CT-COM, Huawei HW_DEBUG, standard
+// TR-181). Returns 404 with OPTICAL_NOT_SUPPORTED when the CPE doesn't
+// expose any known optical parameter tree.
+//
+// Use ?refresh=true to force a `refreshObject` task on the optical
+// subtree before reading. Default behavior reads from the cached device
+// tree (fast but possibly stale).
+//
+//	@Summary		Get CPE optical interface stats (TX/RX power, temperature, voltage, bias current)
+//	@Description	Reads optical interface health metrics from the CPE. Vendor detection picks the correct TR-069 parameter path automatically. Use ?refresh=true to force a fresh fetch from the CPE before reading (slower but guaranteed fresh).
+//	@Tags			Device
+//	@Produce		json
+//	@Param			ip		path		string	true	"Device IP address"				example(192.168.1.1)
+//	@Param			refresh	query		bool	false	"Force refresh data from CPE before reading"
+//	@Success		200		{object}	Response{data=OpticalStats}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response	"Device not found OR optical interface not supported by this CPE model"
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/optical/{ip} [get]
+func getOpticalStatsHandler(w http.ResponseWriter, r *http.Request) {
+	deviceID, ok := ExtractDeviceIDByIP(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.Query().Get("refresh") == "true" {
+		if err := refreshOpticalStats(r.Context(), deviceID); err != nil {
+			logger.Info("Optical refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
+			sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrOpticalReadFailed)
+			return
+		}
+		// Clear cache so the next getDeviceData call hits GenieACS fresh.
+		deviceCacheInstance.clear(deviceID)
+	}
+	stats, err := getOpticalStats(r.Context(), deviceID)
+	if err != nil {
+		// Vendor-not-supported case → 404 with explicit error code so the
+		// caller can distinguish "device not found" from "device found but
+		// no optical params".
+		if errors.Is(err, errOpticalNotSupported) {
+			logger.Info("Optical stats not supported by device", zap.String("deviceID", deviceID))
+			sendError(w, r, http.StatusNotFound, "OPTICAL_NOT_SUPPORTED", ErrOpticalNotSupported)
+			return
+		}
+		logger.Error("Failed to read optical stats", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, sanitizeErrorMessage(err))
+		return
+	}
+	sendResponse(w, http.StatusOK, stats)
 }
 
 // getDeviceCapabilityHandler retrieves the wireless capability of a device (single-band or dual-band)
