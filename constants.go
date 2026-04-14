@@ -97,6 +97,38 @@ const (
 	EnvNBIAuthKey = "NBI_AUTH_KEY"
 )
 
+// Optical interface health classification thresholds (dBm).
+//
+// Used by classifyOpticalHealth in optical.go to bucket the raw RxPower
+// reading from the CPE into a categorical health label. All values are
+// negative because PON optical signals are attenuated relative to a 0
+// dBm reference. The thresholds describe the lower bounds of each
+// classification range (more negative = worse signal):
+//
+//	rx <= -30                          → "no_signal"  (fiber broken/disconnected)
+//	-30 < rx <= -27                    → "critical"   (marginal, intermittent drops likely)
+//	-27 < rx <= -24                    → "warning"    (attenuated, watch closely)
+//	-24 <  rx <  -8                    → "good"       (normal PON ONT operating range)
+//	rx >= -8                           → "warning"    (overload — receiver too hot)
+//
+// Per-deployment tuning via env vars (read at startup):
+//
+//	OPTICAL_RX_NO_SIGNAL_DBM   (default -30)
+//	OPTICAL_RX_CRITICAL_DBM    (default -27)
+//	OPTICAL_RX_WARNING_DBM     (default -24)
+//	OPTICAL_RX_OVERLOAD_DBM    (default  -8)
+const (
+	DefaultOpticalRxNoSignalDBm = -30.0
+	DefaultOpticalRxCriticalDBm = -27.0
+	DefaultOpticalRxWarningDBm  = -24.0
+	DefaultOpticalRxOverloadDBm = -8.0
+
+	EnvOpticalRxNoSignalDBm = "OPTICAL_RX_NO_SIGNAL_DBM"
+	EnvOpticalRxCriticalDBm = "OPTICAL_RX_CRITICAL_DBM"
+	EnvOpticalRxWarningDBm  = "OPTICAL_RX_WARNING_DBM"
+	EnvOpticalRxOverloadDBm = "OPTICAL_RX_OVERLOAD_DBM"
+)
+
 // CORS configuration
 const (
 	// EnvCORSAllowedOrigins is the environment variable for allowed CORS origins (comma-separated)
@@ -227,6 +259,9 @@ const (
 	ErrInvalidMaxClients    = "Max clients must be between 1 and 64"
 	ErrPasswordRequiredAuth = "Password is required for WPA, WPA2, or WPA/WPA2 authentication"
 	ErrRefreshFailed        = "Refresh failed"
+	ErrRebootFailed         = "Reboot task submission failed"
+	ErrOpticalNotSupported  = "Optical interface stats not supported by this device. The CPE either does not expose any known vendor extension (X_CT-COM_EponInterfaceConfig, X_HW_DEBUG, etc.) or does not implement the standard Device.Optical.Interface tree."
+	ErrOpticalReadFailed    = "Failed to read optical interface stats"
 	ErrDeviceCapability     = "Failed to determine device capability"
 	ErrNoWLANDataFound      = "No WLAN data found after %d attempts"
 	ErrWLANCheckFailed      = "Failed to check WLAN status"
@@ -257,6 +292,8 @@ const (
 const (
 	MsgCacheCleared          = "Cache cleared"
 	MsgRefreshSubmitted      = "Refresh task submitted. Please query the GET endpoint again after a few moments."
+	MsgRebootSubmitted       = "Reboot task submitted. CPE will reconnect to the ACS in approximately 30-90 seconds."
+	MsgDHCPRefreshSubmitted  = "DHCP refresh task submitted. Query GET /dhcp-client/{ip} to read the refreshed data."
 	MsgWLANCreationSubmitted = "WLAN creation submitted successfully"
 	MsgWLANUpdateSubmitted   = "WLAN update submitted successfully"
 	MsgWLANDeletionSubmitted = "WLAN deletion submitted successfully"

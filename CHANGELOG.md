@@ -4,6 +4,135 @@ All notable changes to genieacs-relay are documented in this file. The format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v2.1.0 (CPE lifecycle operations + optical health)
+
+### Added
+
+- **`POST /api/v1/genieacs/reboot/{ip}`** — TR-069 Reboot RPC. Triggers
+  GenieACS task `{"name": "reboot"}` against the device matched by IP,
+  with `?connection_request` so the call blocks until the task is
+  applied (200 OK) or queued (202 Accepted). Actual CPE reboot takes
+  30-90 seconds before the device reconnects to the ACS — callers
+  (typically the future `RestartOnu` workflow in isp-agent) should NOT
+  block waiting for the device to come back. Idempotency middleware
+  applies via the `/api/v1/genieacs` route group, so double-clicks
+  within the dedup TTL window replay the same response. Implementation:
+  `reboot.go` + handler in `handlers_device.go` + route in `server.go`.
+  Tests: `reboot_test.go` covering 200/202 success, 404 device-not-found,
+  500 NBI error, payload literal verification.
+
+- **`POST /api/v1/genieacs/dhcp/{ip}/refresh`** — dedicated DHCP host
+  cache refresh endpoint. Reuses the existing internal `refreshDHCP()`
+  function but exposes it as a clean POST-for-side-effect primitive
+  distinct from the read endpoint `GET /dhcp-client/{ip}?refresh=true`
+  which mixes read and side-effect semantics. Use case: future
+  `RefreshDhcpStatus` workflow that triggers a refresh now and reads
+  the fresh data on a follow-up call. Idempotency-cached. The cached
+  device data is cleared on success so the next read fetches fresh.
+
+- **`GET /api/v1/genieacs/optical/{ip}`** — read CPE optical interface
+  health metrics (TX power, RX power, temperature, voltage, bias
+  current). Detects the vendor parameter tree automatically:
+
+  | Source label | TR-069 path |
+  |---|---|
+  | `zte_ct_com_epon` | `InternetGatewayDevice.X_CT-COM_EponInterfaceConfig.Stats.*` |
+  | `zte_ct_com_gpon` | `InternetGatewayDevice.X_CT-COM_GponInterfaceConfig.Stats.*` |
+  | `huawei_hw_debug` | `InternetGatewayDevice.X_HW_DEBUG.AdminTR069.{Tx,Rx}Power` |
+  | `realtek_epon` | `InternetGatewayDevice.X_Realtek_EponInterfaceConfig.Stats.*` |
+  | `standard_tr181` | `Device.Optical.Interface.1.Stats.*` |
+
+  Detection order matches typical Indonesian ISP deployment frequency
+  (most ZTE F670L/F660 ONTs in residential PON deployments). Returns
+  HTTP 404 with `error_code: OPTICAL_NOT_SUPPORTED` for CPEs that
+  don't expose any known tree.
+
+  **Health classification.** Raw RxPower (dBm) is bucketed into
+  categorical labels by `classifyOpticalHealth`:
+
+  | RxPower (dBm) | Health |
+  |---|---|
+  | `rx <= -30` | `no_signal` (fiber broken/disconnected) |
+  | `-30 < rx <= -27` | `critical` (marginal, intermittent drops likely) |
+  | `-27 < rx <= -24` | `warning` (attenuated, watch closely) |
+  | `-24 < rx < -8` | `good` (normal PON ONT operating range) |
+  | `rx >= -8` | `warning` (overload — receiver too hot, link too short) |
+
+  Thresholds are configurable per-deployment via env vars (read at
+  startup): `OPTICAL_RX_NO_SIGNAL_DBM`, `OPTICAL_RX_CRITICAL_DBM`,
+  `OPTICAL_RX_WARNING_DBM`, `OPTICAL_RX_OVERLOAD_DBM`. Defaults match
+  typical PON ONT operating ranges; tune if your deployment has
+  unusual splitter ratios or distance profiles.
+
+  **Freshness.** By default the endpoint reads from the cached device
+  tree (fast but possibly stale up to the GenieACS device cache TTL).
+  Pass `?refresh=true` to force a `refreshObject` task on every known
+  vendor optical subtree before reading — slower (round-trips to the
+  CPE) but guaranteed fresh.
+
+  **Response schema** (`OpticalStats`):
+
+  ```json
+  {
+    "device_id":      "001141-F670L-ZTEGCFLN794B3A1",
+    "tx_power_dbm":   2.5,
+    "rx_power_dbm":   -21.3,
+    "bias_current_ma": 12.5,
+    "temperature_c":  45.0,
+    "voltage_v":      3.3,
+    "health":         "good",
+    "source":         "zte_ct_com_epon",
+    "fetched_at":     "2026-04-14T13:00:00Z"
+  }
+  ```
+
+  Implementation: `optical.go` (vendor extractors + classifier +
+  `refreshOpticalStats` + helpers `navigateNested`/`readFloat`).
+  Tests: `optical_test.go` with fixture-based device tree samples for
+  all 5 vendor paths + health classification table + helper unit
+  tests + `refreshOpticalStats` partial-success path. **Manual
+  validation against a real CPE is pending the first ISP pilot
+  deployment** — fixtures are based on documented production samples
+  but not yet hit a live device through this code path.
+
+- New env vars (all optional, with sensible defaults):
+  - `OPTICAL_RX_NO_SIGNAL_DBM` (default `-30`)
+  - `OPTICAL_RX_CRITICAL_DBM` (default `-27`)
+  - `OPTICAL_RX_WARNING_DBM` (default `-24`)
+  - `OPTICAL_RX_OVERLOAD_DBM` (default `-8`)
+
+- New error code: `OPTICAL_NOT_SUPPORTED` (HTTP 404) — distinguishes
+  "device exists but no optical params exposed" from "device not found".
+
+### Notes for deployers
+
+- **No genieacs-stack changes required.** Reboot + DHCP refresh use
+  standard GenieACS NBI tasks (`reboot`, `refreshObject`) that work
+  out-of-the-box. Optical reading uses `getDeviceData` against the
+  CPE's existing parameter tree — if the CPE exposes the parameters,
+  GenieACS already has them after the next inform.
+- **Optional GenieACS provisioning preset.** For deployments where
+  ops want optical data auto-refreshed periodically (rather than
+  on-demand via `?refresh=true`), configure a GenieACS provisioning
+  preset via the GenieACS UI to fetch the relevant subtree on every
+  inform — vendor-specific, not bundled with the stack. Example
+  preset for ZTE CT-COM EPON:
+
+  ```javascript
+  declare("InternetGatewayDevice.X_CT-COM_EponInterfaceConfig.Stats.RxPower",
+          {value: 1}, {value: now});
+  ```
+
+### Downstream unblock
+
+With these endpoints live, isp-agent v0.2+ can add:
+- `RestartOnu` workflow → `POST /reboot/{ip}`
+- `RefreshDhcpStatus` workflow → `POST /dhcp/{ip}/refresh`
+- New `GetOpticalHealth` workflow → `GET /optical/{ip}` (read-only,
+  same shape as existing `GetDeviceCapability`)
+
+See `~/Projects/isp-agent/TODO.md` Phase 6 backlog.
+
 ## [2.0.0] — 2026-04-12
 
 **First standardized release**, aligned with [`isp-adapter-standard`][adapter-std] and
