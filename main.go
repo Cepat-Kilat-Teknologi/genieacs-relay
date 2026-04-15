@@ -1,13 +1,18 @@
 // Package main GenieACS Relay API
 //
-// A lightweight relay service for managing devices via GenieACS.
-// Provides RESTful endpoints for SSID management, WLAN configuration,
-// device capability detection, and DHCP client information.
+// A lightweight relay service for managing TR-069 devices via GenieACS.
+// Provides RESTful endpoints across the full CPE operational surface:
+// SSID/WLAN management, device capability + status inspection, DHCP
+// clients, CPE lifecycle (reboot/factory-reset/wake), NOC support tools
+// (ping/traceroute diagnostics, WiFi inspection, device discovery),
+// customer self-service (port forwarding, DDNS, DMZ, WiFi schedule,
+// MAC filter, static DHCP, NTP, admin password), firmware push, and
+// GenieACS provisioning preset + tag management.
 //
 //	@title						GenieACS Relay API
-//	@version					1.0.0
-//	@description				A lightweight relay service for managing TR-069 devices via GenieACS.
-//	@description				Provides endpoints for SSID/WLAN management, device capability detection, and DHCP clients.
+//	@version					2.2.0
+//	@description				A lightweight REST relay for managing TR-069 devices via the GenieACS NBI. v2.2.0 adds 25 new operational endpoints across 4 phases (CPE lifecycle, NOC support, customer self-service, GenieACS metadata) on top of the v2.1.0 baseline. 100% main-package coverage, 40/40 endpoints end-to-end verified on real ZTE F670L V9.0.10P1N12A via VPN lab (sessions 5i + 5j 2026-04-15).
+//	@description				See CHANGELOG.md [2.2.0] for full release notes and upstream genieacs-stack v1.3.1 blocker for customer factory-reset workflows.
 //
 //	@contact.name				Cepat Kilat Teknologi
 //	@contact.url				https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
@@ -24,15 +29,29 @@
 //	@description				API key for authentication (required when MIDDLEWARE_AUTH=true)
 //
 //	@tag.name					Health
-//	@tag.description			Health check endpoint
+//	@tag.description			Health check, readiness, version, metrics endpoints (unauthenticated)
 //	@tag.name					SSID
-//	@tag.description			SSID management operations
+//	@tag.description			SSID read/refresh operations (v1.x)
 //	@tag.name					WLAN
-//	@tag.description			WLAN configuration and management
+//	@tag.description			WLAN configuration and management (create / update / delete / optimize / availability, v1.x)
 //	@tag.name					Device
-//	@tag.description			Device capability and information
+//	@tag.description			Device capability detection, DHCP clients, reboot (v1.x + v2.1.0)
 //	@tag.name					Cache
 //	@tag.description			Cache management operations
+//	@tag.name					Lifecycle
+//	@tag.description			CPE lifecycle operations — factory-reset, wake (v2.2.0)
+//	@tag.name					Inspection
+//	@tag.description			Read-side device inspection — status, WAN connections, generic params, optical, WiFi clients/stats (v2.1.0 + v2.2.0)
+//	@tag.name					Provisioning
+//	@tag.description			CPE provisioning writes — PPPoE, QoS, bridge-mode, NTP, admin password, DMZ, DDNS, port forwarding, static DHCP, WiFi schedule, MAC filter, firmware push (v2.2.0)
+//	@tag.name					Diagnostics
+//	@tag.description			TR-069 IPPingDiagnostics and TraceRouteDiagnostics dispatch (v2.2.0)
+//	@tag.name					Devices
+//	@tag.description			Multi-device queries via GenieACS NBI — paginated listing and MAC/serial/PPPoE search (v2.2.0)
+//	@tag.name					Admin
+//	@tag.description			Administrative operations on individual devices (v2.2.0)
+//	@tag.name					Metadata
+//	@tag.description			GenieACS NBI passthrough — device tags and provisioning presets (v2.2.0)
 package main
 
 import (

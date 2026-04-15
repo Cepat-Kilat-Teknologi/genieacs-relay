@@ -1,9 +1,9 @@
 # GenieACS Relay API Reference
 
-**Version:** 2.0.0 — aligned with `isp-adapter-standard` and `isp-logging-standard`
-**Last Updated:** 2026-04-12
+**Version:** 2.2.0-dev (Phase 1-4 complete, 25 new endpoints, Phase 5 release pending)
+**Last Updated:** 2026-04-14
 
-This document provides complete API reference with request/response examples for all GenieACS Relay endpoints.
+This document provides complete API reference with request/response examples for all GenieACS Relay endpoints. **v2.2.0** adds 25 new endpoints (Section 17) to support auto-learning OLT deployments where the OLT doesn't push customer profile config — see `V2.2.0-DESIGN.md` in the repo root for the design doc.
 
 > **Note:** For device-specific test results, see:
 > - [TEST_RESULT_SINGLEBAND.md](TEST_RESULT_SINGLEBAND.md) - Single-band device tests (CDATA FD512XW-R460)
@@ -91,8 +91,9 @@ Server errors (5xx) are NOT cached — they remain retryable.
 14. [CPE Reboot Endpoint (v2.1.0)](#14-cpe-reboot-endpoint-v210)
 15. [DHCP Refresh Endpoint (v2.1.0)](#15-dhcp-refresh-endpoint-v210)
 16. [Optical Health Endpoint (v2.1.0)](#16-optical-health-endpoint-v210)
-17. [Error Cases](#17-error-cases)
-18. [Authentication Error Cases](#18-authentication-error-cases-middleware_authtrue)
+17. [v2.2.0 Endpoints — Auto-Learn OLT Support (25 new)](#17-v220-endpoints--auto-learn-olt-support-25-new)
+18. [Error Cases](#18-error-cases)
+19. [Authentication Error Cases](#19-authentication-error-cases-middleware_authtrue)
 
 ---
 
@@ -992,7 +993,7 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZT
 
 ---
 
-## 14. CPE Reboot Endpoint (v2.1.0)
+## 14. CPE Reboot Endpoint (v2.1.0, E2E verified v2.2.0 session 5j)
 
 ### POST /api/v1/genieacs/reboot/{ip}
 
@@ -1003,11 +1004,21 @@ task is applied synchronously (200 OK) or queued asynchronously when
 the connection request fails (202 Accepted). Both status codes indicate
 successful task submission per the NBI contract.
 
-Actual CPE reboot takes 30-90 seconds before the device reconnects to
-the ACS. Callers (typically the future `RestartOnu` workflow in
-`isp-agent` v2+) should **NOT** block waiting for the device to come
-back — the workflow's retry policy or a follow-up health check is the
-right tool for that.
+Actual CPE reboot takes 30-90 seconds typical before the device
+reconnects to the ACS. Callers (typically the future `RestartOnu`
+workflow in `isp-agent` v2+) should **NOT** block waiting for the
+device to come back — the workflow's retry policy or a follow-up
+health check is the right tool for that.
+
+> **Slow-boot anomaly observed in session 5j** — on a real ZTE F670L
+> running V9.0.10P1N12A, the observed total downtime was **6 min 52
+> seconds**, well outside the 30-90s docstring spec. Root cause
+> unconfirmed but likely specific to this ZTE firmware revision's
+> config-parsing path or lab-VPN WAN re-establishment. Callers
+> deploying on ZTE fleets with this firmware should budget **up to
+> ~7 minutes** before treating a reboot as failed. A docstring patch
+> is scheduled for v2.2.1. See CHANGELOG.md `[2.2.0]` → "Verified —
+> Session 5j" for the full test timeline.
 
 Idempotency middleware applies via the `/api/v1/genieacs` route group,
 so double-clicks within the dedup TTL window replay the same response.
@@ -1167,7 +1178,743 @@ accepts the refresh task the call proceeds.
 
 ---
 
-## 17. Error Cases
+## 17. v2.2.0 Endpoints — Auto-Learn OLT Support (25 new)
+
+This section documents the 25 new endpoints added in v2.2.0 to
+support **auto-learning OLT deployments** (Hioso, HSGQ, Jolink, CDATA
+auto mode, etc.). In those topologies the OLT does **not** push
+customer profile config — it only bridges traffic — so **all**
+customer-facing configuration must flow through TR-069 from the
+GenieACS plane. v2.1.0's CRUD slice was too narrow for that workflow;
+v2.2.0 expands the surface to cover lifecycle, inspection,
+provisioning, diagnostics, and customer self-service features.
+
+Endpoints are grouped by priority tier:
+
+- **Phase 2 (HIGH, 7)** — operational essentials for auto-learn ISP
+  scenarios
+- **Phase 3 (MEDIUM, 8)** — NOC support tools
+- **Phase 4 (LOW, 10)** — customer-facing self-service + metadata
+
+All 25 endpoints share the same response envelope, idempotency
+middleware, audit logging, and API-key authentication as the v1.x /
+v2.1.0 endpoints. See `V2.2.0-DESIGN.md` in the repo root for the
+full design doc with endpoint contracts and vendor caveats.
+
+### 17.1 HIGH priority — Phase 2 endpoints
+
+#### POST /api/v1/genieacs/factory-reset/{ip}  (H6)
+
+**TR-069 FactoryReset RPC. DESTRUCTIVE.**
+
+Triggers a TR-069 FactoryReset against the CPE. The device loses all
+locally-stored config (PPPoE credentials, WLAN, port-forward rules,
+static DHCP leases, etc.), reboots, and rejoins the ACS in a fresh
+provisioning state. Unreachable for 60-180 seconds during the reset
+cycle. Used by RMA flows and customer-requested "reset my modem"
+support tickets. Fire-and-forget — does NOT block waiting for the
+device to come back.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/genieacs/factory-reset/192.168.1.1 \
+  -H "X-API-Key: your-api-key"
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "message": "FactoryReset task submitted. Device will be unreachable for 60-180 seconds, will lose its current PPPoE credentials and WLAN config, and will rejoin the ACS in a fresh provisioning state."
+  }
+}
+```
+
+**⚠️ Real-lab constraint:** DO NOT run against production CPE
+without a recovery plan — the device's admin-set config is lost
+permanently once the reset is applied.
+
+> **Session 5j verification (2026-04-15)** — end-to-end verified on a
+> real ZTE F670L V9.0.10P1N12A via VPN lab. Observed: HTTP 202, ping
+> drop at T+11s (faster than reboot's T+32s because FactoryReset is
+> a more direct RPC), full ping recovery at T+1:45 for **1:34 total
+> downtime** — within the documented 60-180s window. PASS verdict
+> supported by four independent evidence vectors (downtime signature
+> distinct from reboot on the same unit, post-recovery credential
+> drift proving device-side creds were wiped, clean task queue
+> transition, timing match). See CHANGELOG.md `[2.2.0]` →
+> "Verified — Session 5j" block for the full reasoning chain.
+
+> **⚠️ Production-deployment blocker (genieacs-stack v1.3.1 pending)**
+> — after factory-reset, genieacs cannot wake the device via
+> `POST /wake/{ip}` until the device informs on its own periodic cycle
+> (30 min default). Root cause is a stock `/init` provision in
+> upstream genieacs-stack: it writes a numeric `PeriodicInformTime`
+> that ZTE rejects with fault 9007, and TR-069 atomic rollback wipes
+> the sibling `ConnectionRequestUsername`/`Password` writes in the
+> same `setParameterValues` call, so genieacs ends up with cached
+> ACS-side credentials that no longer match what the freshly-reset
+> device expects. The mongo-side mitigation applied in session 5i
+> does **not** survive a factory-reset cycle. Permanent fix ships in
+> `genieacs-stack v1.3.1`. NOT a relay bug; relay code is correct.
+> Do not wire `isp-agent v0.2+` `FactoryResetCpe` customer workflow
+> until `genieacs-stack v1.3.1` has landed.
+
+#### POST /api/v1/genieacs/wake/{ip}  (H2)
+
+**Fires a TR-069 ConnectionRequest without queuing real work.**
+
+Wakes a freshly-installed CPE so the first config push lands
+synchronously (instead of queuing until the next periodic inform),
+or wakes an idle device for diagnostics, or probes responsiveness.
+Implemented as a no-op `getParameterValues` task for
+`DeviceInfo.UpTime` (cheapest always-present parameter) submitted
+with `?connection_request` enabled. Fire-and-forget; wake takes
+1-30 seconds depending on CPE CWMP timer config.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/genieacs/wake/192.168.1.1 \
+  -H "X-API-Key: your-api-key"
+```
+
+**Response (202):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "message": "ConnectionRequest dispatched to device. Wake-up takes 1-30 seconds depending on CPE responsiveness."
+  }
+}
+```
+
+#### GET /api/v1/genieacs/status/{ip}  (H1)
+
+**Returns device status snapshot from the cached tree.**
+
+Returns `last_inform` timestamp, computed `online` flag, `uptime_seconds`,
+and identification fields (manufacturer, model, software/hardware
+version). Walks both TR-098 (`InternetGatewayDevice.DeviceInfo.*`) and
+TR-181 (`Device.DeviceInfo.*`) paths so the same handler works across
+the Indonesian ONT fleet. `_lastInform` is read directly from the
+top-level field (bare RFC3339 string, not wrapped in `_value`). Online
+flag = `time.Since(last_inform) < 3*stale_threshold` with a 30-min
+fallback when the stale-check env var is disabled.
+
+```bash
+curl http://localhost:8080/api/v1/genieacs/status/192.168.1.1 \
+  -H "X-API-Key: your-api-key"
+```
+
+**Response (200):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": {
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "ip": "192.168.1.1",
+    "last_inform": "2026-04-14T11:35:21Z",
+    "last_inform_age_seconds": 42,
+    "online": true,
+    "uptime_seconds": 1234567,
+    "manufacturer": "ZTE",
+    "model": "F670L",
+    "software_version": "V9.0.10P5N12",
+    "hardware_version": "V1.0"
+  }
+}
+```
+
+#### GET /api/v1/genieacs/wan/{ip}  (H4)
+
+**Returns WAN connection state(s) — type, status, external IP, uptime.**
+
+Walks every `WANDevice.{n}.WANConnectionDevice.{m}.WANPPPConnection.{k}`
+and `WANIPConnection.{k}` instance in the cached tree and surfaces
+each as a separate `WANConnectionInfo` entry. Handles multi-WAN and
+dual-stack devices (PPPoE on WAN1 + DHCP on WAN2, for example).
+Per-connection fields: instance, type (`pppoe`/`dhcp`/`static`/`ipcp`),
+connection status, external IP, uptime seconds, PPPoE username
+(PPPoE only), last connection error.
+
+```bash
+curl http://localhost:8080/api/v1/genieacs/wan/192.168.1.1 \
+  -H "X-API-Key: your-api-key"
+```
+
+**Response (200):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": {
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "ip": "192.168.1.1",
+    "wan_connections": [
+      {
+        "instance": 1,
+        "type": "pppoe",
+        "connection_status": "Connected",
+        "external_ip": "203.0.113.45",
+        "uptime_seconds": 12345,
+        "username": "pppoe-customer-001",
+        "last_connection_error": ""
+      }
+    ]
+  }
+}
+```
+
+#### POST /api/v1/genieacs/params/{ip}  (H7)
+
+**Generic GetParameterValues passthrough.**
+
+NOC L2/L3 debugging tool — inspect arbitrary TR-069 parameter values
+without the relay needing a dedicated endpoint per parameter. Up to
+50 paths per request, each validated against
+`^[a-zA-Z][a-zA-Z0-9_.]*$` (no shell metacharacters or query
+injection). Two modes:
+
+- `live=false` (default) — walks the cached device tree immediately
+  (sub-100ms)
+- `live=true` — dispatches a fresh GetParameterValues task with
+  `?connection_request`, clears the cache, then reads the refreshed
+  tree
+
+```bash
+curl -X POST http://localhost:8080/api/v1/genieacs/params/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paths": [
+      "InternetGatewayDevice.DeviceInfo.UpTime",
+      "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username"
+    ],
+    "live": false
+  }'
+```
+
+**Response (200):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": {
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "ip": "192.168.1.1",
+    "params": {
+      "InternetGatewayDevice.DeviceInfo.UpTime": "1234567",
+      "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username": "pppoe-customer-001"
+    },
+    "missing_paths": [],
+    "live": false
+  }
+}
+```
+
+#### PUT /api/v1/genieacs/pppoe/{ip}  (H3)
+
+**Set PPPoE credentials on the CPE. Critical for auto-learn activate flow.**
+
+Without this endpoint, the customer activate flow in auto-learning
+OLT topologies has no way to provision the customer's PPPoE username
+and password onto the CPE. Submitted via the existing worker pool so
+the handler returns 202 immediately; the actual NBI dispatch happens
+asynchronously. v2.2.0 hardcodes the TR-098 path
+`WANDevice.{n}.WANConnectionDevice.1.WANPPPConnection.1.{Username,Password}`;
+v2.3.0 will add TR-181 detection.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/pppoe/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "pppoe-customer-001",
+    "password": "secret-pass"
+  }'
+```
+
+**Validation rules:**
+- `username` non-empty, ≤ 64 chars, no whitespace
+- `password` non-empty, ≤ 64 chars
+- `wan_instance` 1-8 if specified, defaults to 1
+
+**Response (202):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "message": "PPPoE credentials updated. Device will reconnect within 30s.",
+    "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+    "ip": "192.168.1.1",
+    "wan_instance": 1
+  }
+}
+```
+
+#### POST /api/v1/genieacs/firmware/{ip}  (H5)
+
+**TR-069 Download RPC for firmware upgrade. LONG-RUNNING.**
+
+Dispatches a TR-069 Download task against the CPE. Returns 202 +
+GenieACS task ID immediately; does NOT block waiting for the download
+to complete (typical 60-300s depending on file size and link speed).
+Includes HTTPS-only validation + SSRF guard rejecting private IPs /
+loopback / link-local / metadata service hostnames.
+
+**⚠️ REAL-LAB CONSTRAINT:** DO NOT test against production CPE
+without an offline-verified firmware blob matching the exact ONU
+model. A wrong firmware image **bricks the device**.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/genieacs/firmware/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_url": "https://firmware.example.com/zte-f670l-v9.0.11.bin",
+    "file_type": "1 Firmware Upgrade Image",
+    "file_size": 12345678,
+    "command_key": "fleet-rollout-2026-04-14"
+  }'
+```
+
+**Response (202):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "task_id": "67abc1234567890abcdef123",
+    "message": "Firmware download dispatched. Use the returned task_id to poll status.",
+    "estimated_duration_seconds": 180
+  }
+}
+```
+
+**SSRF guard rejects:**
+- Non-HTTPS schemes (plain HTTP, FTP, file://)
+- Private IPs (`10.x.x.x`, `172.16-31.x.x`, `192.168.x.x`)
+- Loopback (`127.x.x.x`, `::1`)
+- Link-local (`169.254.x.x`, `fe80::/10`)
+- Metadata service hostnames (`localhost`, `metadata`,
+  `metadata.google.internal`)
+- Unspecified (`0.0.0.0`)
+
+---
+
+### 17.2 MEDIUM priority — Phase 3 endpoints
+
+#### POST /api/v1/genieacs/diag/ping/{ip}  (M1)
+
+**TR-069 IPPingDiagnostics dispatch. Long-running; poll result separately.**
+
+Sets the IPPingDiagnostics parameters (Host, NumberOfRepetitions,
+Timeout, DataBlockSize, DSCP) + `DiagnosticsState=Requested` to
+trigger the run. The trigger entry MUST be last per TR-069 §A.4.1 so
+the CPE applies all inputs before starting the diagnostic. Returns
+202 + the list of result parameter paths the caller should poll via
+`POST /params/{ip}` after 5-15 seconds. Polling is delegated to the
+caller to keep the relay request-handler thread decoupled from CPE
+inform latency.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/genieacs/diag/ping/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "host": "8.8.8.8",
+    "count": 4,
+    "timeout_ms": 5000
+  }'
+```
+
+**Response (202):**
+```json
+{
+  "code": 202,
+  "status": "success",
+  "data": {
+    "message": "Diagnostic task dispatched. Poll /params/{ip} for the diagnostic result paths after 5-15 seconds.",
+    "device_id": "...",
+    "ip": "192.168.1.1",
+    "diagnostic": "ping",
+    "result_paths": [
+      "InternetGatewayDevice.IPPingDiagnostics.DiagnosticsState",
+      "InternetGatewayDevice.IPPingDiagnostics.SuccessCount",
+      "InternetGatewayDevice.IPPingDiagnostics.FailureCount",
+      "InternetGatewayDevice.IPPingDiagnostics.AverageResponseTime",
+      "InternetGatewayDevice.IPPingDiagnostics.MinimumResponseTime",
+      "InternetGatewayDevice.IPPingDiagnostics.MaximumResponseTime"
+    ]
+  }
+}
+```
+
+**Validation rules:** count 1-64, timeout 100-60000ms.
+
+#### POST /api/v1/genieacs/diag/traceroute/{ip}  (M2)
+
+**TR-069 TraceRouteDiagnostics dispatch.** Same pattern as M1, with
+`max_hops` instead of `count`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/genieacs/diag/traceroute/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"host":"8.8.8.8","max_hops":30,"timeout_ms":5000}'
+```
+
+#### GET /api/v1/genieacs/wifi-clients/{ip}  (M3)
+
+**Returns associated WiFi clients across all WLAN radios.**
+
+Walks `LANDevice.1.WLANConfiguration.{n}.AssociatedDevice.{m}`
+(TR-098). Distinct from `/dhcp-client/{ip}` — this reads the WLAN
+association table directly, which includes clients on static IPs or
+clients that haven't asked for DHCP. Per-client fields: MAC, WLAN
+instance, SSID, band, signal strength dBm, authentication state.
+Reads both `X_SignalStrength` vendor extension and standard
+`SignalStrength` paths.
+
+```bash
+curl http://localhost:8080/api/v1/genieacs/wifi-clients/192.168.1.1 \
+  -H "X-API-Key: your-api-key"
+```
+
+**Response (200):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": {
+    "device_id": "...",
+    "ip": "192.168.1.1",
+    "clients": [
+      {
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "wlan": 1,
+        "ssid": "MyWiFi-2.4GHz",
+        "band": "2.4GHz",
+        "signal_strength_dbm": -55,
+        "authenticated": true
+      }
+    ]
+  }
+}
+```
+
+#### GET /api/v1/genieacs/wifi-stats/{ip}  (M7)
+
+**Returns per-radio WiFi statistics.**
+
+Channel, transmit power (standard `TransmitPower` + vendor `X_TXPower`),
+bytes/packets sent and received, error counters. Used by WiFi
+optimization recommendations and "my wifi is slow" tickets.
+
+```bash
+curl http://localhost:8080/api/v1/genieacs/wifi-stats/192.168.1.1 \
+  -H "X-API-Key: your-api-key"
+```
+
+#### GET /api/v1/genieacs/devices  (M4)
+
+**Paginated device listing — FIRST endpoint without an `{ip}` URL param.**
+
+Wraps the GenieACS NBI `/devices?query=...` call directly. Optional
+filters: `model` (substring), `online` (last inform within 3x stale
+threshold), `pppoe_username` (substring). Pagination via
+`?page=N&page_size=N` (1-indexed, max 200). Returns lightweight
+`DeviceSummary` rows — not the full device tree. Used by admin UI
+device discovery flow.
+
+```bash
+curl "http://localhost:8080/api/v1/genieacs/devices?page=1&page_size=50&model=F670L" \
+  -H "X-API-Key: your-api-key"
+```
+
+**Response (200):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "data": {
+    "page": 1,
+    "page_size": 50,
+    "count": 2,
+    "has_more": false,
+    "devices": [
+      {
+        "device_id": "001141-F670L-ZTEGCFLN794B3A1",
+        "ip": "203.0.113.45",
+        "last_inform": "2026-04-14T11:35:21Z",
+        "manufacturer": "ZTE",
+        "model": "F670L",
+        "serial": "ZTEGCFLN794B3A1",
+        "mac": "AA:BB:CC:DD:EE:FF"
+      }
+    ]
+  }
+}
+```
+
+#### GET /api/v1/genieacs/devices/search  (M5)
+
+**Single-device lookup by alternative key.**
+
+Exactly one of `?mac=...`, `?serial=...`, or `?pppoe_username=...`
+must be provided. Precedence: mac → serial → pppoe_username. Returns
+404 if no device matches. Used in the customer onboarding flow when
+the IP is not yet known.
+
+```bash
+curl "http://localhost:8080/api/v1/genieacs/devices/search?mac=AA:BB:CC:DD:EE:FF" \
+  -H "X-API-Key: your-api-key"
+```
+
+#### PUT /api/v1/genieacs/qos/{ip}  (M6)
+
+**Per-WAN bandwidth rate limit via TR-069 SetParameterValues.**
+
+Sets `X_DownStreamMaxBitRate` / `X_UpStreamMaxBitRate` on the
+standard WANPPPConnection path. At least one rate must be provided;
+rates of 0 clear the cap. Vendor-specific QoS extensions
+(`X_HW_BandwidthLimit`, `X_TPLINK_QoSManagement`, etc.) are deferred
+to v2.3.0.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/qos/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"download_kbps":102400,"upload_kbps":51200}'
+```
+
+#### PUT /api/v1/genieacs/bridge-mode/{ip}  (M8)
+
+**Toggle CPE bridge / router mode. COARSE APPROXIMATION.**
+
+Sets `WANPPPConnection.Enable` — `enabled=true` puts CPE in bridge
+mode (PPPoE off, customer router handles termination); `enabled=false`
+reverts to router mode. Real bridge-mode toggling varies by vendor
+and may require multiple parameter writes (disable PPPoE + enable
+IP passthrough + switch L2 forwarding); v2.3.0 will add vendor
+detection.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/bridge-mode/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}'
+```
+
+---
+
+### 17.3 LOW priority — Phase 4 endpoints
+
+#### PUT /api/v1/genieacs/ntp/{ip}  (L7)
+
+**Set NTP servers and/or timezone.**
+
+Max 5 NTP server entries (TR-098 schema limit). Either field alone
+is valid — "timezone-only" or "servers-only" updates are allowed.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/ntp/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"ntp_servers":["pool.ntp.org","time.google.com"],"timezone":"Asia/Jakarta"}'
+```
+
+#### PUT /api/v1/genieacs/admin-password/{ip}  (L8)
+
+**Set CPE local web admin password.**
+
+Distinct from PPPoE credentials (`/pppoe/{ip}`) and TR-069 ACS auth.
+Password is **NOT echoed** in the response or audit logs for
+security.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/admin-password/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"password":"new-admin-password"}'
+```
+
+#### PUT /api/v1/genieacs/dmz/{ip}  (L2)
+
+**Set DMZ host on the CPE WAN connection.**
+
+`enabled=true` requires `host_ip`; `enabled=false` clears the DMZ.
+Uses vendor extension paths (`X_DMZEnable`, `X_DMZHost`).
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/dmz/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true,"host_ip":"192.168.1.100"}'
+```
+
+#### PUT /api/v1/genieacs/ddns/{ip}  (L3)
+
+**Set DDNS provider, hostname, credentials.**
+
+Uses TR-098 `Services.X_DynDNS.1.*` paths. Username and password are
+**NOT echoed** in the response. When `enabled=false`, provider /
+hostname / credentials are not required.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/ddns/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "provider": "dyndns.com",
+    "hostname": "mycpe.dyndns.com",
+    "username": "user",
+    "password": "pass"
+  }'
+```
+
+#### PUT /api/v1/genieacs/port-forwarding/{ip}  (L1)
+
+**Set port forwarding rules at caller-specified slot indexes.**
+
+v2.2.0 uses **set-at-index** semantics — caller specifies which
+PortMapping slot to write. Does NOT auto-create new instances
+(v2.3.0 enhancement). Use `enabled=false` to disable a slot without
+removing it. Max 32 rules per request.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/port-forwarding/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rules": [
+      {
+        "index": 1,
+        "name": "ssh",
+        "protocol": "tcp",
+        "external_port": 2222,
+        "internal_ip": "192.168.1.100",
+        "internal_port": 22,
+        "enabled": true
+      }
+    ]
+  }'
+```
+
+**Protocol values:** `tcp`, `udp`, `both` (→ TR-069 `TCP AND UDP`).
+
+#### PUT /api/v1/genieacs/static-dhcp/{ip}  (L6)
+
+**Set static DHCP lease entries at caller-specified slot indexes.**
+
+Same set-at-index semantics as port forwarding. Max 32 leases.
+MAC format validated with `([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}`.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/static-dhcp/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "leases": [
+      {
+        "index": 1,
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "ip": "192.168.1.100",
+        "hostname": "my-laptop"
+      }
+    ]
+  }'
+```
+
+#### PUT /api/v1/genieacs/wifi-schedule/{ip}  (L4)
+
+**Set parental-control WiFi schedule entries.**
+
+`day` is 0-6 (Sun=0, Sat=6). `start_time` / `end_time` are HH:MM
+format (`00:00`-`23:59`). Max 14 entries (2 per day for 7 days).
+Uses vendor extension path `X_TimerSchedule` common across ZTE,
+Huawei, and FiberHome ONUs. v2.3.0 will add per-vendor detection.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/wifi-schedule/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schedules": [
+      {"day": 1, "start_time": "22:00", "end_time": "06:00", "enabled": true},
+      {"day": 2, "start_time": "22:00", "end_time": "06:00", "enabled": true}
+    ]
+  }'
+```
+
+#### PUT /api/v1/genieacs/mac-filter/{ip}  (L5)
+
+**Set WLAN MAC filter list.**
+
+`mode` is `allow` (whitelist) or `deny` (blacklist); canonicalized to
+TR-069 `Allow`/`Deny` on the wire. Max 32 MAC entries. Each entry
+validated against the standard MAC address regex.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/mac-filter/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "allow",
+    "macs": ["AA:BB:CC:DD:EE:FF","11:22:33:44:55:66"]
+  }'
+```
+
+#### PUT /api/v1/genieacs/tags/{ip}  (L9)
+
+**Add and remove GenieACS device tags via the NBI.**
+
+Tags are metadata only — they don't trigger TR-069 RPCs. Used by ops
+to group devices for bulk operations, alerting, or fleet rollouts.
+Wraps NBI `POST /devices/{id}/tags/{tag}` and `DELETE /devices/{id}/tags/{tag}`.
+Tag names must match `[a-zA-Z0-9_-]{1,64}`. First failure aborts
+the batch (no transactional rollback).
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/genieacs/tags/192.168.1.1 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "add": ["prod", "region-jkt"],
+    "remove": ["staging"]
+  }'
+```
+
+#### GET|PUT|DELETE /api/v1/genieacs/presets/{name}  (L10)
+
+**GenieACS provisioning preset management via NBI passthrough.**
+
+Three methods on the same path. Preset name must match
+`[a-zA-Z0-9_-]{1,64}`.
+
+```bash
+# Read
+curl http://localhost:8080/api/v1/genieacs/presets/prod-default \
+  -H "X-API-Key: your-api-key"
+
+# Create / update (body forwarded as-is)
+curl -X PUT http://localhost:8080/api/v1/genieacs/presets/prod-default \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"weight": 10, "configurations": []}'
+
+# Delete
+curl -X DELETE http://localhost:8080/api/v1/genieacs/presets/prod-default \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+## 18. Error Cases
 
 ### Invalid IP Address Format
 
@@ -1724,7 +2471,7 @@ Content-Type: application/json
 
 ---
 
-## 18. Authentication Error Cases (MIDDLEWARE_AUTH=true)
+## 19. Authentication Error Cases (MIDDLEWARE_AUTH=true)
 
 When `MIDDLEWARE_AUTH=true` is enabled, API key authentication is required for all `/api/v1/genieacs/*` endpoints.
 

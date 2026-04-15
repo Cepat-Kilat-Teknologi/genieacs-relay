@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "A lightweight relay service for managing TR-069 devices via GenieACS.\nProvides endpoints for SSID/WLAN management, device capability detection, and DHCP clients.",
+        "description": "A lightweight REST relay for managing TR-069 devices via the GenieACS NBI. v2.2.0 adds 25 new operational endpoints across 4 phases (CPE lifecycle, NOC support, customer self-service, GenieACS metadata) on top of the v2.1.0 baseline. 100% main-package coverage, 40/40 endpoints end-to-end verified on real ZTE F670L V9.0.10P1N12A via VPN lab (sessions 5i + 5j 2026-04-15).\nSee CHANGELOG.md [2.2.0] for full release notes and upstream genieacs-stack v1.3.1 blocker for customer factory-reset workflows.",
         "title": "GenieACS Relay API",
         "contact": {
             "name": "Cepat Kilat Teknologi",
@@ -11,11 +11,189 @@
             "name": "MIT",
             "url": "https://opensource.org/licenses/MIT"
         },
-        "version": "1.0.0"
+        "version": "2.2.0"
     },
     "host": "localhost:8080",
     "basePath": "/api/v1/genieacs",
     "paths": {
+        "/admin-password/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the CPE local web admin password via TR-069 SetParameterValues on `InternetGatewayDevice.UserInterface.WebPassword`. Distinct from PPPoE credentials and TR-069 ACS auth. Password is NOT echoed in the response or audit logs.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Set CPE admin web password",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New admin password",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetAdminPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetAdminPasswordResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/bridge-mode/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Toggles bridge / router mode on the CPE WAN connection by setting WANPPPConnection.Enable. Coarse approximation — real bridge-mode toggling varies by vendor and may require multiple parameter writes. v2.3.0 adds vendor detection.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Toggle CPE bridge / router mode",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Bridge mode toggle",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetBridgeModeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetBridgeModeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/cache/clear": {
             "post": {
                 "security": [
@@ -111,6 +289,277 @@
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/main.DeviceCapabilityResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/ddns/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates DDNS configuration on the CPE via TR-069 SetParameterValues on the standard `Services.X_DynDNS` paths. Vendor variation is wide; v2.2.0 uses the most common paths and surfaces vendor incompatibility as a 503 from the GenieACS layer.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set CPE DDNS configuration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "DDNS configuration",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetDDNSRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetDDNSResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/devices": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a paginated list of devices known to GenieACS. Optional filters: model, online, pppoe_username (substring). Used by the admin UI device discovery flow. Pagination metadata: page, page_size, count (rows in this page), has_more (true when count == page_size).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Devices"
+                ],
+                "summary": "List devices (paginated)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-indexed)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Rows per page (1-200)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by model substring (e.g. F670L)",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only include devices that are currently online",
+                        "name": "online",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by PPPoE username substring",
+                        "name": "pppoe_username",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.DevicesListResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/devices/search": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Looks up a single device by MAC address, serial number, or PPPoE username. Exactly one of the three query params must be provided. Returns 404 if no device matches. Used in the customer onboarding flow when the IP is not yet known.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Devices"
+                ],
+                "summary": "Search for a device by alternative key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "MAC address (case-insensitive, AA:BB:CC:DD:EE:FF format)",
+                        "name": "mac",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Serial number from device info",
+                        "name": "serial",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "PPPoE username (exact match)",
+                        "name": "pppoe_username",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.DeviceSearchResponse"
                                         }
                                     }
                                 }
@@ -313,6 +762,439 @@
                 }
             }
         },
+        "/diag/ping/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Triggers a TR-069 IPPingDiagnostics task against the CPE. v2.2.0 ships ONLY the dispatch step — poll result fields via /params/{ip} after 5-15 seconds (the response includes the list of result parameter paths). Standard TR-098 path: `InternetGatewayDevice.IPPingDiagnostics.*`.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Diagnostics"
+                ],
+                "summary": "Dispatch IP ping diagnostic",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ping diagnostic parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.PingDiagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.DiagDispatchResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/diag/traceroute/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Triggers a TR-069 TraceRouteDiagnostics task against the CPE. v2.2.0 ships ONLY the dispatch step — poll result fields via /params/{ip} after 5-15 seconds (the response includes the list of result parameter paths). Standard TR-098 path: `InternetGatewayDevice.TraceRouteDiagnostics.*`.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Diagnostics"
+                ],
+                "summary": "Dispatch traceroute diagnostic",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Traceroute diagnostic parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.TraceRouteDiagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.DiagDispatchResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/dmz/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Sets the DMZ host on the CPE WAN connection via TR-069 SetParameterValues. enabled=true requires host_ip; enabled=false clears the DMZ. v2.2.0 uses TR-098 IGD paths; v2.3.0 will add vendor detection.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set CPE DMZ host",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "DMZ configuration",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetDMZRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetDMZResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/factory-reset/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Triggers a TR-069 FactoryReset RPC against the CPE identified by IP. Destructive — the CPE will lose its current PPPoE credentials, WLAN config, port-forward rules, and any other locally-stored state, then rejoin the ACS in a fresh provisioning state. The device is unreachable for 60-180 seconds after the task is applied.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Lifecycle"
+                ],
+                "summary": "Factory reset CPE",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/firmware/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Dispatches a TR-069 Download RPC against the CPE. Validates the firmware URL is HTTPS and that the host is not a private IP or metadata service (basic SSRF guard). Returns 202 + GenieACS task ID immediately so the caller can poll task status. Typical duration 60-300 seconds depending on file size and CPE link speed. **DO NOT TEST IN REAL LAB** — a wrong firmware image bricks the CPE.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Lifecycle"
+                ],
+                "summary": "Dispatch firmware upgrade to CPE",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Firmware download request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.FirmwareUpgradeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.FirmwareUpgradeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/force/ssid/{ip}": {
             "get": {
                 "security": [
@@ -467,6 +1349,95 @@
                 }
             }
         },
+        "/mac-filter/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the WLAN MAC filter on the CPE via TR-069 SetParameterValues. mode allow = whitelist, deny = blacklist. Standard TR-098 path: `LANDevice.1.WLANConfiguration.{wlan}.WLANAccessControl.*`. Vendor variation may apply for the entry list format.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set WLAN MAC filter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "MAC filter list",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetMACFilterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetMACFilterResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/metrics": {
             "get": {
                 "description": "Prometheus exposition format for service metrics. No authentication required.",
@@ -480,6 +1451,95 @@
                 "responses": {
                     "200": {
                         "description": "OK"
+                    }
+                }
+            }
+        },
+        "/ntp/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the CPE NTP server list (max 5 entries) and/or timezone via TR-069 SetParameterValues. Standard TR-098 paths: `InternetGatewayDevice.Time.NTPServer{1..5}` and `InternetGatewayDevice.Time.LocalTimeZoneName`. At least one of ntp_servers or timezone must be provided.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Set CPE NTP servers and timezone",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "NTP / timezone payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetNTPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetNTPResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
                     }
                 }
             }
@@ -548,6 +1608,604 @@
                     },
                     "404": {
                         "description": "Device not found OR optical interface not supported by this CPE model",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/params/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Reads arbitrary TR-069 parameter values from the cached device tree (or dispatches a fresh GetParameterValues task with `live=true`). Each path is validated for safe characters before forwarding. Up to 50 paths per request.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Inspection"
+                ],
+                "summary": "Generic GetParameterValues passthrough",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Parameter paths to read",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.GenericParamsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.GenericParamsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/port-forwarding/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates port forwarding rules at the given PortMapping slot indexes via TR-069 SetParameterValues. Caller specifies the index for each rule. v2.2.0 first iteration does NOT auto-create new instances — use enabled=false to disable a slot without removing it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set port forwarding rules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Port forwarding rules",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetPortForwardingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetPortForwardingResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/pppoe/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the PPPoE username and password on the CPE via TR-069 SetParameterValues. Critical for auto-learning OLT deployments where the OLT does not push customer profile config and PPPoE termination happens on the CPE side. The device will drop and re-establish its WAN connection within ~30 seconds of the task being applied.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set PPPoE credentials on CPE",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "PPPoE credentials",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetPPPoERequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetPPPoEResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/presets/{name}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Reads a single GenieACS provisioning preset by name via the NBI query syntax. Returns the raw preset body as `body`. Returns 404 when no preset with that name exists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metadata"
+                ],
+                "summary": "Read a GenieACS provisioning preset",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Preset name (alphanumeric, underscore, hyphen, 1-64 chars)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.PresetResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates or updates a GenieACS provisioning preset via the NBI. Body is forwarded as-is.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metadata"
+                ],
+                "summary": "Create or update a GenieACS provisioning preset",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Preset name (alphanumeric, underscore, hyphen, 1-64 chars)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Preset body (forwarded as-is to GenieACS NBI)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.PresetOperationResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Removes a GenieACS provisioning preset via the NBI.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metadata"
+                ],
+                "summary": "Remove a GenieACS provisioning preset",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Preset name (alphanumeric, underscore, hyphen, 1-64 chars)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.PresetOperationResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/qos/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the per-WAN download / upload rate limit on the CPE via TR-069 SetParameterValues. At least one of download_kbps or upload_kbps must be provided. Rates of 0 clear the cap. v2.2.0 uses the standard `X_DownStreamMaxBitRate` / `X_UpStreamMaxBitRate` paths; vendor-specific QoS extensions are deferred to v2.3.0.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set CPE bandwidth rate limit (QoS)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "QoS rates",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetQoSRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetQoSResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/main.Response"
                         }
@@ -827,6 +2485,261 @@
                 }
             }
         },
+        "/static-dhcp/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates static DHCP lease entries via TR-069 SetParameterValues. Caller specifies the slot index for each lease. Standard TR-098 path: `LANDevice.1.LANHostConfigManagement.IPInterface.1.DHCPStaticAddress.{index}.*`.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set static DHCP leases",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Static DHCP leases",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetStaticDHCPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetStaticDHCPResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/status/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns last inform timestamp, computed online flag, uptime, and identification fields (manufacturer, model, software/hardware version) parsed from the cached GenieACS device tree.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Inspection"
+                ],
+                "summary": "Get CPE status (last inform, uptime, identity)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.DeviceStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/tags/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates device tags via the GenieACS NBI. Tags are metadata only and don't trigger TR-069 RPCs. Wraps NBI `PUT /devices/{id}/tags/{tag}` and `DELETE /devices/{id}/tags/{tag}`. Tag names must match `[a-zA-Z0-9_-]{1,64}`.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metadata"
+                ],
+                "summary": "Add and remove GenieACS device tags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tag operations",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetTagsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/version": {
             "get": {
                 "description": "Returns binary build metadata (version, commit, build_time, api_version, uptime). Does not require authentication.",
@@ -842,6 +2755,403 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/main.VersionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wake/{ip}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Fires a TR-069 ConnectionRequest against the CPE without queuing any actual work. Used to wake a freshly-installed CPE so the first config push lands synchronously, wake an idle device for diagnostics, or probe responsiveness. Fire-and-forget — does NOT block waiting for the device to actually dial home. Typical wake takes 1-30 seconds.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Lifecycle"
+                ],
+                "summary": "Wake CPE via TR-069 ConnectionRequest",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wan/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns WAN connection state(s) for the CPE — connection type (pppoe/dhcp/static), connection status, external IP, uptime, optional PPPoE username. Walks all WANDevice / WANConnectionDevice instances so multi-WAN devices are surfaced as separate entries.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Inspection"
+                ],
+                "summary": "Get CPE WAN connection state",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WANConnectionsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wifi-clients/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the associated WiFi clients across all WLAN radios on the CPE. Distinct from `/dhcp-client/{ip}` which only sees clients that asked for DHCP — this endpoint reads the WLAN association table directly.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Inspection"
+                ],
+                "summary": "Get associated WiFi clients",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WiFiClientsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wifi-schedule/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the WiFi schedule (parental control) on the CPE via TR-069 SetParameterValues. Vendor variation is wide; v2.2.0 uses the most common vendor extension path family.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Provisioning"
+                ],
+                "summary": "Set WiFi schedule (parental control)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "WiFi schedule entries",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.SetWifiScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.SetWifiScheduleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wifi-stats/{ip}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns per-radio WiFi statistics for the CPE — channel, tx power, bytes/packets sent and received, and error counters. Used by WiFi optimization recommendations and \"my wifi is slow\" customer support tickets.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Inspection"
+                ],
+                "summary": "Get per-radio WiFi statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/main.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/main.WiFiStatsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
                         }
                     }
                 }
@@ -1368,6 +3678,12 @@
                 "model": {
                     "type": "string"
                 },
+                "provisioned_wlan": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.ProvisionedWLANInfo"
+                    }
+                },
                 "total_slots": {
                     "type": "object",
                     "properties": {
@@ -1508,6 +3824,240 @@
                 }
             }
         },
+        "main.DeviceSearchResponse": {
+            "description": "Single-device search result. Returns the matching device or 404.",
+            "type": "object",
+            "properties": {
+                "device": {
+                    "$ref": "#/definitions/main.DeviceSummary"
+                }
+            }
+        },
+        "main.DeviceStatusResponse": {
+            "description": "Device status response — last inform timestamp, computed online flag, uptime, and identification fields parsed from the cached device tree.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "hardware_version": {
+                    "type": "string",
+                    "example": "V1.0"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "last_inform": {
+                    "type": "string",
+                    "example": "2026-04-14T11:35:21Z"
+                },
+                "last_inform_age_seconds": {
+                    "type": "integer",
+                    "example": 42
+                },
+                "manufacturer": {
+                    "type": "string",
+                    "example": "ZTE"
+                },
+                "model": {
+                    "type": "string",
+                    "example": "F670L"
+                },
+                "online": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "software_version": {
+                    "type": "string",
+                    "example": "V9.0.10P5N12"
+                },
+                "uptime_seconds": {
+                    "type": "integer",
+                    "example": 1234567
+                }
+            }
+        },
+        "main.DeviceSummary": {
+            "description": "Lightweight per-device summary for the list/search endpoints.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "last_inform": {
+                    "type": "string"
+                },
+                "mac": {
+                    "type": "string"
+                },
+                "manufacturer": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "serial": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.DevicesListResponse": {
+            "description": "Paginated device listing response. Pagination metadata is best-effort: page and page_size echo the request, has_more is true when the current page returned exactly page_size rows (i.e. there might be more on the next page).",
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "devices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.DeviceSummary"
+                    }
+                },
+                "has_more": {
+                    "type": "boolean"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.DiagDispatchResponse": {
+            "description": "Diagnostic dispatch response — confirms the trigger task is queued, plus a list of result parameter paths the caller should poll via /params/{ip}.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "diagnostic": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "result_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "main.FirmwareUpgradeRequest": {
+            "description": "Firmware upgrade request — file_url is required and must be HTTPS. file_size, target_filename, username, password, and command_key are optional.",
+            "type": "object",
+            "properties": {
+                "command_key": {
+                    "description": "CommandKey is an optional client correlation tag echoed back in\nTransferComplete events. ≤ 256 chars.",
+                    "type": "string"
+                },
+                "file_size": {
+                    "description": "FileSize is optional. When provided, lets the CPE pre-allocate\nstorage and reject trivially malformed payloads.",
+                    "type": "integer"
+                },
+                "file_type": {
+                    "description": "FileType defaults to \"1 Firmware Upgrade Image\" if blank. Other\nTR-069 standard values are passed through verbatim — see Annex G\nof the TR-069 spec for the full list.",
+                    "type": "string"
+                },
+                "file_url": {
+                    "description": "FileURL must be HTTPS. Plaintext HTTP is rejected to avoid\nMITM firmware swaps.",
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "target_filename": {
+                    "description": "TargetFilename is optional. CPE chooses if blank.",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "Username/Password are optional HTTP basic credentials for\nfetching the file from a private firmware mirror.",
+                    "type": "string"
+                }
+            }
+        },
+        "main.FirmwareUpgradeResponse": {
+            "description": "Firmware upgrade response — returns the GenieACS task ID and an estimated duration so callers can poll the task status.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "estimated_duration_seconds": {
+                    "type": "integer",
+                    "example": 180
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Firmware download dispatched."
+                },
+                "task_id": {
+                    "type": "string",
+                    "example": "task-67abc1234567890"
+                }
+            }
+        },
+        "main.GenericParamsRequest": {
+            "description": "Generic parameter passthrough request — list of TR-069 parameter paths to read from the cached device tree, plus an optional `live` flag to trigger a fresh GetParameterValues task before reading.",
+            "type": "object",
+            "properties": {
+                "live": {
+                    "type": "boolean"
+                },
+                "paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "main.GenericParamsResponse": {
+            "description": "Generic parameter passthrough response — map of path → string value for found parameters, plus a list of paths that did not exist in the device tree.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "live": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "missing_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "params": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "main.HealthResponse": {
             "description": "Health check response data",
             "type": "object",
@@ -1589,6 +4139,99 @@
                 }
             }
         },
+        "main.PingDiagRequest": {
+            "description": "IPPingDiagnostics request — host is required (target IP or DNS name), count and timeout_ms are optional with sensible defaults.",
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "data_block_size": {
+                    "type": "integer"
+                },
+                "dscp": {
+                    "type": "integer"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "timeout_ms": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.PortForwardRule": {
+            "description": "One port forwarding rule. Index is the TR-069 PortMapping instance number (1-based). Use enabled=false to disable a slot without removing it.",
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "external_port": {
+                    "type": "integer"
+                },
+                "index": {
+                    "type": "integer"
+                },
+                "internal_ip": {
+                    "type": "string"
+                },
+                "internal_port": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
+                },
+                "wan_instance": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.PresetOperationResponse": {
+            "description": "Preset operation response.",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.PresetResponse": {
+            "description": "GenieACS provisioning preset payload.",
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.ProvisionedWLANInfo": {
+            "type": "object",
+            "properties": {
+                "band": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "ssid": {
+                    "type": "string"
+                },
+                "wlan_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "main.ReadinessResponse": {
             "description": "Readiness probe response including per-dependency health",
             "type": "object",
@@ -1642,6 +4285,489 @@
                     "items": {
                         "$ref": "#/definitions/main.WLANConfig"
                     }
+                }
+            }
+        },
+        "main.SetAdminPasswordRequest": {
+            "description": "Admin web password update request. The password is the new value to set on the CPE's local web admin interface — it does NOT change PPPoE credentials (use /pppoe/{ip} for that) or TR-069 ACS auth.",
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetAdminPasswordResponse": {
+            "description": "Admin web password update response. Does NOT echo the password value back to keep it out of relay audit logs.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetBridgeModeRequest": {
+            "description": "Bridge mode toggle. enabled=true puts the CPE in pure bridge mode (PPPoE termination on customer router). enabled=false reverts to router mode.",
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "wan_instance": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetBridgeModeResponse": {
+            "description": "Bridge mode toggle response.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Bridge mode toggled."
+                },
+                "wan_instance": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "main.SetDDNSRequest": {
+            "description": "DDNS configuration. provider, hostname, username, password are required when enabled=true.",
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "hostname": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetDDNSResponse": {
+            "description": "DDNS configuration response. Does NOT echo username/password back.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "hostname": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetDMZRequest": {
+            "description": "DMZ host configuration. enabled=true requires host_ip; enabled=false clears the DMZ. wan_instance defaults to 1.",
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "host_ip": {
+                    "type": "string"
+                },
+                "wan_instance": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetDMZResponse": {
+            "description": "DMZ host configuration response.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "host_ip": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "wan_instance": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetMACFilterRequest": {
+            "description": "MAC filter rule update. mode = \"allow\" (whitelist) or \"deny\" (blacklist). wlan_index defaults to 1.",
+            "type": "object",
+            "properties": {
+                "macs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "wlan_index": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetMACFilterResponse": {
+            "description": "MAC filter update response.",
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "wlan_index": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetNTPRequest": {
+            "description": "NTP / timezone update request. At least one of ntp_servers or timezone must be provided.",
+            "type": "object",
+            "properties": {
+                "ntp_servers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timezone": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetNTPResponse": {
+            "description": "NTP / timezone update response.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "ntp_servers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timezone": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetPPPoERequest": {
+            "description": "PPPoE credential update request — username and password are required, wan_instance is optional and defaults to 1.",
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "wan_instance": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetPPPoEResponse": {
+            "description": "PPPoE credential update response — confirms the device, IP, and which WAN instance was updated.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "PPPoE credentials updated. Device will reconnect within 30s."
+                },
+                "wan_instance": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "main.SetPortForwardingRequest": {
+            "description": "Set port forwarding rules. Caller specifies the rule indexes. v2.2.0 does NOT auto-create new instances — see V2.2.0-DESIGN.md §Phase 4.",
+            "type": "object",
+            "properties": {
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.PortForwardRule"
+                    }
+                }
+            }
+        },
+        "main.SetPortForwardingResponse": {
+            "description": "Port forwarding rule update response.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "rules_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetQoSRequest": {
+            "description": "Bandwidth rate-limit request. At least one of download_kbps or upload_kbps must be provided. Rates of 0 mean \"no limit\" (clears the cap). wan_instance defaults to 1.",
+            "type": "object",
+            "properties": {
+                "download_kbps": {
+                    "type": "integer"
+                },
+                "upload_kbps": {
+                    "type": "integer"
+                },
+                "wan_instance": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetQoSResponse": {
+            "description": "Bandwidth rate-limit response.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "download_kbps": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "QoS rate limit updated."
+                },
+                "upload_kbps": {
+                    "type": "integer"
+                },
+                "wan_instance": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "main.SetStaticDHCPRequest": {
+            "description": "Set static DHCP leases. Caller specifies slot indexes.",
+            "type": "object",
+            "properties": {
+                "leases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.StaticDHCPLease"
+                    }
+                }
+            }
+        },
+        "main.SetStaticDHCPResponse": {
+            "description": "Static DHCP lease update response.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "leases_count": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.SetTagsRequest": {
+            "description": "Tag management — add and remove are both optional but at least one must be non-empty. Tags must match [a-zA-Z0-9_-]{1,64}.",
+            "type": "object",
+            "properties": {
+                "add": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "remove": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "main.SetTagsResponse": {
+            "description": "Tag update response.",
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "main.SetWifiScheduleRequest": {
+            "description": "WiFi schedule update — list of per-day on/off windows. wlan_index defaults to 1.",
+            "type": "object",
+            "properties": {
+                "schedules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.WifiScheduleEntry"
+                    }
+                },
+                "wlan_index": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.SetWifiScheduleResponse": {
+            "description": "WiFi schedule update response.",
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "wlan_index": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.StaticDHCPLease": {
+            "description": "One static DHCP lease — binds a MAC address to a fixed IP.",
+            "type": "object",
+            "properties": {
+                "hostname": {
+                    "type": "string"
+                },
+                "index": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "mac": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.TraceRouteDiagRequest": {
+            "description": "TraceRouteDiagnostics request — host is required, max_hops and timeout_ms are optional.",
+            "type": "object",
+            "properties": {
+                "data_block_size": {
+                    "type": "integer"
+                },
+                "dscp": {
+                    "type": "integer"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "max_hops": {
+                    "type": "integer"
+                },
+                "timeout_ms": {
+                    "type": "integer"
                 }
             }
         },
@@ -1714,6 +4840,60 @@
                 }
             }
         },
+        "main.WANConnectionInfo": {
+            "description": "One WAN connection's state — type (pppoe/dhcp/static), connection status, external IP, uptime, optional username (PPPoE only).",
+            "type": "object",
+            "properties": {
+                "connection_status": {
+                    "type": "string",
+                    "example": "Connected"
+                },
+                "external_ip": {
+                    "type": "string",
+                    "example": "203.0.113.45"
+                },
+                "instance": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "last_connection_error": {
+                    "type": "string",
+                    "example": ""
+                },
+                "type": {
+                    "type": "string",
+                    "example": "pppoe"
+                },
+                "uptime_seconds": {
+                    "type": "integer",
+                    "example": 12345
+                },
+                "username": {
+                    "type": "string",
+                    "example": "pppoe-customer-001"
+                }
+            }
+        },
+        "main.WANConnectionsResponse": {
+            "description": "WAN connection state response — array of WAN connections (some CPE models expose multiple WANPPPConnection / WANIPConnection instances for multi-WAN or dual-stack).",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "001141-F670L-ZTEGCFLN794B3A1"
+                },
+                "ip": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                },
+                "wan_connections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.WANConnectionInfo"
+                    }
+                }
+            }
+        },
         "main.WLANConfig": {
             "type": "object",
             "properties": {
@@ -1724,6 +4904,10 @@
                 "band": {
                     "description": "Frequency band (2.4GHz, 5GHz, etc.)",
                     "type": "string"
+                },
+                "enabled": {
+                    "description": "TR-069 Enable flag (raw); true = slot actively broadcasting",
+                    "type": "boolean"
                 },
                 "encryption": {
                     "description": "Encryption mode (AES, TKIP, TKIP+AES)",
@@ -1880,6 +5064,134 @@
                 "wlan": {
                     "type": "string",
                     "example": "2"
+                }
+            }
+        },
+        "main.WiFiClientInfo": {
+            "description": "Associated WiFi client — distinct from a DHCP lease in `/dhcp-client/{ip}` which only sees clients that asked for DHCP. WiFi clients are read from the WLAN association table on the CPE radio.",
+            "type": "object",
+            "properties": {
+                "authenticated": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "band": {
+                    "type": "string",
+                    "example": "2.4GHz"
+                },
+                "mac": {
+                    "type": "string",
+                    "example": "AA:BB:CC:DD:EE:FF"
+                },
+                "signal_strength_dbm": {
+                    "type": "integer",
+                    "example": -55
+                },
+                "ssid": {
+                    "type": "string",
+                    "example": "MyWiFi-2.4GHz"
+                },
+                "wlan": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "main.WiFiClientsResponse": {
+            "description": "Associated WiFi clients per radio. Distinct from `/dhcp-client/{ip}` which only sees clients that asked for DHCP.",
+            "type": "object",
+            "properties": {
+                "clients": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.WiFiClientInfo"
+                    }
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.WiFiRadioStats": {
+            "description": "Per-radio WiFi statistics — channel, tx power, byte/packet counters, and error rates.",
+            "type": "object",
+            "properties": {
+                "band": {
+                    "type": "string",
+                    "example": "2.4GHz"
+                },
+                "bytes_received": {
+                    "type": "integer"
+                },
+                "bytes_sent": {
+                    "type": "integer"
+                },
+                "channel": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "errors_received": {
+                    "type": "integer"
+                },
+                "errors_sent": {
+                    "type": "integer"
+                },
+                "packets_received": {
+                    "type": "integer"
+                },
+                "packets_sent": {
+                    "type": "integer"
+                },
+                "ssid": {
+                    "type": "string",
+                    "example": "MyWiFi-2.4GHz"
+                },
+                "tx_power_percent": {
+                    "type": "integer",
+                    "example": 100
+                },
+                "wlan": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "main.WiFiStatsResponse": {
+            "description": "Per-radio WiFi statistics for the CPE.",
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "radios": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.WiFiRadioStats"
+                    }
+                }
+            }
+        },
+        "main.WifiScheduleEntry": {
+            "description": "WiFi schedule entry — day of week (0=Sun..6=Sat), start_time / end_time HH:MM, enabled flag.",
+            "type": "object",
+            "properties": {
+                "day": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
                 }
             }
         }

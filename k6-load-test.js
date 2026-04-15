@@ -1,9 +1,17 @@
-// k6 load test — genieacs-relay v2.0.0
+// k6 load test — genieacs-relay v2.2.0
 //
 // Scope: health + contract validation only. Does NOT exercise real GenieACS because
 // WLAN write paths have side effects (register/restart actual ONUs). Destructive
 // testing requires a sandbox GenieACS + sandbox device pool and is out of scope
 // for CI load testing.
+//
+// v2.2.0: extended contract_check to probe v2.2.0 read endpoints (status, wan,
+// params, optical, wifi-clients, wifi-stats, devices list, presets read) —
+// same "non-existent IP → 4xx" pattern as the v1.x /ssid probe. Write
+// endpoints (factory-reset, wake, pppoe, firmware, diag dispatch, provisioning
+// writes) remain deliberately excluded because they queue real TR-069 tasks
+// against GenieACS. Customer-facing factory-reset workflow verification is in
+// the real-device lab sweep (session 5j, see CHANGELOG.md [2.2.0]).
 //
 // Run:
 //   k6 run k6-load-test.js
@@ -142,4 +150,39 @@ export function contractCheck() {
       'status is 401 or 403': (r) => r.status === 401 || r.status === 403,
     });
   });
+
+  // v2.2.0 read endpoints — 404 NOT_FOUND contract probes on non-existent IP.
+  // Each asserts the v2 error envelope shape: error_code + request_id fields.
+  // Write endpoints are NOT probed here to keep the test side-effect-free.
+  const v22ReadPaths = [
+    '/api/v1/genieacs/status/10.255.255.254',           // H1
+    '/api/v1/genieacs/wan/10.255.255.254',              // H4
+    '/api/v1/genieacs/optical/10.255.255.254',          // v2.1.0 but in v2.2.0 family
+    '/api/v1/genieacs/wifi-clients/10.255.255.254',     // M3
+    '/api/v1/genieacs/wifi-stats/10.255.255.254',       // M7
+    '/api/v1/genieacs/devices/search?mac=de:ad:be:ef:00:01', // M5
+    '/api/v1/genieacs/presets/nonexistent-preset-k6',   // L10
+  ];
+  for (const path of v22ReadPaths) {
+    group(`v2.2.0 404 contract probe ${path}`, () => {
+      const res = http.get(`${BASE}${path}`, {
+        headers: {
+          'X-API-Key': API_KEY,
+          'X-Request-ID': `k6-v22-${__VU}-${__ITER}`,
+        },
+      });
+      check(res, {
+        'status is 4xx or 5xx': (r) => r.status >= 400,
+        'error envelope error_code field': (r) => {
+          try { return !!JSON.parse(r.body).error_code; } catch { return false; }
+        },
+        'error envelope request_id echoed': (r) => {
+          try {
+            const b = JSON.parse(r.body);
+            return b.request_id && b.request_id.startsWith('k6-v22-');
+          } catch { return false; }
+        },
+      });
+    });
+  }
 }

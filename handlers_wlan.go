@@ -164,8 +164,10 @@ func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get current WLAN configurations (enabled ones)
-	wlanConfigs, err := getWLANData(r.Context(), deviceID)
+	// Get ALL WLAN configurations (including disabled slots) so the
+	// response can distinguish "actively broadcasting" from "provisioned
+	// but disabled". CalculateAvailableWLANSlots derives both views.
+	wlanConfigs, err := getAllWLANConfigs(r.Context(), deviceID)
 	if err != nil {
 		logger.Error("Failed to get WLAN data", zap.String("deviceID", deviceID), zap.Error(err))
 		sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrGetWLANData)
@@ -196,6 +198,14 @@ func buildAvailableWLANResponse(deviceID string, capability *DeviceCapability, s
 	response.UsedWLAN = slots.UsedWLAN
 	if response.UsedWLAN == nil {
 		response.UsedWLAN = []UsedWLANInfo{}
+	}
+
+	// Set provisioned WLAN with nil-safe default. ProvisionedWLAN is a
+	// superset of UsedWLAN that includes disabled slots — it warns
+	// callers before they overwrite a tenant SSID label on an unused slot.
+	response.ProvisionedWLAN = slots.ProvisionedWLAN
+	if response.ProvisionedWLAN == nil {
+		response.ProvisionedWLAN = []ProvisionedWLANInfo{}
 	}
 
 	// Set available slots with nil-safe defaults

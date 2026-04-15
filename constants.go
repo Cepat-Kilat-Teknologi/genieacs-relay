@@ -235,6 +235,15 @@ const (
 	MaxSSIDLength = 32
 	// MaxRequestBodySize is the maximum allowed request body size (1KB - sufficient for SSID/password updates)
 	MaxRequestBodySize = 1024
+
+	// MaxPresetBodySize is the dedicated request body cap for the
+	// L10 /presets/{name} PUT endpoint. Preset configurations can
+	// contain dozens of parameter path declarations and easily
+	// exceed 1 KB — the companion genieacs-stack v1.3.0
+	// `isp-saas-default.json` is ~6 KB with 51 entries. 64 KB is
+	// generous enough for any reasonable preset bundle without
+	// opening the relay to large-body DoS.
+	MaxPresetBodySize = 64 * 1024
 )
 
 // Error messages
@@ -273,6 +282,100 @@ const (
 	ErrGetWLANData          = "Failed to get WLAN data"
 	ErrWorkerPoolBusy       = "Server is busy processing other requests. Please try again shortly."
 	ErrDeletePrimaryWLAN    = "Cannot delete primary WLAN (ID 1 or 5). This would disable the device's primary WiFi connectivity."
+
+	// v2.2.0 — CPE lifecycle, status, params, PPPoE
+	ErrFactoryResetFailed      = "FactoryReset task submission failed"
+	ErrWakeFailed              = "ConnectionRequest dispatch failed"
+	ErrStatusReadFailed        = "Failed to read device status from cached tree"
+	ErrWanReadFailed           = "Failed to read WAN connection state from cached tree"
+	ErrParamReadFailed         = "Failed to read parameters from cached device tree"
+	ErrParamLiveFetchFailed    = "Failed to dispatch live GetParameterValues task"
+	ErrPathListEmpty           = "At least one parameter path must be provided"
+	ErrPathListTooLong         = "Too many parameter paths in one request (max 50)"
+	ErrInvalidParamPath        = "Invalid parameter path: %s"
+	ErrPPPoEUsernameRequired   = "PPPoE username is required"
+	ErrPPPoEPasswordRequired   = "PPPoE password is required"
+	ErrPPPoEUsernameTooLong    = "PPPoE username too long (max 64 chars)"
+	ErrPPPoEPasswordTooLong    = "PPPoE password too long (max 64 chars)"
+	ErrPPPoEUsernameWhitespace = "PPPoE username must not contain whitespace"
+	ErrPPPoEInvalidWanInstance = "wan_instance must be between 1 and 8"
+	ErrPPPoEDispatchFailed     = "Failed to dispatch PPPoE credential update task"
+
+	// v2.2.0 — firmware upgrade
+	ErrFirmwareURLRequired       = "file_url is required"
+	ErrFirmwareFileSizeNegative  = "file_size must not be negative"
+	ErrFirmwareCommandKeyTooLong = "command_key too long (max 256 chars)"
+	ErrFirmwareURLMalformed      = "file_url is not a valid URL"
+	ErrFirmwareURLNotHTTPS       = "file_url must use https scheme (plain http is rejected to avoid MITM firmware swaps)"
+	ErrFirmwareURLMissingHost    = "file_url is missing a host component"
+	ErrFirmwareURLPrivateHost    = "file_url host is a private/loopback/link-local IP or metadata service (basic SSRF guard)"
+	ErrFirmwareDispatchFailed    = "Failed to dispatch firmware download task"
+
+	// v2.2.0 — wifi inspection (M3, M7), QoS (M6), bridge mode (M8),
+	// devices query (M4, M5), diagnostics (M1, M2)
+	ErrWifiClientsReadFailed    = "Failed to read WiFi associated client list from cached tree"
+	ErrWifiStatsReadFailed      = "Failed to read WiFi radio statistics from cached tree"
+	ErrQosDispatchFailed        = "Failed to dispatch QoS rate-limit task"
+	ErrQosNoFieldsProvided      = "At least one of download_kbps or upload_kbps must be provided"
+	ErrQosNegativeRate          = "QoS rates must be non-negative integers"
+	ErrQosCapabilityProbeFailed = "Failed to probe CPE QoS capability (device data unreadable)"
+	ErrQosUnsupportedByDevice   = "This CPE does not expose the X_DownStreamMaxBitRate / X_UpStreamMaxBitRate vendor extension. Use OLT-side rate limiting via RADIUS CoA for this device model, or wait for TR-098 QueueManagement support in v2.3."
+	ErrBridgeModeDispatchFailed = "Failed to dispatch bridge-mode toggle task"
+	ErrDevicesQueryFailed       = "Failed to query GenieACS devices collection"
+	ErrDevicesSearchKeyMissing  = "At least one of mac, serial, or pppoe_username must be provided"
+	ErrDevicesPageInvalid       = "page must be >= 1"
+	ErrDevicesPageSizeInvalid   = "page_size must be between 1 and 200"
+	ErrDevicesNotFound          = "No devices match the requested query"
+	ErrDiagDispatchFailed       = "Failed to dispatch TR-069 diagnostic task"
+	ErrDiagInvalidHost          = "host is required and must be a valid hostname or IP"
+	ErrDiagInvalidCount         = "count must be between 1 and 64"
+	ErrDiagInvalidTimeout       = "timeout_ms must be between 100 and 60000"
+
+	// v2.2.0 — Phase 4 LOW endpoints
+	ErrAdminPasswordRequired      = "password is required"
+	ErrAdminPasswordTooLong       = "password too long (max 64 chars)"
+	ErrAdminPasswordDispatch      = "Failed to dispatch admin password update"
+	ErrNTPNoFields                = "At least one of ntp_servers or timezone must be provided"
+	ErrNTPServersTooMany          = "ntp_servers list too long (max 5 entries)"
+	ErrNTPDispatchFailed          = "Failed to dispatch NTP / timezone update"
+	ErrDMZHostInvalid             = "host_ip is required when enabled=true and must be a valid IPv4 address"
+	ErrDMZDispatchFailed          = "Failed to dispatch DMZ host update"
+	ErrDDNSProviderRequired       = "provider is required when enabled=true"
+	ErrDDNSHostnameRequired       = "hostname is required when enabled=true"
+	ErrDDNSDispatchFailed         = "Failed to dispatch DDNS update"
+	ErrPortFwdRulesEmpty          = "rules list must contain at least one rule (use enabled=false to disable existing slots)"
+	ErrPortFwdRulesTooMany        = "rules list too long (max 32 entries)"
+	ErrPortFwdInvalidProto        = "rule protocol must be tcp, udp, or both"
+	ErrPortFwdInvalidPort         = "rule external_port and internal_port must be between 1 and 65535"
+	ErrPortFwdInvalidIP           = "rule internal_ip must be a valid IPv4 address"
+	ErrPortFwdDispatchFailed      = "Failed to dispatch port forwarding update"
+	ErrStaticDHCPLeasesEmpty      = "leases list must contain at least one lease"
+	ErrStaticDHCPLeasesTooMany    = "leases list too long (max 32 entries)"
+	ErrStaticDHCPInvalidMAC       = "lease mac must be a valid MAC address (AA:BB:CC:DD:EE:FF)"
+	ErrStaticDHCPInvalidIP        = "lease ip must be a valid IPv4 address"
+	ErrStaticDHCPDispatchFailed   = "Failed to dispatch static DHCP lease update"
+	ErrWifiScheduleEmpty          = "schedules list must contain at least one entry"
+	ErrWifiScheduleTooMany        = "schedules list too long (max 14 entries)"
+	ErrWifiScheduleInvalidDay     = "schedule day must be 0-6 (Sun-Sat)"
+	ErrWifiScheduleInvalidTime    = "schedule start_time/end_time must be HH:MM (00:00-23:59)"
+	ErrWifiScheduleDispatchFailed = "Failed to dispatch WiFi schedule update"
+	ErrMacFilterModeInvalid       = "mode must be allow or deny"
+	ErrMacFilterMacsEmpty         = "macs list must contain at least one MAC"
+	ErrMacFilterMacsTooMany       = "macs list too long (max 32 entries)"
+	ErrMacFilterInvalidMAC        = "all macs entries must be valid MAC addresses"
+	ErrMacFilterDispatchFailed    = "Failed to dispatch MAC filter update"
+	ErrTagsAddRemoveEmpty         = "at least one of add or remove must be non-empty"
+	ErrTagsInvalidName            = "tag names must match [a-zA-Z0-9_-]{1,64}"
+	ErrTagsDispatchFailed         = "Failed to dispatch tag update via NBI"
+	ErrPresetNameInvalid          = "preset name must match [a-zA-Z0-9_-]{1,64}"
+	ErrPresetBodyRequired         = "preset body is required for PUT"
+	ErrPresetDispatchFailed       = "Failed to dispatch preset operation via NBI"
+	ErrEnabledRequired            = "enabled is required (true or false)"
+)
+
+// Firmware default values
+const (
+	DefaultFirmwareFileType = "1 Firmware Upgrade Image"
 )
 
 // HTTP status messages for authentication
@@ -297,6 +400,30 @@ const (
 	MsgWLANCreationSubmitted = "WLAN creation submitted successfully"
 	MsgWLANUpdateSubmitted   = "WLAN update submitted successfully"
 	MsgWLANDeletionSubmitted = "WLAN deletion submitted successfully"
+
+	// v2.2.0 — CPE lifecycle, status, params, PPPoE
+	MsgFactoryResetSubmitted = "FactoryReset task submitted. Device will be unreachable for 60-180 seconds, will lose its current PPPoE credentials and WLAN config, and will rejoin the ACS in a fresh provisioning state."
+	MsgWakeDispatched        = "ConnectionRequest dispatched to device. Wake-up takes 1-30 seconds depending on CPE responsiveness."
+	MsgPPPoEUpdated          = "PPPoE credentials updated. Device will reconnect within 30s."
+	MsgFirmwareDispatched    = "Firmware download dispatched. Use the returned task_id to poll status. Typical duration 60-300 seconds."
+	MsgQoSUpdated            = "QoS rate-limit update dispatched. Device will apply new rates within 30s."
+	MsgBridgeModeUpdated     = "Bridge mode toggle dispatched. Device will reconfigure WAN within 30s."
+	MsgDevicesQueried        = "Devices query completed."
+	MsgDiagDispatched        = "Diagnostic task dispatched. Poll /params/{ip} for the diagnostic result paths after 5-15 seconds."
+	// MsgAdminPasswordUpdated is a success message, not a credential.
+	// gosec G101 flags it as a "hardcoded credentials" false positive
+	// because the string contains the word "password".
+	//nolint:gosec // G101: success message for the admin-password endpoint, not an actual credential
+	MsgAdminPasswordUpdated = "Admin web password update dispatched."
+	MsgNTPUpdated           = "NTP / timezone update dispatched."
+	MsgDMZUpdated           = "DMZ host update dispatched."
+	MsgDDNSUpdated          = "DDNS update dispatched."
+	MsgPortFwdUpdated       = "Port forwarding rule update dispatched."
+	MsgStaticDHCPUpdated    = "Static DHCP lease update dispatched."
+	MsgWifiScheduleUpdated  = "WiFi schedule update dispatched."
+	MsgMacFilterUpdated     = "MAC filter update dispatched."
+	MsgTagsUpdated          = "Tag update dispatched via GenieACS NBI."
+	MsgPresetUpdated        = "Preset operation dispatched via GenieACS NBI."
 )
 
 // XSD types for GenieACS

@@ -15,4 +15,9 @@ const (
 	ErrCodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 	// GenieACS-specific error code for upstream TR-069 / NBI failures.
 	ErrCodeGenieACS = "GENIEACS_ERROR"
+	// QoS-specific: CPE model lacks the X_*StreamMaxBitRate vendor
+	// extension the v2.2 QoS handler writes to. Returned with HTTP 501
+	// Not Implemented (not 400/404) because the request is valid but
+	// the feature is unimplemented for this specific device.
+	ErrCodeQoSUnsupported = "QOS_UNSUPPORTED_BY_DEVICE"
 )

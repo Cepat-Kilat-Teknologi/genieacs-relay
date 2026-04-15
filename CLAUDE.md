@@ -23,12 +23,43 @@ When releasing a new version or making substantive changes:
    **all 7 CPE workflows** in isp-agent v0.1.0, breaking changes have
    high blast radius
 
+**v2.2.0 status (2026-04-15): ✅ RELEASE-READY, tag pending.** All
+25 new operational endpoints (7 HIGH + 8 MEDIUM + 10 LOW) shipped
+across 4 phases + structural `tr069.go` / `param_walker.go`
+foundations. 100% main-package coverage maintained. 40/40 endpoints
+fully end-to-end verified on a real ZTE F670L V9.0.10P1N12A via
+VPN lab (sessions 5i + 5j 2026-04-15). CHANGELOG promoted
+`[Unreleased]` → `[2.2.0]`. README + TODO + wiki + V2.2.0-DESIGN
+all synced. Only outstanding work is `git tag v2.2.0` pending
+explicit instruction; Docker multi-arch build and GitHub release
+auto-trigger via `release.yml` on tag push.
+
+Session 5j closed the last 2 safety-skipped items from session 5i:
+- `POST /reboot/{ip}` — HTTP 202 + ping drop T+32s + recovery T+7:24
+  (6:52 downtime — slow-boot anomaly on this firmware, docstring
+  patch scheduled for v2.2.1)
+- `POST /factory-reset/{ip}` — HTTP 202 + ping drop T+11s + recovery
+  T+1:45 (1:34 downtime, within spec) + PASS via 4 independent
+  evidence vectors (see CHANGELOG `[2.2.0]` → "Verified — Session 5j"
+  block for the full reasoning chain)
+
+**Upstream blocker for customer factory-reset workflows** (NOT a
+relay bug): `genieacs-stack v1.3.1` inform-provision fix. The stock
+`/init` writes a numeric `PeriodicInformTime` that ZTE rejects, and
+TR-069 atomic rollback wipes the sibling
+`ConnectionRequestUsername`/`Password` writes in the same call.
+After factory-reset, genieacs cannot wake the device via
+`?connection_request` until the device informs on its own periodic
+cycle. Mongo-side mitigation from session 5i does NOT survive a
+reset cycle. `isp-agent v0.2+ FactoryResetCpe` workflow wiring
+should wait until `genieacs-stack v1.3.1` ships.
+
 **v2.1.0 status (2026-04-15): ✅ SHIPPED.** Tag `v2.1.0` pushed, CI
 release workflow green, Docker image multi-arch published at
 `cepatkilatteknologi/genieacs-relay:2.1.0`, GitHub release at
 `https://github.com/Cepat-Kilat-Teknologi/genieacs-relay/releases/tag/v2.1.0`.
-Main-package coverage is **100.0%** (auto-generated `docs/docs.go`
-swagger excluded via `-coverpkg` scoping).
+v2.2.0 builds on top of this and preserves every v2.1.0 endpoint
+unchanged — the release is strictly additive.
 
 New endpoints shipped in v2.1.0:
 - `POST /api/v1/genieacs/reboot/{ip}` — TR-069 Reboot RPC
@@ -36,7 +67,9 @@ New endpoints shipped in v2.1.0:
 - `GET /api/v1/genieacs/optical/{ip}` — read TX/RX power + temp +
   voltage + bias current with vendor auto-detection (ZTE CT-COM EPON/GPON,
   Huawei HW_DEBUG, Realtek EPON, standard TR-181) and configurable
-  health classification thresholds
+  health classification thresholds. **v2.2.0 adds a sixth vendor
+  extractor — `X_ZTE-COM_WANPONInterfaceConfig` — for ZTE F670L,
+  landed during session 5i real-device hardening.**
 
 These unblock isp-agent v0.2+ `RestartOnu`, `RefreshDhcpStatus`, and a
 new `GetOpticalHealth` workflow. See `CHANGELOG.md [2.1.0]` for full
@@ -51,8 +84,11 @@ source of truth for "what did this change cost clients?":
 - **MAJOR (X.y.z)** — breaking changes. Any client-visible change that would force
   `isp-agent` or other consumers to update integration code. Current major: **v2**.
 - **MINOR (x.Y.z)** — backwards-compatible additions (new endpoint, new optional
-  field, new header, new metric, new env var with default). Current: **v2.1.0**
-  released 2026-04-15 (reboot + DHCP refresh + optical health endpoints).
+  field, new header, new metric, new env var with default). Current:
+  **v2.2.0** release-ready 2026-04-15 (25 new auto-learn-OLT endpoints +
+  session 5i F670L hardening + session 5j reboot/factory-reset E2E
+  verification); prior **v2.1.0** released 2026-04-15 (reboot +
+  DHCP refresh + optical health endpoints).
 - **PATCH (x.y.Z)** — bug fixes only, no API change.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) §Versioning Policy for the full rules table,
@@ -66,10 +102,16 @@ internal HTTP calls into GenieACS NBI tasks, with an async worker pool for
 slow WLAN provisioning operations.
 
 **Tier 4 core adapter** in the ISP SaaS 7-plane topology, sitting at Plane 3
-(agent side) alongside `freeradius-api` and `olt-executor`. Current release:
-**v2.1.0** released 2026-04-15 — added CPE lifecycle operations (reboot +
-dedicated DHCP refresh) and optical interface health endpoints across 5
-vendor parameter paths. See `CHANGELOG.md [2.1.0]` for detail.
+(agent side) alongside `freeradius-api` and `olt-executor`. Current
+state: **v2.2.0 release-ready** 2026-04-15 (tag pending) — 25 new
+operational endpoints covering CPE lifecycle, NOC support tools, and
+customer self-service, plus structural `tr069.go` + `param_walker.go`
+foundations, at 100% main-package coverage and 40/40 endpoints E2E
+verified on real ZTE F670L. Last tagged release: **v2.1.0** released
+2026-04-15 — CPE lifecycle operations (reboot + dedicated DHCP
+refresh) and optical interface health across 5 vendor parameter paths
+(v2.2.0 adds a sixth: `X_ZTE-COM_WANPONInterfaceConfig`). See
+`CHANGELOG.md [2.2.0]` and `[2.1.0]` for detail.
 
 - **Module path:** `github.com/Cepat-Kilat-Teknologi/genieacs-relay`
 - **Go version:** 1.26.2
