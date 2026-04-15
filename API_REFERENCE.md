@@ -993,7 +993,7 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZT
 
 ---
 
-## 14. CPE Reboot Endpoint (v2.1.0)
+## 14. CPE Reboot Endpoint (v2.1.0, E2E verified v2.2.0 session 5j)
 
 ### POST /api/v1/genieacs/reboot/{ip}
 
@@ -1004,11 +1004,21 @@ task is applied synchronously (200 OK) or queued asynchronously when
 the connection request fails (202 Accepted). Both status codes indicate
 successful task submission per the NBI contract.
 
-Actual CPE reboot takes 30-90 seconds before the device reconnects to
-the ACS. Callers (typically the future `RestartOnu` workflow in
-`isp-agent` v2+) should **NOT** block waiting for the device to come
-back — the workflow's retry policy or a follow-up health check is the
-right tool for that.
+Actual CPE reboot takes 30-90 seconds typical before the device
+reconnects to the ACS. Callers (typically the future `RestartOnu`
+workflow in `isp-agent` v2+) should **NOT** block waiting for the
+device to come back — the workflow's retry policy or a follow-up
+health check is the right tool for that.
+
+> **Slow-boot anomaly observed in session 5j** — on a real ZTE F670L
+> running V9.0.10P1N12A, the observed total downtime was **6 min 52
+> seconds**, well outside the 30-90s docstring spec. Root cause
+> unconfirmed but likely specific to this ZTE firmware revision's
+> config-parsing path or lab-VPN WAN re-establishment. Callers
+> deploying on ZTE fleets with this firmware should budget **up to
+> ~7 minutes** before treating a reboot as failed. A docstring patch
+> is scheduled for v2.2.1. See CHANGELOG.md `[2.2.0]` → "Verified —
+> Session 5j" for the full test timeline.
 
 Idempotency middleware applies via the `/api/v1/genieacs` route group,
 so double-clicks within the dedup TTL window replay the same response.
@@ -1224,6 +1234,32 @@ curl -X POST http://localhost:8080/api/v1/genieacs/factory-reset/192.168.1.1 \
 **⚠️ Real-lab constraint:** DO NOT run against production CPE
 without a recovery plan — the device's admin-set config is lost
 permanently once the reset is applied.
+
+> **Session 5j verification (2026-04-15)** — end-to-end verified on a
+> real ZTE F670L V9.0.10P1N12A via VPN lab. Observed: HTTP 202, ping
+> drop at T+11s (faster than reboot's T+32s because FactoryReset is
+> a more direct RPC), full ping recovery at T+1:45 for **1:34 total
+> downtime** — within the documented 60-180s window. PASS verdict
+> supported by four independent evidence vectors (downtime signature
+> distinct from reboot on the same unit, post-recovery credential
+> drift proving device-side creds were wiped, clean task queue
+> transition, timing match). See CHANGELOG.md `[2.2.0]` →
+> "Verified — Session 5j" block for the full reasoning chain.
+
+> **⚠️ Production-deployment blocker (genieacs-stack v1.3.1 pending)**
+> — after factory-reset, genieacs cannot wake the device via
+> `POST /wake/{ip}` until the device informs on its own periodic cycle
+> (30 min default). Root cause is a stock `/init` provision in
+> upstream genieacs-stack: it writes a numeric `PeriodicInformTime`
+> that ZTE rejects with fault 9007, and TR-069 atomic rollback wipes
+> the sibling `ConnectionRequestUsername`/`Password` writes in the
+> same `setParameterValues` call, so genieacs ends up with cached
+> ACS-side credentials that no longer match what the freshly-reset
+> device expects. The mongo-side mitigation applied in session 5i
+> does **not** survive a factory-reset cycle. Permanent fix ships in
+> `genieacs-stack v1.3.1`. NOT a relay bug; relay code is correct.
+> Do not wire `isp-agent v0.2+` `FactoryResetCpe` customer workflow
+> until `genieacs-stack v1.3.1` has landed.
 
 #### POST /api/v1/genieacs/wake/{ip}  (H2)
 

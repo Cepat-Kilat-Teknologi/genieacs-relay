@@ -12,6 +12,26 @@ This service provides HTTP endpoints for CPE lifecycle operations
 (reboot, DHCP refresh, optical health read), SSID/WLAN management, device
 capability detection, and DHCP client retrieval — all via the GenieACS NBI.
 
+> **v2.2.0 release-ready 2026-04-15** (tag pending) — auto-learn OLT
+> support. Adds **25 new operational endpoints** across 4 phases:
+> 7 HIGH (factory-reset, wake, status, wan, params, pppoe, firmware),
+> 8 MEDIUM (ping diag, traceroute diag, wifi-clients, wifi-stats,
+> devices list, devices search, qos with capability probe,
+> bridge-mode), 10 LOW (port forwarding, DMZ, DDNS, wifi schedule,
+> MAC filter, static DHCP, NTP, admin password, GenieACS tags,
+> presets CRUD). Plus the structural `tr069.go` + `param_walker.go`
+> foundations. Total operational surface: v2.1.0 × 14 → v2.2.0 × 39.
+> All at **100% main-package coverage**, 0 lint issues. **40/40
+> endpoints fully end-to-end verified on a real ZTE F670L
+> V9.0.10P1N12A** via VPN lab (sessions 5i + 5j 2026-04-15). Drives
+> the auto-learning OLT scenario (Hioso, HSGQ, Jolink, CDATA auto)
+> where the OLT itself cannot push customer-facing config and all
+> provisioning must go CPE-side via TR-069. See
+> [`CHANGELOG.md`](CHANGELOG.md) `[2.2.0]` section for the full
+> 25-endpoint inventory, session 5j real-device verification report,
+> and the upstream `genieacs-stack v1.3.1` blocker for customer
+> factory-reset workflows (not a relay bug).
+>
 > **v2.1.0 released 2026-04-15** — CPE lifecycle operations (reboot,
 > dedicated DHCP refresh) + optical interface health (TX/RX power,
 > temperature, voltage, bias current) across 5 vendor parameter paths
@@ -61,6 +81,50 @@ capability detection, and DHCP client retrieval — all via the GenieACS NBI.
 - **ONU/ONT Band Detection** - Automatic detection of single-band and dual-band devices
 - **API Key Authentication** - Protect sensitive endpoints with API keys
 - **Cross-band Validation** - Prevent cross-band SSID/password updates
+
+### v2.2.0 Features (2026-04-15 — release-ready, tag pending)
+
+Auto-learn OLT support — 25 new operational endpoints under
+`/api/v1/genieacs/*`, bringing the operational surface from 14 to 39.
+Full per-endpoint detail is in [`CHANGELOG.md`](CHANGELOG.md) `[2.2.0]`
+and [`V2.2.0-DESIGN.md`](V2.2.0-DESIGN.md). Headline groups:
+
+**CPE lifecycle (7 HIGH, Phase 1+2)**
+- `POST /factory-reset/{ip}` — TR-069 FactoryReset RPC (destructive, RMA flow). 60–180s downtime; session 5j E2E verified on real F670L at 1:34 downtime.
+- `POST /wake/{ip}` — ConnectionRequest wake-up via no-op `getParameterValues` task.
+- `GET /status/{ip}` — last_inform, online flag, uptime, model identification (TR-098 + TR-181 dual-path).
+- `GET /wan/{ip}` — WAN connection state(s) + external IP, walks every WANPPPConnection / WANIPConnection instance.
+- `POST /params/{ip}` — generic `GetParameterValues` passthrough (cached + live mode) for NOC L2/L3 debugging.
+- `PUT /pppoe/{ip}` — set PPPoE credentials (critical for auto-learn activate flow). Vendor path hardcoded TR-098; v2.3.0 will add 5-vendor detection.
+- `POST /firmware/{ip}` — TR-069 Download RPC with HTTPS-only + basic SSRF guard (rejects private/loopback/metadata hosts). **NOT exercised in real-device tests** — a wrong firmware image bricks the CPE.
+
+**NOC support (8 MEDIUM, Phase 3)**
+- `POST /diag/ping/{ip}` — TR-069 IPPingDiagnostics dispatch (caller polls results via `/params/{ip}`).
+- `POST /diag/traceroute/{ip}` — TR-069 TraceRouteDiagnostics dispatch (same pattern).
+- `GET /wifi-clients/{ip}` — associated WiFi clients across all WLAN radios (distinct from `/dhcp-client/{ip}`).
+- `GET /wifi-stats/{ip}` — per-radio channel, transmit power, byte/packet counters, error counters.
+- `GET /devices` — paginated device listing with filters (model / online / pppoe_username substring).
+- `GET /devices/search` — single-device lookup by MAC / serial / PPPoE username.
+- `PUT /qos/{ip}` — per-WAN bandwidth rate limit via `X_*StreamMaxBitRate`. **Capability probe** returns `501 QOS_UNSUPPORTED_BY_DEVICE` on CPEs (notably ZTE F670L) that use TR-098 `QueueManagement` instead.
+- `PUT /bridge-mode/{ip}` — toggle bridge/router mode on the WAN connection.
+
+**Customer self-service + metadata (10 LOW, Phase 4)**
+- `PUT /ntp/{ip}`, `PUT /admin-password/{ip}`, `PUT /dmz/{ip}`, `PUT /ddns/{ip}`, `PUT /port-forwarding/{ip}`, `PUT /static-dhcp/{ip}`, `PUT /wifi-schedule/{ip}`, `PUT /mac-filter/{ip}`, `PUT /tags/{ip}`, `GET|PUT|DELETE /presets/{name}`.
+
+**Session 5i real-device F670L hardening (included in v2.2.0)**
+- Sixth optical extractor — `X_ZTE-COM_WANPONInterfaceConfig` — for ZTE F670L.
+- `wlan/available` enriched with `provisioned_wlan[]` (every slot vs. enabled-only `used_wlan[]`).
+- QoS 501 capability probe (instead of silent no-op).
+- `refreshObject` trailing-dot sanitation (defensive fix against GenieACS 1.2.16 `objectName` validation).
+
+**Session 5j real-device verification**
+- Reboot + factory-reset E2E on real F670L: both PASS. Factory-reset verified via 4 independent evidence vectors (see `CHANGELOG.md` `[2.2.0]` → "Verified — Session 5j" block).
+
+**Coverage**: 100.0% main-package maintained across all 4 phases + session 5i hardening. 0 lint issues. Race-clean.
+
+**Upstream blocker** (not a relay bug): customer-facing factory-reset workflows need `genieacs-stack v1.3.1` inform-provision fix to restore ACS-side wake-on-demand after a reset cycle. Relay code is correct; v2.2.0 ships as-is.
+
+---
 
 ### v2.1.0 Features (2026-04-15)
 

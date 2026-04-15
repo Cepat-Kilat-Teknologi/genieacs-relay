@@ -39,6 +39,10 @@ definitions:
         type: string
       model:
         type: string
+      provisioned_wlan:
+        items:
+          $ref: '#/definitions/main.ProvisionedWLANInfo'
+        type: array
       total_slots:
         properties:
           2_4ghz:
@@ -138,6 +142,191 @@ definitions:
             type: array
         type: object
     type: object
+  main.DeviceSearchResponse:
+    description: Single-device search result. Returns the matching device or 404.
+    properties:
+      device:
+        $ref: '#/definitions/main.DeviceSummary'
+    type: object
+  main.DeviceStatusResponse:
+    description: Device status response — last inform timestamp, computed online flag,
+      uptime, and identification fields parsed from the cached device tree.
+    properties:
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      hardware_version:
+        example: V1.0
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      last_inform:
+        example: "2026-04-14T11:35:21Z"
+        type: string
+      last_inform_age_seconds:
+        example: 42
+        type: integer
+      manufacturer:
+        example: ZTE
+        type: string
+      model:
+        example: F670L
+        type: string
+      online:
+        example: true
+        type: boolean
+      software_version:
+        example: V9.0.10P5N12
+        type: string
+      uptime_seconds:
+        example: 1234567
+        type: integer
+    type: object
+  main.DeviceSummary:
+    description: Lightweight per-device summary for the list/search endpoints.
+    properties:
+      device_id:
+        type: string
+      ip:
+        type: string
+      last_inform:
+        type: string
+      mac:
+        type: string
+      manufacturer:
+        type: string
+      model:
+        type: string
+      serial:
+        type: string
+    type: object
+  main.DevicesListResponse:
+    description: 'Paginated device listing response. Pagination metadata is best-effort:
+      page and page_size echo the request, has_more is true when the current page
+      returned exactly page_size rows (i.e. there might be more on the next page).'
+    properties:
+      count:
+        type: integer
+      devices:
+        items:
+          $ref: '#/definitions/main.DeviceSummary'
+        type: array
+      has_more:
+        type: boolean
+      page:
+        type: integer
+      page_size:
+        type: integer
+    type: object
+  main.DiagDispatchResponse:
+    description: Diagnostic dispatch response — confirms the trigger task is queued,
+      plus a list of result parameter paths the caller should poll via /params/{ip}.
+    properties:
+      device_id:
+        type: string
+      diagnostic:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      result_paths:
+        items:
+          type: string
+        type: array
+    type: object
+  main.FirmwareUpgradeRequest:
+    description: Firmware upgrade request — file_url is required and must be HTTPS.
+      file_size, target_filename, username, password, and command_key are optional.
+    properties:
+      command_key:
+        description: |-
+          CommandKey is an optional client correlation tag echoed back in
+          TransferComplete events. ≤ 256 chars.
+        type: string
+      file_size:
+        description: |-
+          FileSize is optional. When provided, lets the CPE pre-allocate
+          storage and reject trivially malformed payloads.
+        type: integer
+      file_type:
+        description: |-
+          FileType defaults to "1 Firmware Upgrade Image" if blank. Other
+          TR-069 standard values are passed through verbatim — see Annex G
+          of the TR-069 spec for the full list.
+        type: string
+      file_url:
+        description: |-
+          FileURL must be HTTPS. Plaintext HTTP is rejected to avoid
+          MITM firmware swaps.
+        type: string
+      password:
+        type: string
+      target_filename:
+        description: TargetFilename is optional. CPE chooses if blank.
+        type: string
+      username:
+        description: |-
+          Username/Password are optional HTTP basic credentials for
+          fetching the file from a private firmware mirror.
+        type: string
+    type: object
+  main.FirmwareUpgradeResponse:
+    description: Firmware upgrade response — returns the GenieACS task ID and an estimated
+      duration so callers can poll the task status.
+    properties:
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      estimated_duration_seconds:
+        example: 180
+        type: integer
+      ip:
+        example: 192.168.1.1
+        type: string
+      message:
+        example: Firmware download dispatched.
+        type: string
+      task_id:
+        example: task-67abc1234567890
+        type: string
+    type: object
+  main.GenericParamsRequest:
+    description: Generic parameter passthrough request — list of TR-069 parameter
+      paths to read from the cached device tree, plus an optional `live` flag to trigger
+      a fresh GetParameterValues task before reading.
+    properties:
+      live:
+        type: boolean
+      paths:
+        items:
+          type: string
+        type: array
+    type: object
+  main.GenericParamsResponse:
+    description: Generic parameter passthrough response — map of path → string value
+      for found parameters, plus a list of paths that did not exist in the device
+      tree.
+    properties:
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      live:
+        example: false
+        type: boolean
+      missing_paths:
+        items:
+          type: string
+        type: array
+      params:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
   main.HealthResponse:
     description: Health check response data
     properties:
@@ -220,6 +409,70 @@ definitions:
         description: 'Transmit power percentage: 0, 20, 40, 60, 80, 100'
         type: integer
     type: object
+  main.PingDiagRequest:
+    description: IPPingDiagnostics request — host is required (target IP or DNS name),
+      count and timeout_ms are optional with sensible defaults.
+    properties:
+      count:
+        type: integer
+      data_block_size:
+        type: integer
+      dscp:
+        type: integer
+      host:
+        type: string
+      timeout_ms:
+        type: integer
+    type: object
+  main.PortForwardRule:
+    description: One port forwarding rule. Index is the TR-069 PortMapping instance
+      number (1-based). Use enabled=false to disable a slot without removing it.
+    properties:
+      enabled:
+        type: boolean
+      external_port:
+        type: integer
+      index:
+        type: integer
+      internal_ip:
+        type: string
+      internal_port:
+        type: integer
+      name:
+        type: string
+      protocol:
+        type: string
+      wan_instance:
+        type: integer
+    type: object
+  main.PresetOperationResponse:
+    description: Preset operation response.
+    properties:
+      message:
+        type: string
+      name:
+        type: string
+    type: object
+  main.PresetResponse:
+    description: GenieACS provisioning preset payload.
+    properties:
+      body:
+        additionalProperties: true
+        type: object
+      name:
+        type: string
+    type: object
+  main.ProvisionedWLANInfo:
+    properties:
+      band:
+        type: string
+      enabled:
+        type: boolean
+      ssid:
+        type: string
+      wlan_id:
+        type: integer
+    type: object
   main.ReadinessResponse:
     description: Readiness probe response including per-dependency health
     properties:
@@ -258,6 +511,347 @@ definitions:
         items:
           $ref: '#/definitions/main.WLANConfig'
         type: array
+    type: object
+  main.SetAdminPasswordRequest:
+    description: Admin web password update request. The password is the new value
+      to set on the CPE's local web admin interface — it does NOT change PPPoE credentials
+      (use /pppoe/{ip} for that) or TR-069 ACS auth.
+    properties:
+      password:
+        type: string
+    type: object
+  main.SetAdminPasswordResponse:
+    description: Admin web password update response. Does NOT echo the password value
+      back to keep it out of relay audit logs.
+    properties:
+      device_id:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+    type: object
+  main.SetBridgeModeRequest:
+    description: Bridge mode toggle. enabled=true puts the CPE in pure bridge mode
+      (PPPoE termination on customer router). enabled=false reverts to router mode.
+    properties:
+      enabled:
+        type: boolean
+      wan_instance:
+        type: integer
+    type: object
+  main.SetBridgeModeResponse:
+    description: Bridge mode toggle response.
+    properties:
+      device_id:
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      ip:
+        type: string
+      message:
+        example: Bridge mode toggled.
+        type: string
+      wan_instance:
+        example: 1
+        type: integer
+    type: object
+  main.SetDDNSRequest:
+    description: DDNS configuration. provider, hostname, username, password are required
+      when enabled=true.
+    properties:
+      enabled:
+        type: boolean
+      hostname:
+        type: string
+      password:
+        type: string
+      provider:
+        type: string
+      username:
+        type: string
+    type: object
+  main.SetDDNSResponse:
+    description: DDNS configuration response. Does NOT echo username/password back.
+    properties:
+      device_id:
+        type: string
+      enabled:
+        type: boolean
+      hostname:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      provider:
+        type: string
+    type: object
+  main.SetDMZRequest:
+    description: DMZ host configuration. enabled=true requires host_ip; enabled=false
+      clears the DMZ. wan_instance defaults to 1.
+    properties:
+      enabled:
+        type: boolean
+      host_ip:
+        type: string
+      wan_instance:
+        type: integer
+    type: object
+  main.SetDMZResponse:
+    description: DMZ host configuration response.
+    properties:
+      device_id:
+        type: string
+      enabled:
+        type: boolean
+      host_ip:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      wan_instance:
+        type: integer
+    type: object
+  main.SetMACFilterRequest:
+    description: MAC filter rule update. mode = "allow" (whitelist) or "deny" (blacklist).
+      wlan_index defaults to 1.
+    properties:
+      macs:
+        items:
+          type: string
+        type: array
+      mode:
+        type: string
+      wlan_index:
+        type: integer
+    type: object
+  main.SetMACFilterResponse:
+    description: MAC filter update response.
+    properties:
+      count:
+        type: integer
+      device_id:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      mode:
+        type: string
+      wlan_index:
+        type: integer
+    type: object
+  main.SetNTPRequest:
+    description: NTP / timezone update request. At least one of ntp_servers or timezone
+      must be provided.
+    properties:
+      ntp_servers:
+        items:
+          type: string
+        type: array
+      timezone:
+        type: string
+    type: object
+  main.SetNTPResponse:
+    description: NTP / timezone update response.
+    properties:
+      device_id:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      ntp_servers:
+        items:
+          type: string
+        type: array
+      timezone:
+        type: string
+    type: object
+  main.SetPPPoERequest:
+    description: PPPoE credential update request — username and password are required,
+      wan_instance is optional and defaults to 1.
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+      wan_instance:
+        type: integer
+    type: object
+  main.SetPPPoEResponse:
+    description: PPPoE credential update response — confirms the device, IP, and which
+      WAN instance was updated.
+    properties:
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      message:
+        example: PPPoE credentials updated. Device will reconnect within 30s.
+        type: string
+      wan_instance:
+        example: 1
+        type: integer
+    type: object
+  main.SetPortForwardingRequest:
+    description: Set port forwarding rules. Caller specifies the rule indexes. v2.2.0
+      does NOT auto-create new instances — see V2.2.0-DESIGN.md §Phase 4.
+    properties:
+      rules:
+        items:
+          $ref: '#/definitions/main.PortForwardRule'
+        type: array
+    type: object
+  main.SetPortForwardingResponse:
+    description: Port forwarding rule update response.
+    properties:
+      device_id:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      rules_count:
+        type: integer
+    type: object
+  main.SetQoSRequest:
+    description: Bandwidth rate-limit request. At least one of download_kbps or upload_kbps
+      must be provided. Rates of 0 mean "no limit" (clears the cap). wan_instance
+      defaults to 1.
+    properties:
+      download_kbps:
+        type: integer
+      upload_kbps:
+        type: integer
+      wan_instance:
+        type: integer
+    type: object
+  main.SetQoSResponse:
+    description: Bandwidth rate-limit response.
+    properties:
+      device_id:
+        type: string
+      download_kbps:
+        type: integer
+      ip:
+        type: string
+      message:
+        example: QoS rate limit updated.
+        type: string
+      upload_kbps:
+        type: integer
+      wan_instance:
+        example: 1
+        type: integer
+    type: object
+  main.SetStaticDHCPRequest:
+    description: Set static DHCP leases. Caller specifies slot indexes.
+    properties:
+      leases:
+        items:
+          $ref: '#/definitions/main.StaticDHCPLease'
+        type: array
+    type: object
+  main.SetStaticDHCPResponse:
+    description: Static DHCP lease update response.
+    properties:
+      device_id:
+        type: string
+      ip:
+        type: string
+      leases_count:
+        type: integer
+      message:
+        type: string
+    type: object
+  main.SetTagsRequest:
+    description: Tag management — add and remove are both optional but at least one
+      must be non-empty. Tags must match [a-zA-Z0-9_-]{1,64}.
+    properties:
+      add:
+        items:
+          type: string
+        type: array
+      remove:
+        items:
+          type: string
+        type: array
+    type: object
+  main.SetTagsResponse:
+    description: Tag update response.
+    properties:
+      added:
+        items:
+          type: string
+        type: array
+      device_id:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      removed:
+        items:
+          type: string
+        type: array
+    type: object
+  main.SetWifiScheduleRequest:
+    description: WiFi schedule update — list of per-day on/off windows. wlan_index
+      defaults to 1.
+    properties:
+      schedules:
+        items:
+          $ref: '#/definitions/main.WifiScheduleEntry'
+        type: array
+      wlan_index:
+        type: integer
+    type: object
+  main.SetWifiScheduleResponse:
+    description: WiFi schedule update response.
+    properties:
+      count:
+        type: integer
+      device_id:
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      wlan_index:
+        type: integer
+    type: object
+  main.StaticDHCPLease:
+    description: One static DHCP lease — binds a MAC address to a fixed IP.
+    properties:
+      hostname:
+        type: string
+      index:
+        type: integer
+      ip:
+        type: string
+      mac:
+        type: string
+    type: object
+  main.TraceRouteDiagRequest:
+    description: TraceRouteDiagnostics request — host is required, max_hops and timeout_ms
+      are optional.
+    properties:
+      data_block_size:
+        type: integer
+      dscp:
+        type: integer
+      host:
+        type: string
+      max_hops:
+        type: integer
+      timeout_ms:
+        type: integer
     type: object
   main.UpdateWLANRequest:
     properties:
@@ -308,6 +902,48 @@ definitions:
         example: 2.0.0
         type: string
     type: object
+  main.WANConnectionInfo:
+    description: One WAN connection's state — type (pppoe/dhcp/static), connection
+      status, external IP, uptime, optional username (PPPoE only).
+    properties:
+      connection_status:
+        example: Connected
+        type: string
+      external_ip:
+        example: 203.0.113.45
+        type: string
+      instance:
+        example: 1
+        type: integer
+      last_connection_error:
+        example: ""
+        type: string
+      type:
+        example: pppoe
+        type: string
+      uptime_seconds:
+        example: 12345
+        type: integer
+      username:
+        example: pppoe-customer-001
+        type: string
+    type: object
+  main.WANConnectionsResponse:
+    description: WAN connection state response — array of WAN connections (some CPE
+      models expose multiple WANPPPConnection / WANIPConnection instances for multi-WAN
+      or dual-stack).
+    properties:
+      device_id:
+        example: 001141-F670L-ZTEGCFLN794B3A1
+        type: string
+      ip:
+        example: 192.168.1.1
+        type: string
+      wan_connections:
+        items:
+          $ref: '#/definitions/main.WANConnectionInfo'
+        type: array
+    type: object
   main.WLANConfig:
     properties:
       auth_mode:
@@ -316,6 +952,9 @@ definitions:
       band:
         description: Frequency band (2.4GHz, 5GHz, etc.)
         type: string
+      enabled:
+        description: TR-069 Enable flag (raw); true = slot actively broadcasting
+        type: boolean
       encryption:
         description: Encryption mode (AES, TKIP, TKIP+AES)
         type: string
@@ -432,20 +1071,230 @@ definitions:
         example: "2"
         type: string
     type: object
+  main.WiFiClientInfo:
+    description: Associated WiFi client — distinct from a DHCP lease in `/dhcp-client/{ip}`
+      which only sees clients that asked for DHCP. WiFi clients are read from the
+      WLAN association table on the CPE radio.
+    properties:
+      authenticated:
+        example: true
+        type: boolean
+      band:
+        example: 2.4GHz
+        type: string
+      mac:
+        example: AA:BB:CC:DD:EE:FF
+        type: string
+      signal_strength_dbm:
+        example: -55
+        type: integer
+      ssid:
+        example: MyWiFi-2.4GHz
+        type: string
+      wlan:
+        example: 1
+        type: integer
+    type: object
+  main.WiFiClientsResponse:
+    description: Associated WiFi clients per radio. Distinct from `/dhcp-client/{ip}`
+      which only sees clients that asked for DHCP.
+    properties:
+      clients:
+        items:
+          $ref: '#/definitions/main.WiFiClientInfo'
+        type: array
+      device_id:
+        type: string
+      ip:
+        type: string
+    type: object
+  main.WiFiRadioStats:
+    description: Per-radio WiFi statistics — channel, tx power, byte/packet counters,
+      and error rates.
+    properties:
+      band:
+        example: 2.4GHz
+        type: string
+      bytes_received:
+        type: integer
+      bytes_sent:
+        type: integer
+      channel:
+        example: 6
+        type: integer
+      errors_received:
+        type: integer
+      errors_sent:
+        type: integer
+      packets_received:
+        type: integer
+      packets_sent:
+        type: integer
+      ssid:
+        example: MyWiFi-2.4GHz
+        type: string
+      tx_power_percent:
+        example: 100
+        type: integer
+      wlan:
+        example: 1
+        type: integer
+    type: object
+  main.WiFiStatsResponse:
+    description: Per-radio WiFi statistics for the CPE.
+    properties:
+      device_id:
+        type: string
+      ip:
+        type: string
+      radios:
+        items:
+          $ref: '#/definitions/main.WiFiRadioStats'
+        type: array
+    type: object
+  main.WifiScheduleEntry:
+    description: WiFi schedule entry — day of week (0=Sun..6=Sat), start_time / end_time
+      HH:MM, enabled flag.
+    properties:
+      day:
+        type: integer
+      enabled:
+        type: boolean
+      end_time:
+        type: string
+      start_time:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact:
     name: Cepat Kilat Teknologi
     url: https://github.com/Cepat-Kilat-Teknologi/genieacs-relay
   description: |-
-    A lightweight relay service for managing TR-069 devices via GenieACS.
-    Provides endpoints for SSID/WLAN management, device capability detection, and DHCP clients.
+    A lightweight REST relay for managing TR-069 devices via the GenieACS NBI. v2.2.0 adds 25 new operational endpoints across 4 phases (CPE lifecycle, NOC support, customer self-service, GenieACS metadata) on top of the v2.1.0 baseline. 100% main-package coverage, 40/40 endpoints end-to-end verified on real ZTE F670L V9.0.10P1N12A via VPN lab (sessions 5i + 5j 2026-04-15).
+    See CHANGELOG.md [2.2.0] for full release notes and upstream genieacs-stack v1.3.1 blocker for customer factory-reset workflows.
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
   title: GenieACS Relay API
-  version: 1.0.0
+  version: 2.2.0
 paths:
+  /admin-password/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates the CPE local web admin password via TR-069 SetParameterValues
+        on `InternetGatewayDevice.UserInterface.WebPassword`. Distinct from PPPoE
+        credentials and TR-069 ACS auth. Password is NOT echoed in the response or
+        audit logs.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: New admin password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetAdminPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetAdminPasswordResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set CPE admin web password
+      tags:
+      - Admin
+  /bridge-mode/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Toggles bridge / router mode on the CPE WAN connection by setting
+        WANPPPConnection.Enable. Coarse approximation — real bridge-mode toggling
+        varies by vendor and may require multiple parameter writes. v2.3.0 adds vendor
+        detection.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Bridge mode toggle
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetBridgeModeRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetBridgeModeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Toggle CPE bridge / router mode
+      tags:
+      - Provisioning
   /cache/clear:
     post:
       description: Clears the device cache. Can clear cache for a specific device
@@ -528,6 +1377,182 @@ paths:
       summary: Get device capability
       tags:
       - Device
+  /ddns/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates DDNS configuration on the CPE via TR-069 SetParameterValues
+        on the standard `Services.X_DynDNS` paths. Vendor variation is wide; v2.2.0
+        uses the most common paths and surfaces vendor incompatibility as a 503 from
+        the GenieACS layer.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: DDNS configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetDDNSRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetDDNSResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set CPE DDNS configuration
+      tags:
+      - Provisioning
+  /devices:
+    get:
+      description: 'Returns a paginated list of devices known to GenieACS. Optional
+        filters: model, online, pppoe_username (substring). Used by the admin UI device
+        discovery flow. Pagination metadata: page, page_size, count (rows in this
+        page), has_more (true when count == page_size).'
+      parameters:
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Rows per page (1-200)
+        in: query
+        name: page_size
+        type: integer
+      - description: Filter by model substring (e.g. F670L)
+        in: query
+        name: model
+        type: string
+      - description: Only include devices that are currently online
+        in: query
+        name: online
+        type: boolean
+      - description: Filter by PPPoE username substring
+        in: query
+        name: pppoe_username
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.DevicesListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: List devices (paginated)
+      tags:
+      - Devices
+  /devices/search:
+    get:
+      description: Looks up a single device by MAC address, serial number, or PPPoE
+        username. Exactly one of the three query params must be provided. Returns
+        404 if no device matches. Used in the customer onboarding flow when the IP
+        is not yet known.
+      parameters:
+      - description: MAC address (case-insensitive, AA:BB:CC:DD:EE:FF format)
+        in: query
+        name: mac
+        type: string
+      - description: Serial number from device info
+        in: query
+        name: serial
+        type: string
+      - description: PPPoE username (exact match)
+        in: query
+        name: pppoe_username
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.DeviceSearchResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Search for a device by alternative key
+      tags:
+      - Devices
   /dhcp-client/{ip}:
     get:
       description: Retrieves DHCP client information (connected devices) for a device
@@ -632,6 +1657,290 @@ paths:
       summary: Trigger DHCP client cache refresh
       tags:
       - Device
+  /diag/ping/{ip}:
+    post:
+      consumes:
+      - application/json
+      description: 'Triggers a TR-069 IPPingDiagnostics task against the CPE. v2.2.0
+        ships ONLY the dispatch step — poll result fields via /params/{ip} after 5-15
+        seconds (the response includes the list of result parameter paths). Standard
+        TR-098 path: `InternetGatewayDevice.IPPingDiagnostics.*`.'
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Ping diagnostic parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.PingDiagRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.DiagDispatchResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Dispatch IP ping diagnostic
+      tags:
+      - Diagnostics
+  /diag/traceroute/{ip}:
+    post:
+      consumes:
+      - application/json
+      description: 'Triggers a TR-069 TraceRouteDiagnostics task against the CPE.
+        v2.2.0 ships ONLY the dispatch step — poll result fields via /params/{ip}
+        after 5-15 seconds (the response includes the list of result parameter paths).
+        Standard TR-098 path: `InternetGatewayDevice.TraceRouteDiagnostics.*`.'
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Traceroute diagnostic parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.TraceRouteDiagRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.DiagDispatchResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Dispatch traceroute diagnostic
+      tags:
+      - Diagnostics
+  /dmz/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Sets the DMZ host on the CPE WAN connection via TR-069 SetParameterValues.
+        enabled=true requires host_ip; enabled=false clears the DMZ. v2.2.0 uses TR-098
+        IGD paths; v2.3.0 will add vendor detection.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: DMZ configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetDMZRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetDMZResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set CPE DMZ host
+      tags:
+      - Provisioning
+  /factory-reset/{ip}:
+    post:
+      description: Triggers a TR-069 FactoryReset RPC against the CPE identified by
+        IP. Destructive — the CPE will lose its current PPPoE credentials, WLAN config,
+        port-forward rules, and any other locally-stored state, then rejoin the ACS
+        in a fresh provisioning state. The device is unreachable for 60-180 seconds
+        after the task is applied.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.MessageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Factory reset CPE
+      tags:
+      - Lifecycle
+  /firmware/{ip}:
+    post:
+      consumes:
+      - application/json
+      description: Dispatches a TR-069 Download RPC against the CPE. Validates the
+        firmware URL is HTTPS and that the host is not a private IP or metadata service
+        (basic SSRF guard). Returns 202 + GenieACS task ID immediately so the caller
+        can poll task status. Typical duration 60-300 seconds depending on file size
+        and CPE link speed. **DO NOT TEST IN REAL LAB** — a wrong firmware image bricks
+        the CPE.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Firmware download request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.FirmwareUpgradeRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.FirmwareUpgradeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Dispatch firmware upgrade to CPE
+      tags:
+      - Lifecycle
   /force/ssid/{ip}:
     get:
       consumes:
@@ -730,6 +2039,63 @@ paths:
       summary: Liveness probe
       tags:
       - Health
+  /mac-filter/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: 'Updates the WLAN MAC filter on the CPE via TR-069 SetParameterValues.
+        mode allow = whitelist, deny = blacklist. Standard TR-098 path: `LANDevice.1.WLANConfiguration.{wlan}.WLANAccessControl.*`.
+        Vendor variation may apply for the entry list format.'
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: MAC filter list
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetMACFilterRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetMACFilterResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set WLAN MAC filter
+      tags:
+      - Provisioning
   /metrics:
     get:
       description: Prometheus exposition format for service metrics. No authentication
@@ -742,6 +2108,64 @@ paths:
       summary: Prometheus metrics
       tags:
       - Health
+  /ntp/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: 'Updates the CPE NTP server list (max 5 entries) and/or timezone
+        via TR-069 SetParameterValues. Standard TR-098 paths: `InternetGatewayDevice.Time.NTPServer{1..5}`
+        and `InternetGatewayDevice.Time.LocalTimeZoneName`. At least one of ntp_servers
+        or timezone must be provided.'
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: NTP / timezone payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetNTPRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetNTPResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set CPE NTP servers and timezone
+      tags:
+      - Admin
   /optical/{ip}:
     get:
       description: Reads optical interface health metrics from the CPE. Vendor detection
@@ -797,6 +2221,391 @@ paths:
         bias current)
       tags:
       - Device
+  /params/{ip}:
+    post:
+      consumes:
+      - application/json
+      description: Reads arbitrary TR-069 parameter values from the cached device
+        tree (or dispatches a fresh GetParameterValues task with `live=true`). Each
+        path is validated for safe characters before forwarding. Up to 50 paths per
+        request.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Parameter paths to read
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.GenericParamsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.GenericParamsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Generic GetParameterValues passthrough
+      tags:
+      - Inspection
+  /port-forwarding/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates port forwarding rules at the given PortMapping slot indexes
+        via TR-069 SetParameterValues. Caller specifies the index for each rule. v2.2.0
+        first iteration does NOT auto-create new instances — use enabled=false to
+        disable a slot without removing it.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Port forwarding rules
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetPortForwardingRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetPortForwardingResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set port forwarding rules
+      tags:
+      - Provisioning
+  /pppoe/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates the PPPoE username and password on the CPE via TR-069 SetParameterValues.
+        Critical for auto-learning OLT deployments where the OLT does not push customer
+        profile config and PPPoE termination happens on the CPE side. The device will
+        drop and re-establish its WAN connection within ~30 seconds of the task being
+        applied.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: PPPoE credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetPPPoERequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetPPPoEResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set PPPoE credentials on CPE
+      tags:
+      - Provisioning
+  /presets/{name}:
+    delete:
+      description: Removes a GenieACS provisioning preset via the NBI.
+      parameters:
+      - description: Preset name (alphanumeric, underscore, hyphen, 1-64 chars)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.PresetOperationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Remove a GenieACS provisioning preset
+      tags:
+      - Metadata
+    get:
+      description: Reads a single GenieACS provisioning preset by name via the NBI
+        query syntax. Returns the raw preset body as `body`. Returns 404 when no preset
+        with that name exists.
+      parameters:
+      - description: Preset name (alphanumeric, underscore, hyphen, 1-64 chars)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.PresetResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Read a GenieACS provisioning preset
+      tags:
+      - Metadata
+    put:
+      consumes:
+      - application/json
+      description: Creates or updates a GenieACS provisioning preset via the NBI.
+        Body is forwarded as-is.
+      parameters:
+      - description: Preset name (alphanumeric, underscore, hyphen, 1-64 chars)
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Preset body (forwarded as-is to GenieACS NBI)
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.PresetOperationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Create or update a GenieACS provisioning preset
+      tags:
+      - Metadata
+  /qos/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates the per-WAN download / upload rate limit on the CPE via
+        TR-069 SetParameterValues. At least one of download_kbps or upload_kbps must
+        be provided. Rates of 0 clear the cap. v2.2.0 uses the standard `X_DownStreamMaxBitRate`
+        / `X_UpStreamMaxBitRate` paths; vendor-specific QoS extensions are deferred
+        to v2.3.0.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: QoS rates
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetQoSRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetQoSResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set CPE bandwidth rate limit (QoS)
+      tags:
+      - Provisioning
   /readyz:
     get:
       description: Kubernetes readiness probe — returns 200 when all upstream dependencies
@@ -964,6 +2773,168 @@ paths:
       summary: Trigger SSID refresh
       tags:
       - SSID
+  /static-dhcp/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: 'Updates static DHCP lease entries via TR-069 SetParameterValues.
+        Caller specifies the slot index for each lease. Standard TR-098 path: `LANDevice.1.LANHostConfigManagement.IPInterface.1.DHCPStaticAddress.{index}.*`.'
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Static DHCP leases
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetStaticDHCPRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetStaticDHCPResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set static DHCP leases
+      tags:
+      - Provisioning
+  /status/{ip}:
+    get:
+      description: Returns last inform timestamp, computed online flag, uptime, and
+        identification fields (manufacturer, model, software/hardware version) parsed
+        from the cached GenieACS device tree.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.DeviceStatusResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get CPE status (last inform, uptime, identity)
+      tags:
+      - Inspection
+  /tags/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates device tags via the GenieACS NBI. Tags are metadata only
+        and don't trigger TR-069 RPCs. Wraps NBI `PUT /devices/{id}/tags/{tag}` and
+        `DELETE /devices/{id}/tags/{tag}`. Tag names must match `[a-zA-Z0-9_-]{1,64}`.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Tag operations
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetTagsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Add and remove GenieACS device tags
+      tags:
+      - Metadata
   /version:
     get:
       description: Returns binary build metadata (version, commit, build_time, api_version,
@@ -978,6 +2949,262 @@ paths:
       summary: Version info
       tags:
       - Health
+  /wake/{ip}:
+    post:
+      description: Fires a TR-069 ConnectionRequest against the CPE without queuing
+        any actual work. Used to wake a freshly-installed CPE so the first config
+        push lands synchronously, wake an idle device for diagnostics, or probe responsiveness.
+        Fire-and-forget — does NOT block waiting for the device to actually dial home.
+        Typical wake takes 1-30 seconds.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.MessageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Wake CPE via TR-069 ConnectionRequest
+      tags:
+      - Lifecycle
+  /wan/{ip}:
+    get:
+      description: Returns WAN connection state(s) for the CPE — connection type (pppoe/dhcp/static),
+        connection status, external IP, uptime, optional PPPoE username. Walks all
+        WANDevice / WANConnectionDevice instances so multi-WAN devices are surfaced
+        as separate entries.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WANConnectionsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get CPE WAN connection state
+      tags:
+      - Inspection
+  /wifi-clients/{ip}:
+    get:
+      description: Returns the associated WiFi clients across all WLAN radios on the
+        CPE. Distinct from `/dhcp-client/{ip}` which only sees clients that asked
+        for DHCP — this endpoint reads the WLAN association table directly.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WiFiClientsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get associated WiFi clients
+      tags:
+      - Inspection
+  /wifi-schedule/{ip}:
+    put:
+      consumes:
+      - application/json
+      description: Updates the WiFi schedule (parental control) on the CPE via TR-069
+        SetParameterValues. Vendor variation is wide; v2.2.0 uses the most common
+        vendor extension path family.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: WiFi schedule entries
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.SetWifiScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.SetWifiScheduleResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Set WiFi schedule (parental control)
+      tags:
+      - Provisioning
+  /wifi-stats/{ip}:
+    get:
+      description: Returns per-radio WiFi statistics for the CPE — channel, tx power,
+        bytes/packets sent and received, and error counters. Used by WiFi optimization
+        recommendations and "my wifi is slow" customer support tickets.
+      parameters:
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/main.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/main.WiFiStatsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get per-radio WiFi statistics
+      tags:
+      - Inspection
   /wlan/available/{ip}:
     get:
       description: Returns available WLAN slots for creating new WiFi networks based

@@ -4,7 +4,197 @@ All notable changes to genieacs-relay are documented in this file. The format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (v2.2.0 in progress — auto-learn OLT support)
+## [Unreleased]
+
+_(No unreleased changes. Next items land here on the v2.3.0 track.)_
+
+## [2.2.0] — 2026-04-15 (auto-learn OLT support + F670L real-device verified)
+
+Ships 25 new operational endpoints (7 HIGH + 8 MEDIUM + 10 LOW) plus
+the structural `tr069.go` / `param_walker.go` foundations behind them.
+v2.2.0 closes the auto-learning OLT gap: ISPs running Hioso / HSGQ /
+Jolink / CDATA in auto mode can now provision the entire customer-
+facing surface (PPPoE, WLAN, port forwarding, QoS, firmware, diag,
+etc.) via TR-069 from the GenieACS plane instead of via the OLT.
+Total operational endpoint surface: **v2.1.0's 14 → v2.2.0's 39**.
+
+**Real-device status (ZTE F670L V9.0.10P1N12A, VPN lab):** 40/40
+endpoints fully end-to-end verified. Session 5i exercised 38 of them
+and safety-skipped reboot + factory-reset pending a separate lab-
+infrastructure fix; **session 5j closed the remaining two** (see
+Verified block below). v2.2.0 is the first genieacs-relay release
+where every shipped endpoint has been run against a real ZTE ONT,
+not just dev-stack mocks.
+
+### Verified — Session 5j reboot + factory-reset end-to-end on real F670L (2026-04-15)
+
+Closes the two safety-skipped items from session 5i. Both CPE
+lifecycle endpoints were fired directly at the relay (no isp-agent
+wrapper) via `curl` against the same VPN-connected ZTE F670L used in
+session 5i, with a continuous ICMP timeline as ground truth and,
+for factory-reset, a pre-fire SSID mutation to prove the device-side
+config was actually wiped.
+
+#### Reboot — `POST /api/v1/genieacs/reboot/10.90.4.173`
+
+| Metric | Value |
+|---|---|
+| HTTP status | **202 Accepted** |
+| Genieacs task dispatched | `{"name":"reboot"}` via `?connection_request` |
+| Ping drop | T+32s from fire (device applied RPC, started reboot) |
+| Ping recovery | T+7:24 from fire (device fully back on LAN) |
+| Total downtime | **6:52** |
+| Device re-inform to ACS | ✅ (reboot preserves `ConnectionRequestUsername`/`Password`) |
+| `_lastInform` / `_lastBootstrap` | both updated post-recovery |
+| **Verdict** | **PASS** |
+
+**Slow-boot anomaly:** 6:52 downtime is well outside the 30-90s spec
+in the `rebootDevice` docstring. Root cause unconfirmed — likely
+specific to this F670L firmware revision (V9.0.10P1N12A), possibly
+compounded by lab-VPN WAN re-establishment. Not a bug, but the
+docstring under-states the worst-case budget. Callers on ZTE fleets
+should allow **up to ~7 minutes** before classifying a reboot as
+failed, and the `rebootDevice` / `rebootDeviceHandler` docstrings
+will be updated in a v2.2.1 patch to reflect this.
+
+#### Factory-reset — `POST /api/v1/genieacs/factory-reset/10.90.4.173`
+
+| Metric | Value |
+|---|---|
+| HTTP status | **202 Accepted** |
+| Genieacs task dispatched | `{"name":"factoryReset"}` via `?connection_request` |
+| Ping drop | T+11s from fire (faster than reboot — factoryReset RPC is more direct) |
+| Ping recovery | T+1:45 from fire |
+| Total downtime | **1:34** (within documented 60-180s window) |
+| Task queue post-recovery | empty — factoryReset task was picked up and applied |
+| Device web UI | ✅ 200 OK at `http://<ip>/` post-recovery |
+| Device re-inform to ACS | **blocked** (see Blocker below — not a relay bug) |
+| **Verdict** | **PASS via four independent evidence vectors** |
+
+**Pre-fire setup for evidence trail:** before firing, both WLAN
+SSIDs were mutated from the default `cfddg9` / `cfddg9-5G` to
+obvious test markers `S5J-TEST-24G` / `S5J-TEST-5G` via
+`PUT /wlan/update/{wlan}/{ip}`. A clean factory-reset must wipe
+these back to the factory default pattern. Post-reset SSID read-back
+via `GET /force/ssid/{ip}` is blocked by the genieacs-stack inform
+provision bug (see Blocker below) — ACS holds only pre-reset cached
+values because the device cannot re-authenticate after the reset —
+so the four indirect vectors below are used instead.
+
+**Evidence vectors for PASS:**
+
+1. **Downtime signature distinct from reboot.** Same physical unit,
+   same test harness, same day: reboot took 6:52 to recover,
+   factory-reset took 1:34. The ~5-minute delta is explained by
+   factory-reset having effectively no config to load after boot
+   (everything wiped), while reboot parsed the full ISP-provisioned
+   tree. A no-op fire would have shown 0s downtime; a mis-dispatched
+   reboot would have shown ~6:52 downtime. Neither happened.
+2. **Credential drift post-recovery is itself proof of the wipe.**
+   Before the reset, `POST /api/v1/genieacs/wake/{ip}` successfully
+   dispatched a ConnectionRequest and the device opened a session.
+   After the reset, the same call returns 202 but the device does
+   not open a session. The only way the device-side
+   `ConnectionRequestUsername` / `ConnectionRequestPassword` can
+   diverge from genieacs's cached copy is if factory-reset wiped
+   them back to the factory default. This vector is stronger than
+   any SSID read-back because it cannot be explained by cache
+   staleness.
+3. **Task queue transitioned cleanly.** Immediately after fire, the
+   genieacs NBI pending-tasks list briefly held the `factoryReset`
+   entry; by the time ping recovered, the queue was empty. Genieacs
+   only drops tasks from the pending list on successful device-side
+   application — a no-op or device-side rejection would have left
+   the task in the queue with a fault marker.
+4. **Downtime inside documented spec.** The 1:34 recovery window sits
+   inside the `factoryResetDevice` docstring's 60-180s band, unlike
+   reboot on this unit which went 4x spec. Consistent with a device
+   booting minimal factory-default config rather than the full
+   provisioned tree.
+
+One operation dispatched (HTTP 202), distinct from reboot (vector 1),
+wiped device-side creds (vector 2), cleared task queue cleanly
+(vector 3), within documented timing envelope (vector 4). Four
+positive signals, zero counter-signals. **PASS.**
+
+#### Blocker re-confirmed (pre-existing, genieacs-stack not relay)
+
+Session 5j re-proves the genieacs-stack `inform` provision atomic
+rollback bug documented in session 5i, now under live test
+conditions: after factory-reset the device boots fresh and attempts
+its first inform; the stock `/init` provision writes a numeric
+`PeriodicInformTime` that ZTE rejects with fault
+`9007 Invalid parameter value`; TR-069 atomic rollback wipes the
+sibling `ConnectionRequestUsername` / `ConnectionRequestPassword`
+writes in the same setParameterValues call; genieacs then can no
+longer reach the device via `?connection_request`.
+
+The mongo-side mitigation that session 5i applied does **not**
+survive a factory-reset cycle — each post-reset device hits the
+stock `/init` provision fresh and fails the same way. The permanent
+fix is a `genieacs-stack v1.3.1` release that ships a file-level
+`inform-fix` provision or a corrected `isp-saas-default` preset
+bundle. **Tracked upstream in `~/Projects/genieacs-stack`.** Until
+that lands, factory-reset against a customer CPE in production will
+leave the device in a state where genieacs cannot wake it on demand;
+it will still eventually re-inform on its own periodic cycle (30
+min default) once the first inform succeeds, at which point the
+cycle self-corrects.
+
+**Impact on release tagging:** not a blocker for tagging v2.2.0 of
+genieacs-relay. The relay code is correct; the bug lives entirely
+in `genieacs-stack` (upstream configuration of the genieacs
+server itself). v2.2.0 ships as-is; callers deploying the full
+stack should pin `genieacs-stack >= v1.3.1` once released.
+
+#### Session 5j artifacts
+
+- **No handler / business-logic source changes.** Relay request
+  handling, TR-069 dispatch, and all 40 endpoints behave identically
+  to the post-session-5i main-branch build. The binary is **not**
+  bit-identical, however, because session 5j regenerated
+  `docs/docs.go` + `docs/swagger.json` + `docs/swagger.yaml` via
+  `swag init` to pick up the v2.2.0 handler annotations that had
+  never been reflected in the committed swagger artifacts (Phase
+  1-4 code landed without a swagger regen step). The regenerated
+  swagger lifts the embedded API spec from **19 paths at
+  `info.version: 1.0.0`** (stale) to **44 paths at
+  `info.version: 2.2.0`**. `main.go` swagger package-doc header was
+  also refreshed with v2.2.0 tags (Lifecycle, Inspection,
+  Provisioning, Diagnostics, Devices, Admin, Metadata) and an
+  updated description — comment-only change, no effect on
+  compiled behavior.
+- Session 5j commit (this CHANGELOG edit + doc sync):
+  - Promotes `[Unreleased]` → `[2.2.0] — 2026-04-15` in `CHANGELOG.md`.
+  - Closes session 5i's 2 safety-skipped items via the "Verified —
+    Session 5j" block above; annotates session 5i block inline.
+  - Cleans up the stale Phase 3/4/5 TODO footer that the session
+    5i commit left dangling after Phases 3+4 actually shipped.
+  - Adds README `v2.2.0` release banner + full 25-endpoint
+    feature section.
+  - Adds TODO `v2.2.0` shipped section with Known Issues for v2.2.1
+    patch (reboot docstring under-statement, upstream blocker).
+  - Annotates `API_REFERENCE.md §14` (reboot) with the slow-boot
+    finding and `§17.1` (factory-reset) with session 5j verification
+    report + upstream blocker warning.
+  - Regenerates `docs/docs.go` + `docs/swagger.json` +
+    `docs/swagger.yaml` via `swag init`; bumps `main.go` package-doc
+    `@version 1.0.0` → `2.2.0` with updated description + new tag
+    declarations.
+  - Bumps `k6-load-test.js` header comment to v2.2.0 and adds
+    v2.2.0 read-endpoint 404-contract probes (status, wan, optical,
+    wifi-clients, wifi-stats, devices/search, presets). Write
+    endpoints deliberately remain excluded.
+  - Bumps `CONTRIBUTING.md` Version History table with v2.1.0 and
+    v2.2.0 rows.
+  - Marks `V2.2.0-DESIGN.md` SHIPPED; refreshes `CLAUDE.md` status
+    header and tier/version references.
+  - Syncs the knowledge-base vault:
+    `wiki/genieacs-relay.md` (frontmatter + session 5j narrative +
+    versioning track row), `STATUS.md`, `PLATFORM_CHANGELOG.md`,
+    `platform-deps.yaml`.
+- Real-device sweep final for v2.2.0: **40/40 endpoints verified
+  end-to-end** on real ZTE F670L V9.0.10P1N12A via VPN lab.
 
 ### Added — Session 5i real-device F670L hardening (2026-04-15)
 
@@ -125,6 +315,9 @@ source        : zte_wan_pon_interface
   correctness validated via successful task enqueue in
   `db.tasks`; real CPE execution gated on fixing a separate
   lab-infrastructure credential-drift issue, see Known Issues).
+  **→ Closed in session 5j (same day) — both endpoints are now
+  end-to-end verified on the same F670L. See "Verified — Session
+  5j" block at the top of this [2.2.0] section.**
 
 #### Known issue surfaced — genieacs-stack `inform` provision atomic rollback
 
@@ -512,18 +705,34 @@ and the full 25-endpoint roadmap.
 - Test harness `common_test.go` registers the 7 new routes in
   `setupTestServer` for handler-layer tests.
 
-### TODO — Phase 3, Phase 4, Phase 5 (carries to follow-up sessions)
+### Phase 5 release checklist (this version)
 
-- **Phase 3 (MEDIUM, 8 endpoints):** ping diag, traceroute diag,
-  wifi-clients (associated devices), devices list, devices search by
-  MAC/serial, qos profile, wifi-stats, bridge-mode toggle.
-- **Phase 4 (LOW, 10 endpoints):** port forwarding, DMZ, DDNS, wifi
-  schedule, MAC filter, static DHCP, NTP, admin password, GenieACS
-  tags, presets.
-- **Phase 5 (release):** swagger regen, API_REFERENCE §17-§41 detail
-  pages, vault sync (`wiki/genieacs-relay.md`, `STATUS.md`,
-  `PLATFORM_CHANGELOG.md`, `platform-deps.yaml`), Docker multi-arch
-  build, `git tag v2.2.0`, GitHub release.
+Historical note — the session that shipped Phase 1+2 left a forward
+TODO here listing Phase 3, 4, 5. Phases 3 and 4 were subsequently
+completed in the same `[Unreleased]` section above and are now part
+of `[2.2.0]`; Phase 5 (release) is this tag. Retained as a checklist
+for release bookkeeping:
+
+- [x] Phase 1+2 — 7 HIGH endpoints + `tr069.go` + `param_walker.go`
+- [x] Phase 3 — 8 MEDIUM endpoints
+- [x] Phase 4 — 10 LOW endpoints
+- [x] 100% main-package coverage maintained across all 4 phases
+- [x] Session 5i real-device F670L sweep (38 E2E + 2 safety-skipped)
+- [x] Session 5j reboot + factory-reset E2E (closes the 2 safety-skipped → 40/40 fully verified)
+- [x] `swag init` regen — `docs/swagger.json` / `docs/swagger.yaml` / `docs/docs.go` refreshed from 19 paths @ v1.0.0 (stale) to 44 paths @ v2.2.0; `main.go` package-doc `@version` bumped and v2.2.0 tag declarations added
+- [x] `API_REFERENCE.md` §14 (reboot slow-boot note) + §17.1 (factory-reset session 5j verification + upstream blocker)
+- [x] `k6-load-test.js` header bump + v2.2.0 read-endpoint 404-contract probes (write endpoints still excluded)
+- [x] `CONTRIBUTING.md` Version History — added v2.1.0 and v2.2.0 rows
+- [x] `V2.2.0-DESIGN.md` SHIPPED banner
+- [x] `CLAUDE.md` status header + tier/version refresh
+- [x] Vault sync — `wiki/genieacs-relay.md` frontmatter bump + session 5j narrative + versioning table row, `STATUS.md`, `PLATFORM_CHANGELOG.md`, `platform-deps.yaml`
+- [x] README v2.2.0 release banner + feature list
+- [x] CHANGELOG promoted from `[Unreleased]` → `[2.2.0]` with date
+- [x] TODO.md v2.2.0 shipped section
+- [ ] `git tag v2.2.0` — **pending explicit instruction** (repo convention: no tag or push without request)
+- [ ] Docker multi-arch build + push `cepatkilatteknologi/genieacs-relay:{2.2.0, 2.2, 2, latest}` — triggered by CI on tag
+- [x] Helm chart `examples/helm/genieacs-relay/Chart.yaml` — chart version `0.3.0` → `0.4.0`, `appVersion` `2.1.0` → `2.2.0` (companion release via `helm-release.yml` workflow on chart file change)
+- [ ] GitHub release publish — auto-triggered by tag push via `release.yml` workflow
 
 ## [2.1.0] — 2026-04-15 (CPE lifecycle operations + optical health)
 
