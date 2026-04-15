@@ -64,6 +64,34 @@ func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) 
 	return deviceID, true
 }
 
+// getIPParam returns the `{ip}` URL path parameter from the request.
+// Used by handlers that need to echo the original IP back in the
+// response body. Centralized to avoid `chi.URLParam` calls scattered
+// through handler files.
+func getIPParam(r *http.Request) string {
+	return chi.URLParam(r, "ip")
+}
+
+// joinPath builds a TR-069 parameter path segment from a base path,
+// a numeric instance index, and a child name. Used by the WAN
+// connection walker in handlers_inspection.go to construct paths like
+// `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection`.
+//
+// Centralized rather than inline `fmt.Sprintf` so the test suite can
+// assert path construction in isolation and the format string lives
+// in one place if TR-069 path conventions ever shift.
+func joinPath(base string, instance int, child string) string {
+	return base + "." + strconv.Itoa(instance) + "." + child
+}
+
+// joinInstance builds a TR-069 path segment by appending a numeric
+// instance index to a base path, without a trailing child name.
+// Returns "InternetGatewayDevice.WANDevice.1" for joinInstance("InternetGatewayDevice.WANDevice", 1).
+// Used by the WAN walker to derive the per-instance leaf path.
+func joinInstance(base string, instance int) string {
+	return base + "." + strconv.Itoa(instance)
+}
+
 // ValidateWLANAndRespond validates WLAN and sends appropriate error response if invalid
 // Returns true if WLAN is valid, false otherwise (error response already sent)
 func ValidateWLANAndRespond(w http.ResponseWriter, r *http.Request, deviceID, wlan string) bool {
@@ -513,36 +541,61 @@ func buildChannelParams(wlan, channel string) [][]interface{} {
 
 // AvailableWLANSlots holds available and used WLAN slot information
 type AvailableWLANSlots struct {
-	Total24GHz     []int
-	Total5GHz      []int
-	Available24GHz []int
-	Available5GHz  []int
-	UsedWLAN       []UsedWLANInfo
+	Total24GHz      []int
+	Total5GHz       []int
+	Available24GHz  []int
+	Available5GHz   []int
+	UsedWLAN        []UsedWLANInfo
+	ProvisionedWLAN []ProvisionedWLANInfo
 }
 
-// CalculateAvailableWLANSlots calculates available WLAN slots based on capability and current usage
+// CalculateAvailableWLANSlots calculates available WLAN slots based on
+// capability and current usage. Accepts the full list of WLAN configs
+// (including disabled ones, as returned by getAllWLANConfigs) so it
+// can populate both UsedWLAN (Enabled=true only, backward compat) and
+// ProvisionedWLAN (every slot present in the tree, each annotated with
+// its Enable state).
+//
+// "Available" means the slot is safe to (re)create: either it is not
+// present in the tree at all, or its Enable flag is false. A disabled
+// slot is considered available because calling the create endpoint
+// against it flips Enable back to true (the SSID label is overwritten
+// with the caller's value). Operators who want to avoid stomping on
+// previously-provisioned SSID labels can inspect ProvisionedWLAN before
+// picking a slot.
 func CalculateAvailableWLANSlots(capability *DeviceCapability, wlanConfigs []WLANConfig) AvailableWLANSlots {
 	slots := AvailableWLANSlots{}
 
-	// Build used WLAN IDs map
-	usedWLANIDs := make(map[int]bool)
+	// Build lookup maps: enabledIDs drives backward-compat "used",
+	// provisionedIDs drives the new richer "provisioned" view.
+	enabledIDs := make(map[int]bool)
+	provisionedIDs := make(map[int]bool)
 	for _, wlan := range wlanConfigs {
 		wlanID, err := strconv.Atoi(wlan.WLAN)
 		if err != nil {
 			continue
 		}
-		usedWLANIDs[wlanID] = true
-		slots.UsedWLAN = append(slots.UsedWLAN, UsedWLANInfo{
-			WLANID: wlanID,
-			SSID:   wlan.SSID,
-			Band:   wlan.Band,
+		provisionedIDs[wlanID] = true
+		slots.ProvisionedWLAN = append(slots.ProvisionedWLAN, ProvisionedWLANInfo{
+			WLANID:  wlanID,
+			SSID:    wlan.SSID,
+			Band:    wlan.Band,
+			Enabled: wlan.Enabled,
 		})
+		if wlan.Enabled {
+			enabledIDs[wlanID] = true
+			slots.UsedWLAN = append(slots.UsedWLAN, UsedWLANInfo{
+				WLANID: wlanID,
+				SSID:   wlan.SSID,
+				Band:   wlan.Band,
+			})
+		}
 	}
 
 	// Calculate 2.4GHz slots
 	for i := WLAN24GHzMin; i <= WLAN24GHzMax; i++ {
 		slots.Total24GHz = append(slots.Total24GHz, i)
-		if !usedWLANIDs[i] {
+		if !enabledIDs[i] {
 			slots.Available24GHz = append(slots.Available24GHz, i)
 		}
 	}
@@ -551,7 +604,7 @@ func CalculateAvailableWLANSlots(capability *DeviceCapability, wlanConfigs []WLA
 	if capability.IsDualBand {
 		for i := WLAN5GHzMin; i <= WLAN5GHzMax; i++ {
 			slots.Total5GHz = append(slots.Total5GHz, i)
-			if !usedWLANIDs[i] {
+			if !enabledIDs[i] {
 				slots.Available5GHz = append(slots.Available5GHz, i)
 			}
 		}

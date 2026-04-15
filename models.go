@@ -20,6 +20,7 @@ type WLANConfig struct {
 	MaxClients int    `json:"max_clients,omitempty"` // Maximum number of associated devices
 	AuthMode   string `json:"auth_mode,omitempty"`   // Authentication mode (Open, WPA, WPA2, WPA/WPA2)
 	Encryption string `json:"encryption,omitempty"`  // Encryption mode (AES, TKIP, TKIP+AES)
+	Enabled    bool   `json:"enabled"`               // TR-069 Enable flag (raw); true = slot actively broadcasting
 }
 
 // DHCPClient represents a client device that obtained IP address via DHCP
@@ -79,6 +80,19 @@ type UsedWLANInfo struct {
 	Band   string `json:"band"`
 }
 
+// ProvisionedWLANInfo describes a WLAN slot that exists in the TR-069
+// tree regardless of whether it is currently broadcasting. The Enabled
+// flag lets callers distinguish "in use" (Enabled=true, equivalent to
+// UsedWLANInfo) from "provisioned but disabled" (Enabled=false) — a
+// disabled slot still owns an SSID label on the CPE that a `create`
+// call will silently overwrite.
+type ProvisionedWLANInfo struct {
+	WLANID  int    `json:"wlan_id"`
+	SSID    string `json:"ssid"`
+	Band    string `json:"band"`
+	Enabled bool   `json:"enabled"`
+}
+
 // AvailableWLANResponse contains the response for available WLAN slots endpoint
 type AvailableWLANResponse struct {
 	DeviceID   string `json:"device_id"`
@@ -88,8 +102,9 @@ type AvailableWLANResponse struct {
 		Band24GHz []int `json:"2_4ghz"`
 		Band5GHz  []int `json:"5ghz"`
 	} `json:"total_slots"`
-	UsedWLAN      []UsedWLANInfo `json:"used_wlan"`
-	AvailableWLAN struct {
+	UsedWLAN        []UsedWLANInfo        `json:"used_wlan"`
+	ProvisionedWLAN []ProvisionedWLANInfo `json:"provisioned_wlan"`
+	AvailableWLAN   struct {
 		Band24GHz []int `json:"2_4ghz"`
 		Band5GHz  []int `json:"5ghz"`
 	} `json:"available_wlan"`

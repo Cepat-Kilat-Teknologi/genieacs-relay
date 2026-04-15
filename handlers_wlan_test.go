@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- WLAN Handler Tests (Create, Update, Delete, Optimize, Available) ---
@@ -2936,4 +2938,58 @@ func TestGetAvailableWLANHandlerWithDeviceDataError(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+// TestBuildAvailableWLANResponse_NilProvisioned verifies that a device
+// returning zero WLAN configs (e.g. a CPE with no WLANConfiguration
+// subtree at all) produces an empty JSON array for provisioned_wlan,
+// not null. Exercises the nil-safe default branch in
+// buildAvailableWLANResponse.
+func TestBuildAvailableWLANResponse_NilProvisioned(t *testing.T) {
+	capability := &DeviceCapability{
+		Model:      "EmptyDevice",
+		BandType:   BandTypeSingleBand,
+		IsDualBand: false,
+	}
+	emptySlots := AvailableWLANSlots{
+		Total24GHz:      []int{1, 2, 3, 4},
+		Available24GHz:  []int{1, 2, 3, 4},
+		UsedWLAN:        nil,
+		ProvisionedWLAN: nil,
+	}
+	resp := buildAvailableWLANResponse("ANY-DEVICE-123", capability, emptySlots)
+	assert.NotNil(t, resp.UsedWLAN)
+	assert.Equal(t, []UsedWLANInfo{}, resp.UsedWLAN)
+	assert.NotNil(t, resp.ProvisionedWLAN)
+	assert.Equal(t, []ProvisionedWLANInfo{}, resp.ProvisionedWLAN)
+
+	raw, err := json.Marshal(resp)
+	require.NoError(t, err)
+	s := string(raw)
+	assert.Contains(t, s, `"used_wlan":[]`)
+	assert.Contains(t, s, `"provisioned_wlan":[]`)
+}
+
+// TestCalculateAvailableWLANSlots_PopulatesProvisioned verifies that
+// the slot calculator populates ProvisionedWLAN from the raw config
+// list, flags disabled slots correctly, and keeps a disabled slot as
+// "available" while excluding it from UsedWLAN. The bogus non-numeric
+// WLAN id entry exercises the strconv.Atoi error branch.
+func TestCalculateAvailableWLANSlots_PopulatesProvisioned(t *testing.T) {
+	capability := &DeviceCapability{
+		Model:      "F670L",
+		BandType:   BandTypeDualBand,
+		IsDualBand: true,
+	}
+	wlanConfigs := []WLANConfig{
+		{WLAN: "1", SSID: "cfddg9", Band: "2.4GHz", Enabled: true},
+		{WLAN: "2", SSID: "RelayTest24Renamed", Band: "2.4GHz", Enabled: false},
+		{WLAN: "5", SSID: "cfddg9-5G", Band: "5GHz", Enabled: true},
+		{WLAN: "bogus", SSID: "skipped", Band: "2.4GHz", Enabled: true},
+	}
+	slots := CalculateAvailableWLANSlots(capability, wlanConfigs)
+	assert.Len(t, slots.UsedWLAN, 2, "only enabled + numeric-id slots land in used")
+	assert.Len(t, slots.ProvisionedWLAN, 3, "provisioned includes disabled slot 2 but skips bogus")
+	assert.Contains(t, slots.Available24GHz, 2, "disabled slot 2 stays available for overwrite")
+	assert.NotContains(t, slots.Available24GHz, 1, "enabled slot 1 is not available")
 }

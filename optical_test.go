@@ -424,6 +424,31 @@ func TestReadFloat_Int64Value(t *testing.T) {
 	assert.InDelta(t, 42.0, readFloat(parent, "BiasCurrent"), 0.001)
 }
 
+func TestRefreshOneOpticalSubtree_StripsTrailingDot(t *testing.T) {
+	// GenieACS 1.2.16 rejects refreshObject tasks whose objectName ends
+	// with a dot. Assert the helper strips any trailing dot before
+	// serializing the payload, preventing stuck tasks.
+	var captured string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := make([]byte, 1024)
+		n, _ := r.Body.Read(raw)
+		captured = string(raw[:n])
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+	geniesBaseURL = srv.URL
+
+	statusCode, err := refreshOneOpticalSubtree(
+		context.Background(), mockDeviceID,
+		"InternetGatewayDevice.WANDevice.1...", // multiple trailing dots, deliberately pathological
+	)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, statusCode)
+	assert.Contains(t, captured, `"objectName": "InternetGatewayDevice.WANDevice.1"`)
+	assert.NotContains(t, captured, `.1."`)
+	assert.NotContains(t, captured, `.1.."`)
+}
+
 func TestRefreshOneOpticalSubtree_TransportError(t *testing.T) {
 	// Point at a closed server so postJSONRequest returns a transport
 	// error — covers the `if err != nil` path.
@@ -458,6 +483,158 @@ func TestRefreshOpticalStats_EmptySubtreeList(t *testing.T) {
 	err := refreshOpticalStats(context.Background(), mockDeviceID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no subtrees attempted")
+}
+
+// fixtureZTEWanPonF670L mirrors the verbatim shape of
+// `InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig`
+// observed on a real ZTE F670L running V9.0.10P1N12A. Every leaf value
+// is stored as an xsd:string (not xsd:float) — the extractor has to
+// parse these through strconv.ParseFloat.
+//
+// SupplyVoltage is reported in millivolts ("3244") and must be
+// normalized to volts (3.244 V) by the extractor.
+func fixtureZTEWanPonF670L() map[string]interface{} {
+	leaf := func(s string) map[string]interface{} {
+		return map[string]interface{}{"_value": s, "_type": "xsd:string"}
+	}
+	return map[string]interface{}{
+		"_id": mockDeviceID,
+		"InternetGatewayDevice": map[string]interface{}{
+			"WANDevice": map[string]interface{}{
+				"1": map[string]interface{}{
+					"X_ZTE-COM_WANPONInterfaceConfig": map[string]interface{}{
+						"TXPower":                leaf("2.59"),
+						"RXPower":                leaf("-25.08"),
+						"BiasCurrent":            leaf("13.70"),
+						"TransceiverTemperature": leaf("35.31"),
+						"SupplyVoltage":          leaf("3244"),
+						"Status":                 leaf("Up"),
+					},
+				},
+			},
+		},
+	}
+}
+
+// fixtureZTEWanPonLowercaseAliases exercises the firstNonZeroFloat
+// fallback path: some F670L firmware variants emit the same tree but
+// with camelCase key names (TxPower / RxPower / Temperature). The
+// extractor must fall back when the primary uppercase key is absent.
+func fixtureZTEWanPonLowercaseAliases() map[string]interface{} {
+	leaf := func(s string) map[string]interface{} {
+		return map[string]interface{}{"_value": s, "_type": "xsd:string"}
+	}
+	return map[string]interface{}{
+		"_id": mockDeviceID,
+		"InternetGatewayDevice": map[string]interface{}{
+			"WANDevice": map[string]interface{}{
+				"1": map[string]interface{}{
+					"X_ZTE-COM_WANPONInterfaceConfig": map[string]interface{}{
+						"TxPower":       leaf("3.10"),
+						"RxPower":       leaf("-18.40"),
+						"Temperature":   leaf("40.00"),
+						"SupplyVoltage": leaf("3.291"), // already in volts
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestGetOpticalStats_ZTEWanPon_F670L(t *testing.T) {
+	resetCacheForTest(t)
+	srv := stubGenieACSWithDeviceData(t, fixtureZTEWanPonF670L())
+	geniesBaseURL = srv.URL
+
+	stats, err := getOpticalStats(context.Background(), mockDeviceID)
+	require.NoError(t, err)
+	require.NotNil(t, stats)
+	assert.Equal(t, opticalSourceZTEWanPon, stats.Source)
+	assert.InDelta(t, 2.59, stats.TxPowerDBm, 0.001)
+	assert.InDelta(t, -25.08, stats.RxPowerDBm, 0.001)
+	assert.InDelta(t, 13.70, stats.BiasCurrentMA, 0.001)
+	assert.InDelta(t, 35.31, stats.TemperatureC, 0.001)
+	assert.InDelta(t, 3.244, stats.VoltageV, 0.001) // 3244 mV → 3.244 V
+	// -25.08 dBm: within default critical < -25 but warning >= -25.
+	// Boundary depends on thresholds; assert it's one of the lower tiers.
+	assert.Contains(t, []string{"warning", "critical"}, stats.Health)
+}
+
+func TestGetOpticalStats_ZTEWanPon_LowercaseAliases(t *testing.T) {
+	resetCacheForTest(t)
+	srv := stubGenieACSWithDeviceData(t, fixtureZTEWanPonLowercaseAliases())
+	geniesBaseURL = srv.URL
+
+	stats, err := getOpticalStats(context.Background(), mockDeviceID)
+	require.NoError(t, err)
+	assert.Equal(t, opticalSourceZTEWanPon, stats.Source)
+	assert.InDelta(t, 3.10, stats.TxPowerDBm, 0.001)
+	assert.InDelta(t, -18.40, stats.RxPowerDBm, 0.001)
+	assert.InDelta(t, 40.0, stats.TemperatureC, 0.001)
+	// raw 3.291 is below millivolt threshold, kept as-is
+	assert.InDelta(t, 3.291, stats.VoltageV, 0.001)
+}
+
+func TestReadFloat_StringValue(t *testing.T) {
+	parent := map[string]interface{}{
+		"TXPower": map[string]interface{}{"_value": "2.59", "_type": "xsd:string"},
+	}
+	assert.InDelta(t, 2.59, readFloat(parent, "TXPower"), 0.001)
+}
+
+func TestReadFloat_UnhandledValueType(t *testing.T) {
+	// _value is a bool — not in the switch cases. Exercises the
+	// post-switch `return 0` fallthrough branch.
+	parent := map[string]interface{}{
+		"Flag": map[string]interface{}{"_value": true, "_type": "xsd:boolean"},
+	}
+	assert.Equal(t, 0.0, readFloat(parent, "Flag"))
+}
+
+func TestReadFloat_StringValueUnparseable(t *testing.T) {
+	parent := map[string]interface{}{
+		"TXPower": map[string]interface{}{"_value": "not-a-number", "_type": "xsd:string"},
+	}
+	assert.Equal(t, 0.0, readFloat(parent, "TXPower"))
+}
+
+func TestFirstNonZeroFloat_PrimaryHit(t *testing.T) {
+	parent := map[string]interface{}{
+		"TXPower": map[string]interface{}{"_value": 2.59},
+		"TxPower": map[string]interface{}{"_value": 9.99},
+	}
+	// Primary key is picked before fallback.
+	assert.InDelta(t, 2.59, firstNonZeroFloat(parent, "TXPower", "TxPower"), 0.001)
+}
+
+func TestFirstNonZeroFloat_FallbackHit(t *testing.T) {
+	parent := map[string]interface{}{
+		"TxPower": map[string]interface{}{"_value": 1.23},
+	}
+	assert.InDelta(t, 1.23, firstNonZeroFloat(parent, "TXPower", "TxPower"), 0.001)
+}
+
+func TestFirstNonZeroFloat_NoMatch(t *testing.T) {
+	parent := map[string]interface{}{
+		"Unrelated": map[string]interface{}{"_value": 42.0},
+	}
+	assert.Equal(t, 0.0, firstNonZeroFloat(parent, "TXPower", "TxPower"))
+}
+
+func TestNormalizeSupplyVoltage_Millivolts(t *testing.T) {
+	assert.InDelta(t, 3.244, normalizeSupplyVoltage(3244), 0.001)
+}
+
+func TestNormalizeSupplyVoltage_Volts(t *testing.T) {
+	assert.InDelta(t, 3.3, normalizeSupplyVoltage(3.3), 0.001)
+}
+
+func TestExtractZTEWanPon_MissingTree(t *testing.T) {
+	// No WANDevice tree → extractor returns false without mutating stats.
+	stats := &OpticalStats{}
+	got := extractZTEWanPon(map[string]interface{}{}, stats)
+	assert.False(t, got)
+	assert.Empty(t, stats.Source)
 }
 
 func TestOpticalStatsJSONShape(t *testing.T) {

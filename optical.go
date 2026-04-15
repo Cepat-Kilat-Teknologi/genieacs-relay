@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -67,10 +69,18 @@ var errOpticalNotSupported = errors.New("optical interface stats not supported b
 const (
 	opticalSourceZTECTComEpon  = "zte_ct_com_epon"
 	opticalSourceZTECTComGpon  = "zte_ct_com_gpon"
+	opticalSourceZTEWanPon     = "zte_wan_pon_interface"
 	opticalSourceHuaweiHWDbg   = "huawei_hw_debug"
 	opticalSourceRealtekEpon   = "realtek_epon"
 	opticalSourceStandardTR181 = "standard_tr181"
 )
+
+// opticalSupplyVoltageMilliThreshold — raw SupplyVoltage values above
+// this count are treated as millivolts and divided by 1000 to yield
+// volts. ZTE F670L reports "3244" (mV) where most vendors report "3.244"
+// (V). 100 is comfortably above any plausible sane voltage figure and
+// well below the millivolt range for a 3.3V-nominal optical module.
+const opticalSupplyVoltageMilliThreshold = 100.0
 
 // opticalSubtreePathsToRefresh lists the parameter subtrees we ask
 // GenieACS to refresh when the caller passes ?refresh=true. We refresh
@@ -81,6 +91,7 @@ const (
 var opticalSubtreePathsToRefresh = []string{
 	"InternetGatewayDevice.X_CT-COM_EponInterfaceConfig",
 	"InternetGatewayDevice.X_CT-COM_GponInterfaceConfig",
+	"InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig",
 	"InternetGatewayDevice.X_HW_DEBUG.AdminTR069",
 	"InternetGatewayDevice.X_Realtek_EponInterfaceConfig",
 	"Device.Optical.Interface",
@@ -129,6 +140,13 @@ func refreshOpticalStats(ctx context.Context, deviceID string) error {
 // can see the deferred body close — the inline loop variant tripped
 // bodyclose due to the early `continue` paths.
 func refreshOneOpticalSubtree(ctx context.Context, deviceID, subtree string) (int, error) {
+	// GenieACS 1.2.16 rejects refreshObject tasks whose objectName ends
+	// with a dot — the task lands with "Invalid parameter path" and
+	// sticks in the queue forever, re-executed on every inform, never
+	// drained. Observed in real lab against a ZTE F670L when probing
+	// for vendor-specific optical paths. Normalize defensively here so
+	// a typo in opticalSubtreePathsToRefresh can't poison the task queue.
+	subtree = strings.TrimRight(subtree, ".")
 	urlQ := fmt.Sprintf("%s/devices/%s/tasks?connection_request", geniesBaseURL, url.PathEscape(deviceID))
 	payload := fmt.Sprintf(`{"name": "refreshObject", "objectName": %q}`, subtree)
 	resp, err := postJSONRequest(ctx, urlQ, payload)
@@ -166,6 +184,10 @@ func getOpticalStats(ctx context.Context, deviceID string) (*OpticalStats, error
 		return stats, nil
 	}
 	if extractZTECTComGpon(deviceData, stats) {
+		classifyOpticalHealth(stats)
+		return stats, nil
+	}
+	if extractZTEWanPon(deviceData, stats) {
 		classifyOpticalHealth(stats)
 		return stats, nil
 	}
@@ -219,6 +241,65 @@ func extractZTECTComGpon(deviceData map[string]interface{}, stats *OpticalStats)
 	stats.TemperatureC = readFloat(statsTree, "Temperature")
 	stats.VoltageV = readFloat(statsTree, "Voltage")
 	return true
+}
+
+// extractZTEWanPon reads optical stats from the ZTE-specific WAN PON
+// interface subtree
+// (`InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig`).
+//
+// This tree is used by ZTE F670L and newer OEM-agnostic ZTE ONTs that
+// don't expose the China-Telecom-branded X_CT-COM_* trees. All values
+// are reported as xsd:string — we parse them via the string branch in
+// readFloat.
+//
+// Field layout (observed on a real F670L running V9.0.10P1N12A):
+//
+//	BiasCurrent            "13.70"  (mA)
+//	RXPower                "-25.08" (dBm)
+//	TXPower                "2.59"   (dBm)
+//	TransceiverTemperature "35.31"  (°C)
+//	SupplyVoltage          "3244"   (mV — divided by 1000 for volts)
+//
+// Note the uppercase `TXPower` / `RXPower` (ZTE convention) vs the
+// camelCase `TxPower` / `RxPower` used by X_CT-COM. We try both so the
+// same extractor works for mixed firmware lines in the wild.
+func extractZTEWanPon(deviceData map[string]interface{}, stats *OpticalStats) bool {
+	root := navigateNested(deviceData,
+		"InternetGatewayDevice", "WANDevice", "1", "X_ZTE-COM_WANPONInterfaceConfig")
+	if root == nil {
+		return false
+	}
+	stats.Source = opticalSourceZTEWanPon
+	stats.TxPowerDBm = firstNonZeroFloat(root, "TXPower", "TxPower")
+	stats.RxPowerDBm = firstNonZeroFloat(root, "RXPower", "RxPower")
+	stats.BiasCurrentMA = readFloat(root, "BiasCurrent")
+	stats.TemperatureC = firstNonZeroFloat(root, "TransceiverTemperature", "Temperature")
+	stats.VoltageV = normalizeSupplyVoltage(readFloat(root, "SupplyVoltage"))
+	return true
+}
+
+// firstNonZeroFloat tries each key in order and returns the first
+// non-zero float value found. Used for vendor trees that report the
+// same semantic field under slightly different names across firmware
+// revisions.
+func firstNonZeroFloat(parent map[string]interface{}, keys ...string) float64 {
+	for _, key := range keys {
+		if v := readFloat(parent, key); v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+// normalizeSupplyVoltage converts raw voltage readings to volts.
+// ZTE F670L reports SupplyVoltage as millivolts (e.g. "3244"); most
+// other vendors use volts (e.g. "3.244"). We pick the unit by magnitude:
+// anything above 100 is assumed mV and divided by 1000.
+func normalizeSupplyVoltage(raw float64) float64 {
+	if raw > opticalSupplyVoltageMilliThreshold {
+		return raw / 1000.0
+	}
+	return raw
 }
 
 // extractHuaweiHWDebug reads optical stats from the Huawei HW_DEBUG
@@ -290,10 +371,16 @@ func navigateNested(root map[string]interface{}, path ...string) map[string]inte
 }
 
 // readFloat extracts a numeric `_value` from a GenieACS parameter
-// node. GenieACS stores all parameter values as objects shaped like
+// node. GenieACS stores parameter values as objects shaped like
 // `{"_value": 3.14, "_type": "xsd:float", "_timestamp": "..."}`.
+//
+// The value is typically a numeric (xsd:float / xsd:int), but some
+// vendor extensions — notably ZTE's `X_ZTE-COM_WANPONInterfaceConfig`
+// subtree — ship everything as xsd:string (e.g. `"_value": "2.59"`).
+// We accept both by attempting strconv.ParseFloat on string payloads.
+//
 // Returns 0 if the key is missing, the node isn't a map, or the value
-// is not a float64. Callers treat 0 as "not reported".
+// can't be coerced to a float. Callers treat 0 as "not reported".
 func readFloat(parent map[string]interface{}, key string) float64 {
 	node, ok := parent[key].(map[string]interface{})
 	if !ok {
@@ -306,6 +393,12 @@ func readFloat(parent map[string]interface{}, key string) float64 {
 		return float64(v)
 	case int64:
 		return float64(v)
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0
+		}
+		return f
 	}
 	return 0
 }

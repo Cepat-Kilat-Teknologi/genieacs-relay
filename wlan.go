@@ -32,8 +32,69 @@ func refreshWLANConfig(ctx context.Context, deviceID string) error {
 	return nil
 }
 
+// parseWLANEntry turns a single raw WLANConfiguration.<N> subtree into
+// a WLANConfig. Returns ok=false if the entry is malformed, or if the
+// caller asked for enabled-only and this slot's Enable flag is false.
+// Extracted from listWLANConfigs to keep the parent loop's cyclomatic
+// complexity under the project gocyclo threshold.
+func parseWLANEntry(key string, value interface{}, onlyEnabled bool) (WLANConfig, bool) {
+	wlan, ok := value.(map[string]interface{})
+	if !ok {
+		return WLANConfig{}, false
+	}
+
+	enabled := false
+	if enableMap, ok := wlan["Enable"].(map[string]interface{}); ok {
+		if enableVal, ok := enableMap["_value"].(bool); ok {
+			enabled = enableVal
+		}
+	}
+	if onlyEnabled && !enabled {
+		return WLANConfig{}, false
+	}
+
+	var ssid string
+	if ssidMap, ok := wlan["SSID"].(map[string]interface{}); ok {
+		if ssidVal, ok := ssidMap["_value"].(string); ok {
+			ssid = ssidVal
+		}
+	}
+
+	return WLANConfig{
+		WLAN:       key,
+		SSID:       ssid,
+		Password:   getPassword(wlan),
+		Band:       getBand(wlan, key),
+		Hidden:     getHidden(wlan),
+		MaxClients: getMaxClients(wlan),
+		AuthMode:   getAuthMode(wlan),
+		Encryption: getEncryption(wlan),
+		Enabled:    enabled,
+	}, true
+}
+
+// getAllWLANConfigs returns every WLAN slot present in the device tree,
+// regardless of Enable state. The Enabled field on each returned
+// WLANConfig reflects the raw TR-069 value.
+//
+// Use this when callers need a full picture of what is provisioned —
+// e.g. the wlan/available endpoint wants to warn operators that a
+// disabled slot still has a tenant SSID label that would be overwritten
+// on create. For "actively broadcasting WLANs only", use getWLANData.
+func getAllWLANConfigs(ctx context.Context, deviceID string) ([]WLANConfig, error) {
+	return listWLANConfigs(ctx, deviceID, false)
+}
+
 // getWLANData extracts WLAN configuration information from device data
 func getWLANData(ctx context.Context, deviceID string) ([]WLANConfig, error) {
+	return listWLANConfigs(ctx, deviceID, true)
+}
+
+// listWLANConfigs is the shared worker behind getWLANData +
+// getAllWLANConfigs. onlyEnabled=true skips WLANs whose Enable flag is
+// false or missing (preserves historical getWLANData semantics); false
+// returns every slot with Enabled reflecting the raw tree value.
+func listWLANConfigs(ctx context.Context, deviceID string, onlyEnabled bool) ([]WLANConfig, error) {
 	// Retrieve device data from cache or GenieACS
 	deviceData, err := getDeviceData(ctx, deviceID)
 	if err != nil {
@@ -68,41 +129,9 @@ func getWLANData(ctx context.Context, deviceID string) ([]WLANConfig, error) {
 	// Process each WLAN configuration
 	var configs []WLANConfig
 	for key, value := range wlanConfigsMap {
-		// Type assert to map for WLAN configuration
-		wlan, ok := value.(map[string]interface{})
-		if !ok {
-			continue // Skip invalid entries
+		if cfg, ok := parseWLANEntry(key, value, onlyEnabled); ok {
+			configs = append(configs, cfg)
 		}
-
-		// Check if WLAN is enabled
-		enableMap, ok := wlan["Enable"].(map[string]interface{})
-		if !ok {
-			continue // Skip if Enable field missing
-		}
-		// Only process enabled WLAN configurations
-		if enable, ok := enableMap["_value"].(bool); !ok || !enable {
-			continue // Skip disabled WLANs
-		}
-
-		// Extract SSID value
-		var ssid string
-		if ssidMap, ok := wlan["SSID"].(map[string]interface{}); ok {
-			if ssidVal, ok := ssidMap["_value"].(string); ok {
-				ssid = ssidVal
-			}
-		}
-
-		// Create WLANConfig struct and add to results
-		configs = append(configs, WLANConfig{
-			WLAN:       key,                 // WLAN interface identifier
-			SSID:       ssid,                // Network name
-			Password:   getPassword(wlan),   // Security password
-			Band:       getBand(wlan, key),  // Frequency band
-			Hidden:     getHidden(wlan),     // SSID broadcast disabled
-			MaxClients: getMaxClients(wlan), // Maximum associated devices
-			AuthMode:   getAuthMode(wlan),   // Authentication mode
-			Encryption: getEncryption(wlan), // Encryption mode
-		})
 	}
 
 	// Sort WLAN configurations by interface number (if numeric)
