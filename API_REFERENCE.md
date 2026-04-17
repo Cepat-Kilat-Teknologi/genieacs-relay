@@ -1,6 +1,6 @@
 # GenieACS Relay API Reference
 
-**Version:** 2.2.0-dev (Phase 1-4 complete, 25 new endpoints, Phase 5 release pending)
+**Version:** 2.2.0-dev (25 new endpoints complete, release pending)
 **Last Updated:** 2026-04-14
 
 This document provides complete API reference with request/response examples for all GenieACS Relay endpoints. **v2.2.0** adds 25 new endpoints (Section 17) to support auto-learning OLT deployments where the OLT doesn't push customer profile config — see `V2.2.0-DESIGN.md` in the repo root for the design doc.
@@ -993,7 +993,7 @@ POST http://localhost:8080/api/v1/genieacs/cache/clear?device_id=001141-F670L-ZT
 
 ---
 
-## 14. CPE Reboot Endpoint (v2.1.0, E2E verified v2.2.0 session 5j)
+## 14. CPE Reboot Endpoint (v2.1.0, E2E verified in v2.2.0)
 
 ### POST /api/v1/genieacs/reboot/{ip}
 
@@ -1010,15 +1010,15 @@ workflow in `isp-agent` v2+) should **NOT** block waiting for the
 device to come back — the workflow's retry policy or a follow-up
 health check is the right tool for that.
 
-> **Slow-boot anomaly observed in session 5j** — on a real ZTE F670L
-> running V9.0.10P1N12A, the observed total downtime was **6 min 52
-> seconds**, well outside the 30-90s docstring spec. Root cause
-> unconfirmed but likely specific to this ZTE firmware revision's
-> config-parsing path or lab-VPN WAN re-establishment. Callers
-> deploying on ZTE fleets with this firmware should budget **up to
-> ~7 minutes** before treating a reboot as failed. A docstring patch
-> is scheduled for v2.2.1. See CHANGELOG.md `[2.2.0]` → "Verified —
-> Session 5j" for the full test timeline.
+> **Slow-boot anomaly observed during real-device verification** — on
+> a real ZTE F670L running V9.0.10P1N12A, the observed total downtime
+> was **6 min 52 seconds**, well outside the 30-90s docstring spec.
+> Root cause unconfirmed but likely specific to this ZTE firmware
+> revision's config-parsing path or lab-VPN WAN re-establishment.
+> Callers deploying on ZTE fleets with this firmware should budget
+> **up to ~7 minutes** before treating a reboot as failed. A
+> docstring patch is scheduled for v2.2.1. See CHANGELOG.md `[2.2.0]`
+> real-device verification block for the full test timeline.
 
 Idempotency middleware applies via the `/api/v1/genieacs` route group,
 so double-clicks within the dedup TTL window replay the same response.
@@ -1191,17 +1191,17 @@ provisioning, diagnostics, and customer self-service features.
 
 Endpoints are grouped by priority tier:
 
-- **Phase 2 (HIGH, 7)** — operational essentials for auto-learn ISP
+- **HIGH priority (7)** — operational essentials for auto-learn ISP
   scenarios
-- **Phase 3 (MEDIUM, 8)** — NOC support tools
-- **Phase 4 (LOW, 10)** — customer-facing self-service + metadata
+- **MEDIUM priority (8)** — NOC support tools
+- **LOW priority (10)** — customer-facing self-service + metadata
 
 All 25 endpoints share the same response envelope, idempotency
 middleware, audit logging, and API-key authentication as the v1.x /
 v2.1.0 endpoints. See `V2.2.0-DESIGN.md` in the repo root for the
 full design doc with endpoint contracts and vendor caveats.
 
-### 17.1 HIGH priority — Phase 2 endpoints
+### 17.1 HIGH priority endpoints
 
 #### POST /api/v1/genieacs/factory-reset/{ip}  (H6)
 
@@ -1235,16 +1235,16 @@ curl -X POST http://localhost:8080/api/v1/genieacs/factory-reset/192.168.1.1 \
 without a recovery plan — the device's admin-set config is lost
 permanently once the reset is applied.
 
-> **Session 5j verification (2026-04-15)** — end-to-end verified on a
-> real ZTE F670L V9.0.10P1N12A via VPN lab. Observed: HTTP 202, ping
-> drop at T+11s (faster than reboot's T+32s because FactoryReset is
-> a more direct RPC), full ping recovery at T+1:45 for **1:34 total
-> downtime** — within the documented 60-180s window. PASS verdict
-> supported by four independent evidence vectors (downtime signature
-> distinct from reboot on the same unit, post-recovery credential
-> drift proving device-side creds were wiped, clean task queue
-> transition, timing match). See CHANGELOG.md `[2.2.0]` →
-> "Verified — Session 5j" block for the full reasoning chain.
+> **Real-device verification (2026-04-15)** — end-to-end verified on
+> a real ZTE F670L V9.0.10P1N12A via VPN lab. Observed: HTTP 202,
+> ping drop at T+11s (faster than reboot's T+32s because FactoryReset
+> is a more direct RPC), full ping recovery at T+1:45 for **1:34
+> total downtime** — within the documented 60-180s window. PASS
+> verdict supported by four independent evidence vectors (downtime
+> signature distinct from reboot on the same unit, post-recovery
+> credential drift proving device-side creds were wiped, clean task
+> queue transition, timing match). See CHANGELOG.md `[2.2.0]`
+> real-device verification block for the full reasoning chain.
 
 > **⚠️ Production-deployment blocker (genieacs-stack v1.3.1 pending)**
 > — after factory-reset, genieacs cannot wake the device via
@@ -1255,8 +1255,8 @@ permanently once the reset is applied.
 > the sibling `ConnectionRequestUsername`/`Password` writes in the
 > same `setParameterValues` call, so genieacs ends up with cached
 > ACS-side credentials that no longer match what the freshly-reset
-> device expects. The mongo-side mitigation applied in session 5i
-> does **not** survive a factory-reset cycle. Permanent fix ships in
+> device expects. The earlier mongo-side mitigation does **not**
+> survive a factory-reset cycle. Permanent fix ships in
 > `genieacs-stack v1.3.1`. NOT a relay bug; relay code is correct.
 > Do not wire `isp-agent v0.2+` `FactoryResetCpe` customer workflow
 > until `genieacs-stack v1.3.1` has landed.
@@ -1505,7 +1505,7 @@ curl -X POST http://localhost:8080/api/v1/genieacs/firmware/192.168.1.1 \
 
 ---
 
-### 17.2 MEDIUM priority — Phase 3 endpoints
+### 17.2 MEDIUM priority endpoints
 
 #### POST /api/v1/genieacs/diag/ping/{ip}  (M1)
 
@@ -1711,7 +1711,7 @@ curl -X PUT http://localhost:8080/api/v1/genieacs/bridge-mode/192.168.1.1 \
 
 ---
 
-### 17.3 LOW priority — Phase 4 endpoints
+### 17.3 LOW priority endpoints
 
 #### PUT /api/v1/genieacs/ntp/{ip}  (L7)
 

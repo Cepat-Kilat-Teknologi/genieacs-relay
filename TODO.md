@@ -2,7 +2,7 @@
 
 ## v2.2.0 — auto-learn OLT support ✅ RELEASE-READY 2026-04-15 (tag pending)
 
-**Status (2026-04-15 session 5j):** ✅ **RELEASE-READY.** Code + tests
+**Status (2026-04-15):** ✅ **RELEASE-READY.** Code + tests
 + real-device verification + docs + wiki all complete. The only
 outstanding work is the explicit `git tag v2.2.0` command (pending
 user instruction per repo convention) and CI-triggered Docker
@@ -11,35 +11,35 @@ fires.
 
 ### Shipped
 
-- [x] **Phase 1** — structural foundations: `tr069.go` (generic TR-069
+- [x] **Structural foundations** — `tr069.go` (generic TR-069
       RPC dispatcher: factoryReset / connectionRequest /
       getParameterValuesLive / downloadFile / addObject / deleteObject
       + `validateTRParamPath` input sanitizer) + `param_walker.go`
       (typed accessors over `map[string]interface{}`: `LookupValue`,
       `LookupString`, `LookupInt`, `LookupBool`, `LookupTime`,
       `EnumerateInstances`, `CollectPaths`). 100% coverage.
-- [x] **Phase 2** — 7 HIGH endpoints (factory-reset, wake, status, wan,
+- [x] **HIGH-priority endpoints (7)** — factory-reset, wake, status, wan,
       params, pppoe, firmware). 100% coverage. `handlers_lifecycle.go`,
       `handlers_inspection.go`, `handlers_pppoe.go`, `handlers_firmware.go`.
-- [x] **Phase 3** — 8 MEDIUM endpoints (diag/ping, diag/traceroute,
+- [x] **MEDIUM-priority endpoints (8)** — diag/ping, diag/traceroute,
       wifi-clients, wifi-stats, devices list, devices search, qos with
       capability probe, bridge-mode). 100% coverage. `handlers_diag.go`,
       `handlers_devices.go`, `handlers_qos_bridge.go`, + append to
       `handlers_inspection.go` for M3+M7.
-- [x] **Phase 4** — 10 LOW endpoints (port-forwarding, dmz, ddns,
+- [x] **LOW-priority endpoints (10)** — port-forwarding, dmz, ddns,
       wifi-schedule, mac-filter, static-dhcp, ntp, admin-password,
       tags, presets CRUD). 100% coverage. `handlers_admin.go`,
       `handlers_dmz_ddns.go`, `handlers_portforward.go`,
       `handlers_static_dhcp.go`, `handlers_wifi_advanced.go`,
       `handlers_genieacs_meta.go`.
-- [x] **Session 5i F670L hardening** — optical `extractZTEWanPon()`
+- [x] **F670L real-device hardening** — optical `extractZTEWanPon()`
       sixth vendor extractor, `wlan/available` `provisioned_wlan[]`
       enrichment, QoS 501 capability probe, `refreshObject` trailing-
       dot sanitation. Commit `0ff2e0e`. 11 new unit tests.
-- [x] **Session 5i F670L real-device sweep** — 38 endpoints fully
+- [x] **F670L real-device sweep** — 38 endpoints fully
       exercised end-to-end + 1 correct 501 (QoS) + 6 validator-wired
       empty-body probes, 2 safety-skipped (reboot + factory-reset).
-- [x] **Session 5j — close the 2 safety-skipped items.** Reboot and
+- [x] **Close the 2 safety-skipped items** — reboot and
       factory-reset E2E verified on the same F670L. Reboot HTTP 202
       + ping drop T+32s + recovery T+7:24 (6:52 total downtime — see
       slow-boot anomaly note below). Factory-reset HTTP 202 + ping
@@ -48,20 +48,20 @@ fires.
       signature delta vs reboot, credential drift post-recovery,
       clean task queue, documented timing envelope). Real-device
       sweep final: **40/40 endpoints E2E verified**.
-- [x] **100% main-package coverage maintained** across all 4 phases
-      + session 5i hardening. 0 lint issues. Race detector clean.
+- [x] **100% main-package coverage maintained** across the full
+      feature set plus hardening. 0 lint issues. Race detector clean.
 - [x] **CHANGELOG promoted** `[Unreleased]` → `[2.2.0]` with date +
-      session 5j verification block at top + stale Phase 3/4/5 TODO
-      footer replaced with a proper retrospective Phase 5 checklist.
+      real-device verification block at top + stale TODO footer
+      replaced with a proper retrospective release checklist.
 - [x] **README v2.2.0 release banner** + full v2.2.0 feature section.
 - [x] **Wiki sync** — `~/Projects/knowledge-base/wiki/genieacs-relay.md`
       frontmatter bumped (`version: v2.2.0-dev` → `v2.2.0`,
       `git_state: unreleased_committed` → `release_ready`, phase
-      text updated), session 5j narrative block added, versioning
+      text updated), real-device verification narrative added, versioning
       track table extended with v2.2.0 row.
 - [x] **TODO this file** — v2.2.0 shipped section added (this block).
 
-### Pending (outside scope of "docs update" session 5j)
+### Pending (outside scope of the docs-update pass)
 
 - [ ] **`swag init` regen + commit** `docs/swagger.json` + `docs/swagger.yaml`
       — optional: annotations are already in-source, regen only
@@ -78,20 +78,20 @@ fires.
       `"2.2.0"`. Companion chart release is auto-published by the
       `helm-release.yml` workflow when the chart file changes (same
       pattern as v2.0.0 chart `v0.2.0` release auto-publish). Done
-      in this session 5j commit.
+      in the release-prep commit.
 - [ ] **GitHub release publish** — auto-triggered by tag push via
       `release.yml` workflow. No manual step.
 
 ### Known issues / notes for v2.2.1 patch
 
-- **Reboot docstring under-states worst-case budget.** Session 5j
-  observed 6:52 total downtime on ZTE F670L V9.0.10P1N12A, well
+- **Reboot docstring under-states worst-case budget.** Real-device
+  verification observed 6:52 total downtime on ZTE F670L V9.0.10P1N12A, well
   outside the 30-90s spec in the `rebootDevice` docstring. Update
   docstring to "30-90s typical, up to ~7 minutes on some ZTE F670L
   firmware revisions under specific lab conditions" and bump the
   `RestartOnu` workflow retry timeout guidance in the isp-agent
   TODO accordingly. Defer to v2.2.1 to keep v2.2.0 bit-identical
-  to the pre-session-5j main-branch build.
+  to the pre-verification main-branch build.
 - **Customer-facing factory-reset workflow blocker**
   `genieacs-stack v1.3.1` inform-provision fix. Relay code is
   correct; do not release `isp-agent v0.2.0` `FactoryResetCpe`
@@ -144,7 +144,7 @@ review context.**
 
 ## v2.1.0 — CPE lifecycle operations (PLANNED, original spec)
 
-Triggered by **isp-agent v0.1.0** Phase 2 completion — the Temporal worker
+Triggered by **isp-agent v0.1.0** workflow-integration milestone — the Temporal worker
 needs these endpoints to orchestrate full CPE management workflows.
 None of these exist in v2.0.0 yet.
 
@@ -265,7 +265,7 @@ via GenieACS NBI task `{"name": "factoryReset"}`.
 - [ ] GitHub release notes
 - [ ] Update isp-agent docker-compose to pin `2.1.0` image tag
       (currently builds from sibling source — when moved to image pulls
-      in Phase 5 of isp-agent roadmap, pin this version)
+      in a later isp-agent roadmap milestone, pin this version)
 
 ### Exit criteria
 

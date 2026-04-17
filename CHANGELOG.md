@@ -19,21 +19,21 @@ etc.) via TR-069 from the GenieACS plane instead of via the OLT.
 Total operational endpoint surface: **v2.1.0's 14 → v2.2.0's 39**.
 
 **Real-device status (ZTE F670L V9.0.10P1N12A, VPN lab):** 40/40
-endpoints fully end-to-end verified. Session 5i exercised 38 of them
-and safety-skipped reboot + factory-reset pending a separate lab-
-infrastructure fix; **session 5j closed the remaining two** (see
-Verified block below). v2.2.0 is the first genieacs-relay release
-where every shipped endpoint has been run against a real ZTE ONT,
-not just dev-stack mocks.
+endpoints fully end-to-end verified. Initial real-device sweep
+exercised 38 of them and safety-skipped reboot + factory-reset
+pending a separate lab-infrastructure fix; a follow-up pass closed
+the remaining two (see verification block below). v2.2.0 is the first
+genieacs-relay release where every shipped endpoint has been run
+against a real ZTE ONT, not just dev-stack mocks.
 
-### Verified — Session 5j reboot + factory-reset end-to-end on real F670L (2026-04-15)
+### Real-device verification — reboot + factory-reset end-to-end on F670L (2026-04-15)
 
-Closes the two safety-skipped items from session 5i. Both CPE
+Closes the two safety-skipped items from the initial sweep. Both CPE
 lifecycle endpoints were fired directly at the relay (no isp-agent
-wrapper) via `curl` against the same VPN-connected ZTE F670L used in
-session 5i, with a continuous ICMP timeline as ground truth and,
-for factory-reset, a pre-fire SSID mutation to prove the device-side
-config was actually wiped.
+wrapper) via `curl` against the same VPN-connected ZTE F670L, with a
+continuous ICMP timeline as ground truth and, for factory-reset, a
+pre-fire SSID mutation to prove the device-side config was actually
+wiped.
 
 #### Reboot — `POST /api/v1/genieacs/reboot/10.90.4.173`
 
@@ -119,9 +119,10 @@ positive signals, zero counter-signals. **PASS.**
 
 #### Blocker re-confirmed (pre-existing, genieacs-stack not relay)
 
-Session 5j re-proves the genieacs-stack `inform` provision atomic
-rollback bug documented in session 5i, now under live test
-conditions: after factory-reset the device boots fresh and attempts
+This verification re-proves the genieacs-stack `inform` provision
+atomic rollback bug documented during the initial hardening pass,
+now under live test conditions: after factory-reset the device boots
+fresh and attempts
 its first inform; the stock `/init` provision writes a numeric
 `PeriodicInformTime` that ZTE rejects with fault
 `9007 Invalid parameter value`; TR-069 atomic rollback wipes the
@@ -129,8 +130,8 @@ sibling `ConnectionRequestUsername` / `ConnectionRequestPassword`
 writes in the same setParameterValues call; genieacs then can no
 longer reach the device via `?connection_request`.
 
-The mongo-side mitigation that session 5i applied does **not**
-survive a factory-reset cycle — each post-reset device hits the
+The earlier mongo-side mitigation does **not** survive a
+factory-reset cycle — each post-reset device hits the
 stock `/init` provision fresh and fails the same way. The permanent
 fix is a `genieacs-stack v1.3.1` release that ships a file-level
 `inform-fix` provision or a corrected `isp-saas-default` preset
@@ -147,61 +148,31 @@ in `genieacs-stack` (upstream configuration of the genieacs
 server itself). v2.2.0 ships as-is; callers deploying the full
 stack should pin `genieacs-stack >= v1.3.1` once released.
 
-#### Session 5j artifacts
+#### Verification artifacts
 
 - **No handler / business-logic source changes.** Relay request
   handling, TR-069 dispatch, and all 40 endpoints behave identically
-  to the post-session-5i main-branch build. The binary is **not**
-  bit-identical, however, because session 5j regenerated
-  `docs/docs.go` + `docs/swagger.json` + `docs/swagger.yaml` via
+  to the post-hardening main-branch build. The binary is **not**
+  bit-identical, however, because `docs/docs.go` +
+  `docs/swagger.json` + `docs/swagger.yaml` were regenerated via
   `swag init` to pick up the v2.2.0 handler annotations that had
-  never been reflected in the committed swagger artifacts (Phase
-  1-4 code landed without a swagger regen step). The regenerated
-  swagger lifts the embedded API spec from **19 paths at
-  `info.version: 1.0.0`** (stale) to **44 paths at
+  never been reflected in the committed swagger artifacts. The
+  regenerated swagger lifts the embedded API spec from **19 paths
+  at `info.version: 1.0.0`** (stale) to **44 paths at
   `info.version: 2.2.0`**. `main.go` swagger package-doc header was
   also refreshed with v2.2.0 tags (Lifecycle, Inspection,
   Provisioning, Diagnostics, Devices, Admin, Metadata) and an
   updated description — comment-only change, no effect on
   compiled behavior.
-- Session 5j commit (this CHANGELOG edit + doc sync):
-  - Promotes `[Unreleased]` → `[2.2.0] — 2026-04-15` in `CHANGELOG.md`.
-  - Closes session 5i's 2 safety-skipped items via the "Verified —
-    Session 5j" block above; annotates session 5i block inline.
-  - Cleans up the stale Phase 3/4/5 TODO footer that the session
-    5i commit left dangling after Phases 3+4 actually shipped.
-  - Adds README `v2.2.0` release banner + full 25-endpoint
-    feature section.
-  - Adds TODO `v2.2.0` shipped section with Known Issues for v2.2.1
-    patch (reboot docstring under-statement, upstream blocker).
-  - Annotates `API_REFERENCE.md §14` (reboot) with the slow-boot
-    finding and `§17.1` (factory-reset) with session 5j verification
-    report + upstream blocker warning.
-  - Regenerates `docs/docs.go` + `docs/swagger.json` +
-    `docs/swagger.yaml` via `swag init`; bumps `main.go` package-doc
-    `@version 1.0.0` → `2.2.0` with updated description + new tag
-    declarations.
-  - Bumps `k6-load-test.js` header comment to v2.2.0 and adds
-    v2.2.0 read-endpoint 404-contract probes (status, wan, optical,
-    wifi-clients, wifi-stats, devices/search, presets). Write
-    endpoints deliberately remain excluded.
-  - Bumps `CONTRIBUTING.md` Version History table with v2.1.0 and
-    v2.2.0 rows.
-  - Marks `V2.2.0-DESIGN.md` SHIPPED; refreshes `CLAUDE.md` status
-    header and tier/version references.
-  - Syncs the knowledge-base vault:
-    `wiki/genieacs-relay.md` (frontmatter + session 5j narrative +
-    versioning track row), `STATUS.md`, `PLATFORM_CHANGELOG.md`,
-    `platform-deps.yaml`.
 - Real-device sweep final for v2.2.0: **40/40 endpoints verified
   end-to-end** on real ZTE F670L V9.0.10P1N12A via VPN lab.
 
-### Added — Session 5i real-device F670L hardening (2026-04-15)
+### Added — F670L real-device hardening (2026-04-15)
 
 First full real-device pass against a ZTE F670L (V9.0.10P1N12A) via
 VPN lab. 40/40 endpoints verified working (32 exercised end-to-end
 with round-trip writes, 6 validator-wired, 2 safety-skipped). Three
-gaps surfaced and fixed in this session; QoS gap turned into a safer
+gaps surfaced and were fixed; QoS gap turned into a safer
 capability-probe rather than silent no-op.
 
 #### Optical — ZTE F670L WAN PON vendor extension support
@@ -315,9 +286,9 @@ source        : zte_wan_pon_interface
   correctness validated via successful task enqueue in
   `db.tasks`; real CPE execution gated on fixing a separate
   lab-infrastructure credential-drift issue, see Known Issues).
-  **→ Closed in session 5j (same day) — both endpoints are now
-  end-to-end verified on the same F670L. See "Verified — Session
-  5j" block at the top of this [2.2.0] section.**
+  **→ Both endpoints were subsequently verified end-to-end on the
+  same F670L (same day). See the real-device verification block at
+  the top of this [2.2.0] section.**
 
 #### Known issue surfaced — genieacs-stack `inform` provision atomic rollback
 
@@ -335,21 +306,20 @@ source        : zte_wan_pon_interface
   challenge. Live wake/reboot via `?connection_request` then fails
   with HTTP 401 from the CPE.
 - **Workaround for now**: the dev stack was patched live in mongo
-  during this session (removed `PeriodicInformTime` declares from
-  the `inform` provision). This needs to ship as a permanent fix
+  (removed `PeriodicInformTime` declares from the `inform` provision).
+  This needs to ship as a permanent fix
   in `genieacs-stack` as part of the `isp-saas-default` bundle or
   a separate `inform-fix` provision that overwrites the stock one.
   Tracked for `genieacs-stack v1.3.1`.
 
-### Added — Phase 4 (10 LOW endpoints, customer self-service + metadata)
+### Added — LOW-priority endpoints (10, customer self-service + metadata)
 
-Completes the endpoint surface of v2.2.0. After Phase 1+2+3 shipped
-the 7 HIGH operational essentials and 8 MEDIUM NOC support tools,
-Phase 4 adds 10 LOW-priority customer-facing self-service features
+Completes the endpoint surface of v2.2.0. After the 7 HIGH
+operational essentials and 8 MEDIUM NOC support tools were shipped,
+this batch adds 10 LOW-priority customer-facing self-service features
 plus GenieACS metadata management. All 10 endpoints at **100% main-
 package coverage**, **0 lint issues**. Total v2.2.0 endpoint count:
-**25/25 shipped** + 3 structural foundations. Phase 5 (release)
-carries to follow-up sessions.
+**25/25 shipped** + 3 structural foundations.
 
 #### TR-069 provisioning writes (L1-L8) — WAN / LAN config
 
@@ -421,7 +391,7 @@ directly to manage device tags and provisioning presets.
 - **`DELETE /api/v1/genieacs/presets/{name}` (L10)** — remove a
   GenieACS provisioning preset.
 
-#### Phase 4 implementation notes
+#### LOW-priority implementation notes
 
 - **File organization:** 6 new handler files
   (`handlers_admin.go`, `handlers_dmz_ddns.go`,
@@ -433,8 +403,9 @@ directly to manage device tags and provisioning presets.
   DHCP): caller specifies which PortMapping / DHCPStaticAddress slot
   index to write. v2.2.0 does NOT auto-create new instances via
   addObject — caller is responsible for slot lifecycle. The addObject
-  primitive already exists in `tr069.go` (shipped in Phase 1) with
-  100% test coverage, so a v2.3.0 enhancement that auto-adds missing
+  primitive already exists in `tr069.go` (shipped as part of the
+  structural foundations) with 100% test coverage, so a v2.3.0
+  enhancement that auto-adds missing
   slots is a clean small extension.
 - **Vendor variation** for L2/L3/L4/L5 is acknowledged in the
   docstrings. v2.2.0 ships the most-common TR-098 standard paths
@@ -453,12 +424,12 @@ directly to manage device tags and provisioning presets.
   39 operational routes (14 v1.x + 7 v2.2.0 HIGH + 8 v2.2.0 MEDIUM +
   10 v2.2.0 LOW).
 
-### Added — Phase 3 (8 MEDIUM endpoints, NOC support tools)
+### Added — MEDIUM-priority endpoints (8, NOC support tools)
 
-After Phase 1+2 shipped the 7 HIGH operational essentials, Phase 3
-adds 8 MEDIUM-priority endpoints covering NOC L2/L3 support tools,
-WiFi inspection, device collection queries, and TR-069 diagnostics.
-All at **100% main-package coverage**, **0 lint issues**.
+After the 7 HIGH operational essentials shipped, this batch adds 8
+MEDIUM-priority endpoints covering NOC L2/L3 support tools, WiFi
+inspection, device collection queries, and TR-069 diagnostics. All
+at **100% main-package coverage**, **0 lint issues**.
 
 - **`POST /api/v1/genieacs/diag/ping/{ip}` (M1)** — TR-069
   `IPPingDiagnostics` dispatch. Body:
@@ -525,7 +496,7 @@ All at **100% main-package coverage**, **0 lint issues**.
   and varies by vendor. v2.2.0 ships the simplest standard-path
   approximation; v2.3.0 will add vendor detection.
 
-#### Phase 3 implementation notes
+#### MEDIUM-priority implementation notes
 
 - File organization: 3 new handler files (`handlers_diag.go` for M1+M2,
   `handlers_devices.go` for M4+M5, `handlers_qos_bridge.go` for M6+M8)
@@ -543,7 +514,7 @@ All at **100% main-package coverage**, **0 lint issues**.
   validation failures, NBI errors, transport failures, and pagination
   edge cases.
 
-### Added — Phase 1 + Phase 2 (structural foundations + 7 HIGH endpoints)
+### Added — Structural foundations + HIGH-priority endpoints (7)
 
 Drives the auto-learning OLT use case. When the OLT operates in
 auto-learn mode (Hioso, HSGQ, Jolink, CDATA auto, etc.) the OLT does
@@ -555,7 +526,7 @@ workflow, so v2.2.0 adds 7 HIGH-priority endpoints covering the
 operational essentials. See `V2.2.0-DESIGN.md` for the gap analysis
 and the full 25-endpoint roadmap.
 
-#### Structural foundations (Phase 1)
+#### Structural foundations
 
 - **`tr069.go`** — generic TR-069 RPC dispatcher helpers wrapping the
   GenieACS NBI `POST /devices/{id}/tasks?connection_request` endpoint:
@@ -583,7 +554,7 @@ and the full 25-endpoint roadmap.
   centralizing chi URL parameter access and TR-069 path
   construction. 100% test coverage from existing handlers.
 
-#### HIGH-priority endpoint family (Phase 2)
+#### HIGH-priority endpoint family
 
 - **`POST /api/v1/genieacs/factory-reset/{ip}`** — H6: TR-069
   FactoryReset RPC. **Destructive.** The CPE will lose all
@@ -705,27 +676,24 @@ and the full 25-endpoint roadmap.
 - Test harness `common_test.go` registers the 7 new routes in
   `setupTestServer` for handler-layer tests.
 
-### Phase 5 release checklist (this version)
+### Release checklist (this version)
 
-Historical note — the session that shipped Phase 1+2 left a forward
-TODO here listing Phase 3, 4, 5. Phases 3 and 4 were subsequently
-completed in the same `[Unreleased]` section above and are now part
-of `[2.2.0]`; Phase 5 (release) is this tag. Retained as a checklist
-for release bookkeeping:
+Retained as a checklist for release bookkeeping:
 
-- [x] Phase 1+2 — 7 HIGH endpoints + `tr069.go` + `param_walker.go`
-- [x] Phase 3 — 8 MEDIUM endpoints
-- [x] Phase 4 — 10 LOW endpoints
-- [x] 100% main-package coverage maintained across all 4 phases
-- [x] Session 5i real-device F670L sweep (38 E2E + 2 safety-skipped)
-- [x] Session 5j reboot + factory-reset E2E (closes the 2 safety-skipped → 40/40 fully verified)
+- [x] Structural foundations — `tr069.go` + `param_walker.go`
+- [x] 7 HIGH-priority endpoints
+- [x] 8 MEDIUM-priority endpoints
+- [x] 10 LOW-priority endpoints
+- [x] 100% main-package coverage maintained across the full feature set
+- [x] Initial real-device F670L sweep (38 E2E + 2 safety-skipped)
+- [x] Reboot + factory-reset E2E follow-up (closes the 2 safety-skipped → 40/40 fully verified)
 - [x] `swag init` regen — `docs/swagger.json` / `docs/swagger.yaml` / `docs/docs.go` refreshed from 19 paths @ v1.0.0 (stale) to 44 paths @ v2.2.0; `main.go` package-doc `@version` bumped and v2.2.0 tag declarations added
-- [x] `API_REFERENCE.md` §14 (reboot slow-boot note) + §17.1 (factory-reset session 5j verification + upstream blocker)
+- [x] `API_REFERENCE.md` §14 (reboot slow-boot note) + §17.1 (factory-reset real-device verification + upstream blocker)
 - [x] `k6-load-test.js` header bump + v2.2.0 read-endpoint 404-contract probes (write endpoints still excluded)
 - [x] `CONTRIBUTING.md` Version History — added v2.1.0 and v2.2.0 rows
 - [x] `V2.2.0-DESIGN.md` SHIPPED banner
 - [x] `CLAUDE.md` status header + tier/version refresh
-- [x] Vault sync — `wiki/genieacs-relay.md` frontmatter bump + session 5j narrative + versioning table row, `STATUS.md`, `PLATFORM_CHANGELOG.md`, `platform-deps.yaml`
+- [x] Vault sync — `wiki/genieacs-relay.md` frontmatter bump + verification narrative + versioning table row, `STATUS.md`, `PLATFORM_CHANGELOG.md`, `platform-deps.yaml`
 - [x] README v2.2.0 release banner + feature list
 - [x] CHANGELOG promoted from `[Unreleased]` → `[2.2.0]` with date
 - [x] TODO.md v2.2.0 shipped section
@@ -861,7 +829,7 @@ With these endpoints live, isp-agent v0.2+ can add:
 - New `GetOpticalHealth` workflow → `GET /optical/{ip}` (read-only,
   same shape as existing `GetDeviceCapability`)
 
-See `~/Projects/isp-agent/TODO.md` Phase 6 backlog.
+See the `isp-agent` TODO backlog for workflow planning.
 
 ## [2.0.0] — 2026-04-12
 
@@ -997,12 +965,12 @@ Full end-to-end test against real hardware:
 
 **96/96 assertions passed** across 18 HTTP endpoints, 0 failures:
 
-| Phase | Tests | Highlights |
+| Test stage | Tests | Highlights |
 |---|---|---|
-| Phase 1 — unauth + reads + errors + idempotency | 55 | All 7 public endpoints, 5 authenticated reads, 5 error contract probes, 2 idempotency replay tests |
-| Phase 2 — CREATE on fresh slot + verify | 14 | WLAN.3 `Enable:false→true`, `SSID:SSID3→FullTestCreate3`, 8 setParameterValues params all queued correctly |
-| Phase 3a — UPDATE + OPTIMIZE + verify | 10 | `SSID:FullTestCreate3→FullTestUpdate3`, `TransmitPower:→60`, all post-inform state changes verified |
-| Phase 3b — DELETE + verify | 8 | `Enable:true→false` confirmed via direct GenieACS NBI query + relay `/wlan/available` re-query |
+| Unauth + reads + errors + idempotency | 55 | All 7 public endpoints, 5 authenticated reads, 5 error contract probes, 2 idempotency replay tests |
+| CREATE on fresh slot + verify | 14 | WLAN.3 `Enable:false→true`, `SSID:SSID3→FullTestCreate3`, 8 setParameterValues params all queued correctly |
+| UPDATE + OPTIMIZE + verify | 10 | `SSID:FullTestCreate3→FullTestUpdate3`, `TransmitPower:→60`, all post-inform state changes verified |
+| DELETE + verify | 8 | `Enable:true→false` confirmed via direct GenieACS NBI query + relay `/wlan/available` re-query |
 | Post-bug-fix regression | 5 | `/dhcp-client?refresh=true` + `/force/ssid` 5x consecutive success (was 0/5 before fix) |
 | Corrections | 4 | |
 
