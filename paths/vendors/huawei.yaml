@@ -1,0 +1,27 @@
+vendor: huawei
+description: >
+  Huawei ONT path overrides. Covers EG8145V5, EG8247H5, HG8245H and other
+  HG/EG series ONTs. PPPoE / DMZ / port-forwarding use standard TR-098 paths
+  and inherit from default.yaml. Optical stats use the X_HW_DEBUG vendor
+  extension subtree.
+
+# ManufacturerOUI values reported by Huawei devices in TR-069 Inform.
+oui:
+  - "00E0FC"   # Huawei Technologies Co., Ltd.
+  - "4C1FCC"   # Huawei Device Co., Ltd. (newer firmware)
+  - "F4B8A7"   # Huawei (alternative OUI seen in some deployments)
+
+# ProductClass values reported by Huawei ONTs (case-insensitive match).
+product_class:
+  - "EG8145V5"
+  - "EG8247H5"
+  - "HG8245H"
+  - "HG8245"
+  - "EG8120L"
+  - "EG8143X5"
+
+features:
+  optical:
+    # Huawei uses the X_HW_DEBUG vendor extension for optical diagnostics.
+    # The AdminTR069 subtree contains TX/RX power, temperature, and bias current.
+    hw_debug: "InternetGatewayDevice.X_HW_DEBUG.AdminTR069"

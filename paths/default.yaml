@@ -1,0 +1,103 @@
+vendor: default
+description: >
+  TR-098 IGD model baseline paths. Used as the fallback for all vendors
+  that do not define a vendor-specific override. Covers the most common
+  consumer ONT parameter families for EPON/GPON deployments.
+  TR-181 (Device:2) equivalents are included with a "tr181_" key prefix
+  for future v2.3.0 auto-model detection.
+
+features:
+
+  # --- PPPoE WAN credentials and connection control ---
+  # WANPPPConnection. {wan} = WANDevice instance (default 1).
+  pppoe:
+    username:      "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANPPPConnection.1.Username"
+    password:      "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANPPPConnection.1.Password"
+    enable:        "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANPPPConnection.1.Enable"
+    # Vendor extension — bandwidth cap (not all CPEs expose this).
+    downstream_kbps: "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANPPPConnection.1.X_DownStreamMaxBitRate"
+    upstream_kbps:   "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANPPPConnection.1.X_UpStreamMaxBitRate"
+    # TR-181 equivalents. {index} = PPP.Interface instance.
+    tr181_username: "Device.PPP.Interface.{index}.Username"
+    tr181_password: "Device.PPP.Interface.{index}.Password"
+    tr181_enable:   "Device.PPP.Interface.{index}.Enable"
+
+  # --- NAT DMZ host ---
+  # {wan} = WANDevice instance. Some vendors use vendor-specific paths.
+  dmz:
+    enabled: "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANIPConnection.1.X_DMZEnable"
+    host_ip: "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANIPConnection.1.X_DMZHost"
+    # TR-181 equivalents.
+    tr181_enabled: "Device.NAT.DMZ.Enable"
+    tr181_host_ip: "Device.NAT.DMZ.IPAddress"
+
+  # --- Dynamic DNS ---
+  # Standard TR-098 Services.X_DynDNS.1 path; wide vendor variation.
+  ddns:
+    enable:   "InternetGatewayDevice.Services.X_DynDNS.1.Enable"
+    server:   "InternetGatewayDevice.Services.X_DynDNS.1.Server"
+    domain:   "InternetGatewayDevice.Services.X_DynDNS.1.DomainName"
+    username: "InternetGatewayDevice.Services.X_DynDNS.1.Username"
+    password: "InternetGatewayDevice.Services.X_DynDNS.1.Password"
+    # TR-181 equivalents. {index} = DynamicDNS.Client instance.
+    tr181_enable:   "Device.DynamicDNS.Client.{index}.Enable"
+    tr181_server:   "Device.DynamicDNS.Client.{index}.Server"
+    tr181_domain:   "Device.DynamicDNS.Client.{index}.Domain"
+    tr181_username: "Device.DynamicDNS.Client.{index}.Username"
+    tr181_password: "Device.DynamicDNS.Client.{index}.Password"
+
+  # --- Port forwarding ---
+  # Base path: append .FieldName. {wan} = WANDevice instance; {index} = PortMapping slot.
+  port_forwarding:
+    base: "InternetGatewayDevice.WANDevice.{wan}.WANConnectionDevice.1.WANIPConnection.1.PortMapping.{index}"
+    # TR-181 equivalents. {index} = NAT.PortMapping instance.
+    tr181_base: "Device.NAT.PortMapping.{index}"
+
+  # --- WLAN / WiFi configuration ---
+  # WLANConfiguration. {index} = slot (1-based); {entry} = sub-entry.
+  wlan:
+    base:             "InternetGatewayDevice.LANDevice.1.WLANConfiguration.{index}"
+    mac_filter_mode:  "InternetGatewayDevice.LANDevice.1.WLANConfiguration.{index}.WLANAccessControlMode"
+    mac_filter_entry: "InternetGatewayDevice.LANDevice.1.WLANConfiguration.{index}.WLANAccessControlEntry.{entry}"
+    schedule_entry:   "InternetGatewayDevice.LANDevice.1.WLANConfiguration.{index}.X_TimerSchedule.{entry}"
+    # TR-181 equivalents. {index} = WiFi.SSID instance.
+    tr181_base: "Device.WiFi.SSID.{index}"
+
+  # --- Static DHCP leases ---
+  # DHCPStaticAddress. {index} = slot.
+  static_dhcp:
+    base: "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.IPInterface.1.DHCPStaticAddress.{index}"
+    # TR-181 equivalents.
+    tr181_base: "Device.DHCPv4.Server.Pool.1.StaticAddress.{index}"
+
+  # --- NTP / time zone ---
+  # {ntp_index} = 1-5 for NTPServer1..NTPServer5.
+  ntp:
+    server:   "InternetGatewayDevice.Time.NTPServer{ntp_index}"
+    timezone: "InternetGatewayDevice.Time.LocalTimeZoneName"
+    # TR-181 equivalents.
+    tr181_server:   "Device.Time.NTPServer{ntp_index}"
+    tr181_timezone: "Device.Time.LocalTimeZoneName"
+
+  # --- CPE local web admin password ---
+  admin:
+    web_password: "InternetGatewayDevice.UserInterface.WebPassword"
+    # TR-181 equivalent.
+    tr181_web_password: "Device.Users.User.1.Password"
+
+  # --- Optical interface stats ---
+  # Multiple vendor subtrees; optical.go auto-detects which one a given
+  # CPE exposes. The keys here document all known subtrees so the path
+  # registry can be used for targeted refresh dispatching in v2.3.0.
+  optical:
+    # ZTE CT-COM EPON/GPON vendor extensions (F670L, F660, F601, F609).
+    epon_stats:   "InternetGatewayDevice.X_CT-COM_EponInterfaceConfig.Stats"
+    gpon_stats:   "InternetGatewayDevice.X_CT-COM_GponInterfaceConfig.Stats"
+    # ZTE WAN PON interface (F670L V9 and later firmware).
+    wan_pon:      "InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig"
+    # Huawei HW_DEBUG vendor extension (EG8145V5, EG8247H5, HG8245).
+    hw_debug:     "InternetGatewayDevice.X_HW_DEBUG.AdminTR069"
+    # Realtek EPON chipset (OEM white-label ONTs).
+    realtek_epon: "InternetGatewayDevice.X_Realtek_EponInterfaceConfig.Stats"
+    # Standard TR-181 Device:2 optical interface.
+    tr181:        "Device.Optical.Interface.1.Stats"

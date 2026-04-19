@@ -1,0 +1,26 @@
+vendor: tp-link
+description: >
+  TP-Link ONT / CPE path overrides. Covers XC220-G1, XZ000-G7, XC220-G3v,
+  and similar models used in Brazilian and Southeast Asian ISP deployments.
+  TODO (v2.3.0): Full parameter tree dump required from a live TP-Link ONT
+  to complete vendor-specific path mappings. Volunteer lab submissions
+  welcome — see issue #1 for instructions.
+
+# ManufacturerOUI values reported by TP-Link devices in TR-069 Inform.
+oui:
+  - "B0BE76"   # TP-Link Technologies Co., Ltd.
+  - "50C7BF"   # TP-Link Technologies (alternative)
+  - "48A2E6"   # TP-Link (newer devices)
+
+# ProductClass values reported by TP-Link ONTs (case-insensitive match).
+product_class:
+  - "XC220-G1"
+  - "XZ000-G7"
+  - "XC220-G3v"
+  - "HX220-G5v"
+
+# features: {}
+# TODO: populate from live device parameter tree dump.
+# TP-Link ONTs may expose DDNS via X_TPLINK_DDNS instead of Services.X_DynDNS.
+# QoS may use X_TPLINK_QoSManagement instead of X_DownStreamMaxBitRate.
+# Submit a GET /params/{ip} dump from a live TP-Link ONT to unlock these paths.
