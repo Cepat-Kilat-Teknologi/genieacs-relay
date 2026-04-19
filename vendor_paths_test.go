@@ -70,8 +70,10 @@ func TestDetectVendorByOUI(t *testing.T) {
 }
 
 func TestDetectVendorByOUICaseInsensitive(t *testing.T) {
-	assert.Equal(t, "zte", globalPathRegistry.DetectVendor("001141", ""))
-	assert.Equal(t, "zte", globalPathRegistry.DetectVendor("001141", ""))
+	// OUI matching is normalised to uppercase. Use an OUI with hex letters (00E0FC)
+	// to confirm that a lowercase input still resolves to the correct vendor.
+	assert.Equal(t, "huawei", globalPathRegistry.DetectVendor("00e0fc", "")) // lowercase
+	assert.Equal(t, "huawei", globalPathRegistry.DetectVendor("00E0FC", "")) // uppercase
 }
 
 func TestDetectVendorByProductClass(t *testing.T) {
@@ -448,8 +450,11 @@ func TestFormatPathPortForwardingBase(t *testing.T) {
 		"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.PortMapping.5",
 		base,
 	)
-	// Callers append the field name.
-	assert.Equal(t, base+".PortMappingEnabled", base+".PortMappingEnabled")
+	// Callers append the field name; verify the resulting path is correct.
+	assert.Equal(t,
+		"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.PortMapping.5.PortMappingEnabled",
+		base+".PortMappingEnabled",
+	)
 }
 
 func TestFormatPathWLANScheduleEntry(t *testing.T) {
