@@ -1,0 +1,28 @@
+vendor: zte
+description: >
+  ZTE ONT path overrides. Covers F670L, F660, F609, F601, F6600P and OEM
+  variants. ZTE uses the CT-COM and ZTE-COM vendor-extension subtrees for
+  optical stats. PPPoE / DMZ / port-forwarding paths are standard TR-098
+  and inherit from default.yaml with no override needed.
+
+# ManufacturerOUI values reported by ZTE devices in TR-069 Inform.
+# IEEE-assigned OUI for ZTE Corporation.
+oui:
+  - "001141"
+
+# ProductClass values reported by ZTE devices (case-insensitive match).
+product_class:
+  - "F670L"
+  - "F660"
+  - "F609"
+  - "F601"
+  - "F660G"
+  - "F6600P"
+
+features:
+  optical:
+    # ZTE CT-COM EPON/GPON optical stats — vendor extension subtrees.
+    epon_stats: "InternetGatewayDevice.X_CT-COM_EponInterfaceConfig.Stats"
+    gpon_stats: "InternetGatewayDevice.X_CT-COM_GponInterfaceConfig.Stats"
+    # ZTE WAN PON interface — present on F670L V9.0.10P1N12A and later.
+    wan_pon:    "InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig"
