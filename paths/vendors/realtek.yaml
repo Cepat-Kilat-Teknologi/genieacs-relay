@@ -1,0 +1,22 @@
+vendor: realtek
+description: >
+  Realtek chipset ONT path overrides. Covers OEM white-label ONTs built on
+  Realtek RTL9601 / RTL9607 chipsets. These devices expose optical stats
+  via the X_Realtek_EponInterfaceConfig vendor extension.
+
+# ManufacturerOUI values reported by Realtek-based ONTs in TR-069 Inform.
+# Note: OEM vendors use their own OUIs; these are known Realtek-chipset
+# OUIs seen in the wild. Add more as they are discovered.
+oui:
+  - "00E04C"   # Realtek Semiconductor Corp.
+
+# ProductClass values (case-insensitive match). OEM product names vary
+# widely; add specific models as they are confirmed in lab tests.
+product_class:
+  - "RTL9601"
+  - "RTL9607"
+
+features:
+  optical:
+    # Realtek EPON chipset optical stats vendor extension.
+    realtek_epon: "InternetGatewayDevice.X_Realtek_EponInterfaceConfig.Stats"
