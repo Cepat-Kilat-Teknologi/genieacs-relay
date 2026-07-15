@@ -59,6 +59,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -171,7 +172,11 @@ func main() {
 		}
 	}()
 
-	if err := runServerFunc(":8080"); err != nil {
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if err := runServerFunc(":" + port); err != nil {
 		logger.Info("Server failed", zap.Error(err))
 	}
 }
