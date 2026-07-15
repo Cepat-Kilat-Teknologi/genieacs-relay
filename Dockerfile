@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: Development
-FROM golang:1.26-alpine AS development
+FROM golang:1.26.5-alpine AS development
 RUN apk add --no-cache git build-base
 RUN go install github.com/air-verse/air@latest
 WORKDIR /app
@@ -11,7 +11,7 @@ COPY . .
 CMD ["air", "-c", ".air.toml"]
 
 # Stage 2: Builder untuk multi-platform
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS builder
 ARG TARGETARCH
 ARG TARGETOS
 # Build metadata injected into the binary via ldflags. CI should pass APP_VERSION,
