@@ -21,7 +21,7 @@ env:
   GHCR_REGISTRY: ghcr.io
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
   # Go version
-  GO_VERSION: '1.26'
+  GO_VERSION: '1.26.5'
 
 jobs:
   # ========================
