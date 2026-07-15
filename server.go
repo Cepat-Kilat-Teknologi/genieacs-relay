@@ -200,7 +200,6 @@ func runServer(addr string) error {
 	r.Use(
 		middleware.RequestID,
 		requestIDMiddleware,
-		middleware.RealIP,
 		apiVersionHeadersMiddleware,
 		structuredLoggerMiddleware,
 		metricsMiddleware,
