@@ -134,8 +134,8 @@ const (
 	// EnvCORSAllowedOrigins is the environment variable for allowed CORS origins (comma-separated)
 	// Use "*" to allow all origins (default), or specify specific origins like "https://example.com,https://app.example.com"
 	EnvCORSAllowedOrigins = "CORS_ALLOWED_ORIGINS"
-	// DefaultCORSAllowedOrigins allows all origins by default
-	DefaultCORSAllowedOrigins = "*"
+	// DefaultCORSAllowedOrigins restricts to localhost by default (M-HC-08/M-SEC-08)
+	DefaultCORSAllowedOrigins = "http://localhost:3000"
 	// EnvCORSMaxAge is the environment variable for CORS preflight cache duration in seconds
 	EnvCORSMaxAge = "CORS_MAX_AGE"
 	// DefaultCORSMaxAge is the default CORS preflight cache duration (24 hours)
@@ -244,6 +244,10 @@ const (
 	// generous enough for any reasonable preset bundle without
 	// opening the relay to large-body DoS.
 	MaxPresetBodySize = 64 * 1024
+
+	// MaxResponseBodySize caps io.ReadAll on upstream GenieACS NBI
+	// responses to prevent OOM on pathological payloads (10 MB).
+	MaxResponseBodySize = 10 * 1024 * 1024
 )
 
 // Error messages

@@ -201,6 +201,7 @@ type rateLimiter struct {
 	rate     int           // requests per window
 	window   time.Duration // time window
 	stopCh   chan struct{} // channel to signal cleanup goroutine to stop
+	stopOnce sync.Once     // ensures StopCleanup is only called once
 }
 
 // tokenBucket tracks request counts for rate limiting
@@ -282,9 +283,11 @@ func (rl *rateLimiter) StartCleanup() {
 
 // StopCleanup stops the background cleanup goroutine
 func (rl *rateLimiter) StopCleanup() {
-	if rl.stopCh != nil {
-		close(rl.stopCh)
-	}
+	rl.stopOnce.Do(func() {
+		if rl.stopCh != nil {
+			close(rl.stopCh)
+		}
+	})
 }
 
 // Cleanup removes stale entries from the rate limiter map

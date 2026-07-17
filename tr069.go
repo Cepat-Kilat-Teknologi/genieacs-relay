@@ -52,7 +52,11 @@ func factoryResetDevice(ctx context.Context, deviceID string) error {
 	defer safeClose(resp.Body)
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+		if readErr != nil {
+			return fmt.Errorf("factoryReset failed with status %s (body read error: %w)",
+				resp.Status, readErr)
+		}
 		return fmt.Errorf("factoryReset failed with status %s: %s",
 			resp.Status, string(body))
 	}
@@ -90,7 +94,11 @@ func connectionRequest(ctx context.Context, deviceID string) error {
 	defer safeClose(resp.Body)
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+		if readErr != nil {
+			return fmt.Errorf("connectionRequest failed with status %s (body read error: %w)",
+				resp.Status, readErr)
+		}
 		return fmt.Errorf("connectionRequest failed with status %s: %s",
 			resp.Status, string(body))
 	}
@@ -132,7 +140,11 @@ func getParameterValuesLive(ctx context.Context, deviceID string, paths []string
 	defer safeClose(resp.Body)
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+		if readErr != nil {
+			return fmt.Errorf("getParameterValuesLive failed with status %s (body read error: %w)",
+				resp.Status, readErr)
+		}
 		return fmt.Errorf("getParameterValuesLive failed with status %s: %s",
 			resp.Status, string(respBody))
 	}
@@ -226,7 +238,11 @@ func downloadFile(ctx context.Context, deviceID string, req DownloadRequest) (st
 	defer safeClose(resp.Body)
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+		if readErr != nil {
+			return "", fmt.Errorf("downloadFile failed with status %s (body read error: %w)",
+				resp.Status, readErr)
+		}
 		return "", fmt.Errorf("downloadFile failed with status %s: %s",
 			resp.Status, string(respBody))
 	}
@@ -280,7 +296,11 @@ func addObject(ctx context.Context, deviceID, objectName string) (int, error) {
 	defer safeClose(resp.Body)
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+		if readErr != nil {
+			return 0, fmt.Errorf("addObject failed with status %s (body read error: %w)",
+				resp.Status, readErr)
+		}
 		return 0, fmt.Errorf("addObject failed with status %s: %s",
 			resp.Status, string(respBody))
 	}
@@ -356,7 +376,11 @@ func deleteObject(ctx context.Context, deviceID, objectName string) error {
 	defer safeClose(resp.Body)
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+		if readErr != nil {
+			return fmt.Errorf("deleteObject failed with status %s (body read error: %w)",
+				resp.Status, readErr)
+		}
 		return fmt.Errorf("deleteObject failed with status %s: %s",
 			resp.Status, string(respBody))
 	}

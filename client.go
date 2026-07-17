@@ -90,8 +90,8 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
 	}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body (M-SEC-06: limit to prevent OOM)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +155,8 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GenieACS returned non-OK status: %s", resp.Status)
 	}
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body (M-SEC-06: limit to prevent OOM)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
 	if err != nil {
 		return "", err
 	}

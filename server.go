@@ -188,6 +188,38 @@ func runServer(addr string) error {
 	taskWorkerPool.Start()
 	defer taskWorkerPool.Stop()
 
+	// M-SEC-07: Periodic eviction of expired idempotency entries (every 10 min)
+	idempEvictDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				defaultIdempotencyStore.Evict()
+			case <-idempEvictDone:
+				return
+			}
+		}
+	}()
+	defer close(idempEvictDone)
+
+	// M-BUG-07: Periodic eviction of expired device cache entries (every 5 min)
+	cacheEvictDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				deviceCacheInstance.evictExpired()
+			case <-cacheEvictDone:
+				return
+			}
+		}
+	}()
+	defer close(cacheEvictDone)
+
 	// Register Prometheus collectors once at startup.
 	registerMetrics()
 

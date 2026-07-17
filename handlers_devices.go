@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 
 	"go.uber.org/zap"
@@ -152,12 +153,12 @@ func buildDevicesListFilter(r *http.Request) map[string]interface{} {
 	filter := map[string]interface{}{}
 	if v := r.URL.Query().Get("model"); v != "" {
 		filter["InternetGatewayDevice.DeviceInfo.ModelName._value"] = map[string]interface{}{
-			"$regex": v,
+			"$regex": regexp.QuoteMeta(v),
 		}
 	}
 	if v := r.URL.Query().Get("pppoe_username"); v != "" {
 		filter["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username._value"] = map[string]interface{}{
-			"$regex": v,
+			"$regex": regexp.QuoteMeta(v),
 		}
 	}
 	if r.URL.Query().Get("online") == BoolStrTrue && staleThreshold > 0 {

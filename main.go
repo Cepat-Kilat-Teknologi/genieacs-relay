@@ -164,7 +164,9 @@ func main() {
 	// so handlers and /version endpoint can expose real values.
 	setBuildInfo(version, commit, buildTs)
 
-	_ = initLoggerWrapper()
+	if err := initLoggerWrapper(); err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
 
 	defer func() {
 		if err := logger.Sync(); err != nil {

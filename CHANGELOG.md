@@ -6,7 +6,48 @@ All notable changes to genieacs-relay are documented in this file. The format is
 
 ## [Unreleased]
 
-_(No unreleased changes. Next items land here on the v2.3.0 track.)_
+### Security
+
+- **MongoDB regex injection prevention** -- user-supplied `model` and
+  `pppoe_username` query parameters in device search were passed directly as
+  `$regex` values to the GenieACS NBI without escaping. Crafted input like
+  `(a+)+$` could trigger catastrophic backtracking (ReDoS) in MongoDB's regex
+  engine. Both parameters are now sanitized with `regexp.QuoteMeta()` before
+  inclusion in NBI queries. (ref: QA H-SEC-06, H-SEC-07)
+- **Response body size limit** -- `io.ReadAll` on upstream GenieACS NBI responses
+  had no size bound across 11 call sites. A malicious or misconfigured upstream
+  could exhaust memory with an oversized response. All 11 sites now use
+  `io.LimitReader` with a 1 MB cap, returning an explicit error when the limit is
+  exceeded. (ref: QA M-SEC-06)
+- **Idempotency store eviction** -- the in-memory idempotency store's `Evict()`
+  method was implemented but never called in production, causing indefinite memory
+  growth. Added a periodic eviction goroutine (runs every 60 seconds) that removes
+  expired entries and respects context cancellation for clean shutdown.
+  (ref: QA M-SEC-07)
+- **CORS default restricted** -- `DefaultCORSAllowedOrigins` changed from `*`
+  (wildcard) to `http://localhost:3000`. Production deployments must set
+  `CORS_ALLOWED_ORIGINS` explicitly. (ref: QA M-HC-08, M-SEC-08)
+
+### Fixed
+
+- **Double-close panic in StopCleanup** -- `rateLimiter.StopCleanup()` closed
+  `rl.stopCh` without `sync.Once` protection. Calling it twice (e.g. during
+  overlapping shutdown sequences) caused a panic on the second close. Added
+  `sync.Once` guard, matching the pattern already used by
+  `authTracker.StopCleanup()`. (ref: QA H-BUG-04)
+- **Logger init error handling** -- `initLoggerWrapper()` return value was
+  discarded with `_ = initLoggerWrapper()`. If logger initialization failed, the
+  application continued with a nil or partial logger, leading to nil-pointer panics
+  on the first log call. The error is now checked and causes a fatal exit.
+  (ref: QA H-BUG-03)
+- **Device cache memory leak** -- expired entries in the device cache were never
+  removed. Added lazy eviction in `deviceCache.get()`: expired entries are deleted
+  on access and return a cache miss, preventing indefinite memory growth.
+  (ref: QA M-BUG-07)
+- **TR-069 response error handling** -- `io.ReadAll` errors were discarded
+  (`body, _ := io.ReadAll(resp.Body)`) in 6 locations across `tr069.go`. Errors
+  are now checked and propagated, preventing silent data corruption when response
+  reads fail due to network issues or truncation. (ref: QA M-BUG-08)
 
 ## [2.2.0] — 2026-04-15 (auto-learn OLT support + F670L real-device verified)
 

@@ -55,6 +55,18 @@ func (c *deviceCache) clearAll() {
 	c.data = make(map[string]cachedDeviceData) // Reinitialize empty cache map
 }
 
+// evictExpired removes entries whose timestamp exceeds the cache timeout.
+// Call periodically from a background goroutine to prevent unbounded growth.
+func (c *deviceCache) evictExpired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k, v := range c.data {
+		if time.Since(v.timestamp) >= c.timeout {
+			delete(c.data, k)
+		}
+	}
+}
+
 // deepCopyMap creates a recursive deep copy of a map[string]interface{}
 func deepCopyMap(src map[string]interface{}) map[string]interface{} {
 	dst := make(map[string]interface{}, len(src))
