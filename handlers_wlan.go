@@ -412,6 +412,79 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// enableWLANHandler re-enables a disabled WLAN configuration.
+// This is the mirror of deleteWLANHandler — it sets Enable=true without
+// touching SSID, password, or any other configuration. The CPE retains
+// whatever settings were active before the WLAN was disabled.
+//
+//	@Summary		Enable WLAN
+//	@Description	Re-enables a previously disabled WLAN. Only sets Enable=true; SSID and password remain unchanged.
+//	@Tags			WLAN
+//	@Produce		json
+//	@Param			wlan	path		string	true	"WLAN ID (1-8)"		example(2)
+//	@Param			ip		path		string	true	"Device IP address"	example(192.168.1.1)
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		429		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Security		ApiKeyAuth
+//	@Router			/wlan/enable/{wlan}/{ip} [put]
+func enableWLANHandler(w http.ResponseWriter, r *http.Request) {
+	ip := chi.URLParam(r, "ip")
+
+	// Extract and validate WLAN ID
+	wlan, wlanID, ok := ExtractAndValidateWLANID(w, r)
+	if !ok {
+		return
+	}
+
+	// Get device ID from IP
+	deviceID, ok := ExtractDeviceIDByIP(w, r)
+	if !ok {
+		return
+	}
+
+	// Validate WLAN ID against device capability (band validation)
+	if err := validateWLANIDForDevice(r.Context(), deviceID, wlanID); err != nil {
+		logger.Info("WLAN ID not supported by device",
+			zap.String("deviceID", deviceID),
+			zap.Int("wlanID", wlanID),
+			zap.Error(err))
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, sanitizeErrorMessage(err))
+		return
+	}
+
+	// Build parameter values for enabling WLAN (mirror of delete)
+	enablePath := fmt.Sprintf(PathWLANEnableFormat, wlan)
+	parameterValues := [][]interface{}{
+		{enablePath, true, XSDBoolean},
+	}
+
+	// Submit update and clear cache
+	if err := SubmitWLANUpdate(deviceID, parameterValues); err != nil {
+		logger.Error("Failed to submit WLAN enable task", zap.String("deviceID", deviceID), zap.Error(err))
+		sendError(w, r, http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrWorkerPoolBusy)
+		return
+	}
+
+	// Determine the band for this WLAN
+	band := getWLANBandByID(wlanID)
+
+	// Audit log for WLAN enable
+	AuditLog(AuditEventWLANEnable, GetClientIP(r), deviceID,
+		fmt.Sprintf("WLAN %s enabled (band: %s)", wlan, band))
+
+	sendResponse(w, http.StatusOK, map[string]string{
+		"message":   MsgWLANEnableSubmitted,
+		"device_id": deviceID,
+		"wlan":      wlan,
+		"band":      band,
+		"ip":        ip,
+	})
+}
+
 // optimizeWLANHandler optimizes WLAN radio settings (channel, mode, bandwidth, transmit power)
 //
 //	@Summary		Optimize WLAN radio settings
