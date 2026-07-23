@@ -174,6 +174,7 @@ const (
 	AuditEventWLANCreate   = "WLAN_CREATE"
 	AuditEventWLANUpdate   = "WLAN_UPDATE"
 	AuditEventWLANDelete   = "WLAN_DELETE"
+	AuditEventWLANEnable   = "WLAN_ENABLE"
 	AuditEventWLANOptimize = "WLAN_OPTIMIZE"
 	AuditEventCacheClear   = "CACHE_CLEAR"
 )
@@ -404,6 +405,7 @@ const (
 	MsgWLANCreationSubmitted = "WLAN creation submitted successfully"
 	MsgWLANUpdateSubmitted   = "WLAN update submitted successfully"
 	MsgWLANDeletionSubmitted = "WLAN deletion submitted successfully"
+	MsgWLANEnableSubmitted   = "WLAN enable submitted successfully"
 
 	// v2.2.0 — CPE lifecycle, status, params, PPPoE
 	MsgFactoryResetSubmitted = "FactoryReset task submitted. Device will be unreachable for 60-180 seconds, will lose its current PPPoE credentials and WLAN config, and will rejoin the ACS in a fresh provisioning state."
