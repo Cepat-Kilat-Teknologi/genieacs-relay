@@ -187,17 +187,56 @@ See [SECURITY.md](SECURITY.md) for details.
 
 | Method | Endpoint | Description | Idempotent |
 |--------|----------|-------------|:-:|
+| | **WLAN Management** | | |
 | GET | `/ssid/{ip}` | Get SSID configurations for device | — |
 | GET | `/force/ssid/{ip}` | Get SSID with force refresh + retry loop | — |
 | POST | `/ssid/{ip}/refresh` | Trigger async SSID refresh task | ✅ |
-| GET | `/dhcp-client/{ip}` | Get DHCP clients (optional `?refresh=true`) | — |
 | GET | `/capability/{ip}` | Get device band capability (single / dualband) | — |
 | GET | `/wlan/available/{ip}` | Get available WLAN slots with configuration options | — |
-| POST | `/wlan/create/{wlan}/{ip}` | Create new WLAN on slot 1-8 | ✅ |
+| POST | `/wlan/create/{wlan}/{ip}` | Create new WLAN on slot 1–8 | ✅ |
 | PUT | `/wlan/update/{wlan}/{ip}` | Update WLAN (SSID / password / auth / encryption / hidden / max_clients) | ✅ |
+| PUT | `/wlan/enable/{wlan}/{ip}` | Enable or disable a WLAN slot | ✅ |
 | DELETE | `/wlan/delete/{wlan}/{ip}` | Disable WLAN slot (soft-delete, preserves configuration) | ✅ |
 | PUT | `/wlan/optimize/{wlan}/{ip}` | Optimize radio settings (channel, bandwidth, mode, transmit_power) | ✅ |
+| | **WiFi Inspection** | | |
+| GET | `/wifi-clients/{ip}` | List connected WiFi clients | — |
+| GET | `/wifi-stats/{ip}` | Get WiFi radio statistics | — |
+| | **DHCP** | | |
+| GET | `/dhcp-client/{ip}` | Get DHCP clients (optional `?refresh=true`) | — |
+| POST | `/dhcp/{ip}/refresh` | Refresh DHCP client cache | ✅ |
+| | **Device Management** | | |
+| GET | `/status/{ip}` | Get device status summary | — |
+| GET | `/optical/{ip}` | Get optical power / signal stats | — |
+| GET | `/wan/{ip}` | Get WAN connection info | — |
+| POST | `/params/{ip}` | Set arbitrary TR-069 parameters | ✅ |
+| POST | `/reboot/{ip}` | Reboot device | ✅ |
+| POST | `/factory-reset/{ip}` | Factory reset device | ✅ |
+| POST | `/wake/{ip}` | Wake device (connection request) | ✅ |
+| PUT | `/tags/{ip}` | Set device tags | ✅ |
 | POST | `/cache/clear` | Clear device cache (specific or all) | — |
+| GET | `/devices` | List all devices | — |
+| GET | `/devices/search` | Search devices by query | — |
+| | **Network Configuration** | | |
+| PUT | `/pppoe/{ip}` | Configure PPPoE credentials | ✅ |
+| PUT | `/qos/{ip}` | Configure QoS settings | ✅ |
+| PUT | `/bridge-mode/{ip}` | Set bridge mode | ✅ |
+| PUT | `/ntp/{ip}` | Configure NTP server | ✅ |
+| PUT | `/admin-password/{ip}` | Change admin password | ✅ |
+| PUT | `/dmz/{ip}` | Configure DMZ | ✅ |
+| PUT | `/ddns/{ip}` | Configure DDNS | ✅ |
+| PUT | `/port-forwarding/{ip}` | Configure port forwarding rules | ✅ |
+| PUT | `/static-dhcp/{ip}` | Configure static DHCP reservations | ✅ |
+| PUT | `/wifi-schedule/{ip}` | Configure WiFi schedule | ✅ |
+| PUT | `/mac-filter/{ip}` | Configure MAC address filter | ✅ |
+| | **Diagnostics** | | |
+| POST | `/diag/ping/{ip}` | Run ping diagnostic | ✅ |
+| POST | `/diag/traceroute/{ip}` | Run traceroute diagnostic | ✅ |
+| | **Firmware** | | |
+| POST | `/firmware/{ip}` | Upload and apply firmware | ✅ |
+| | **Presets** | | |
+| GET | `/presets/{name}` | Get preset by name | — |
+| PUT | `/presets/{name}` | Create or update preset | ✅ |
+| DELETE | `/presets/{name}` | Delete preset | ✅ |
 
 Write endpoints honor `X-Idempotency-Key` header; repeated calls within a
 7-day TTL replay the cached response without re-executing.
