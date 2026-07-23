@@ -329,6 +329,7 @@ func runServer(addr string) error {
 		r.Get("/wlan/available/{ip}", getAvailableWLANHandler)
 		r.Post("/wlan/create/{wlan}/{ip}", createWLANHandler)
 		r.Put("/wlan/update/{wlan}/{ip}", updateWLANHandler)
+		r.Put("/wlan/enable/{wlan}/{ip}", enableWLANHandler)
 		r.Delete("/wlan/delete/{wlan}/{ip}", deleteWLANHandler)
 		r.Put("/wlan/optimize/{wlan}/{ip}", optimizeWLANHandler)
 	})
