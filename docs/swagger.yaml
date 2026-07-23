@@ -3373,6 +3373,55 @@ paths:
       summary: Delete/Disable WLAN
       tags:
       - WLAN
+  /wlan/enable/{wlan}/{ip}:
+    put:
+      description: Re-enables a previously disabled WLAN. Only sets Enable=true;
+        SSID and password remain unchanged.
+      parameters:
+      - description: WLAN ID (1-8)
+        example: "2"
+        in: path
+        name: wlan
+        required: true
+        type: string
+      - description: Device IP address
+        example: 192.168.1.1
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.Response'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Enable WLAN
+      tags:
+      - WLAN
   /wlan/optimize/{wlan}/{ip}:
     put:
       consumes:
