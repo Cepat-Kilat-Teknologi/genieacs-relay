@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -229,6 +230,11 @@ func queryDevicesNBI(ctx context.Context, filter map[string]interface{}, limit, 
 
 // deviceSummaryFromTree builds a DeviceSummary from a partial device
 // document returned by the GenieACS NBI projection.
+//
+// When InternetGatewayDevice.DeviceInfo.* fields are not yet populated
+// (new devices before parameter discovery), the function falls back to
+// extracting model and serial from the _id field (format:
+// OUI-ProductClass-SerialNumber, e.g. "347839-F670L-ZTEKQB8PH641353").
 func deviceSummaryFromTree(doc map[string]interface{}) DeviceSummary {
 	d := DeviceSummary{}
 	if v, ok := doc["_id"].(string); ok {
@@ -254,6 +260,21 @@ func deviceSummaryFromTree(doc map[string]interface{}) DeviceSummary {
 		"InternetGatewayDevice.LANDevice.1.LANEthernetInterfaceConfig.1.MACAddress"); ok {
 		d.MAC = v
 	}
+
+	// Fallback: extract model and serial from _id when TR-069 params
+	// are not yet discovered. _id format: "OUI-ProductClass-Serial".
+	if d.DeviceID != "" {
+		parts := strings.SplitN(d.DeviceID, "-", 3)
+		if len(parts) == 3 {
+			if d.Model == "" {
+				d.Model = parts[1]
+			}
+			if d.Serial == "" {
+				d.Serial = parts[2]
+			}
+		}
+	}
+
 	return d
 }
 
@@ -307,6 +328,12 @@ func searchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 //
 // Precedence: mac → serial → pppoe_username. Only the first non-empty
 // key produces a filter clause; the other two are ignored.
+//
+// Serial search uses $or to match both the TR-069 parameter
+// (InternetGatewayDevice.DeviceInfo.SerialNumber._value) AND the
+// device _id suffix. New devices that haven't completed parameter
+// discovery yet won't have the TR-069 field populated, but their _id
+// always contains the serial as the last segment (OUI-Class-Serial).
 func buildDevicesSearchFilter(mac, serial, pppoe string) map[string]interface{} {
 	if mac != "" {
 		return map[string]interface{}{
@@ -315,7 +342,10 @@ func buildDevicesSearchFilter(mac, serial, pppoe string) map[string]interface{} 
 	}
 	if serial != "" {
 		return map[string]interface{}{
-			"InternetGatewayDevice.DeviceInfo.SerialNumber._value": serial,
+			"$or": []map[string]interface{}{
+				{"InternetGatewayDevice.DeviceInfo.SerialNumber._value": serial},
+				{"_id": map[string]interface{}{"$regex": regexp.QuoteMeta(serial)}},
+			},
 		}
 	}
 	return map[string]interface{}{
