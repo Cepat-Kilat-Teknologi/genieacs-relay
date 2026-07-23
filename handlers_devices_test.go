@@ -128,8 +128,14 @@ func TestBuildDevicesSearchFilter_MAC(t *testing.T) {
 
 func TestBuildDevicesSearchFilter_Serial(t *testing.T) {
 	filter := buildDevicesSearchFilter("", "ZTEGCFLN12345678", "")
+	// Serial search uses $or: match TR-069 param OR _id suffix
+	orClauses, ok := filter["$or"].([]map[string]interface{})
+	require.True(t, ok, "$or clause must be present")
+	require.Len(t, orClauses, 2)
 	assert.Equal(t, "ZTEGCFLN12345678",
-		filter["InternetGatewayDevice.DeviceInfo.SerialNumber._value"])
+		orClauses[0]["InternetGatewayDevice.DeviceInfo.SerialNumber._value"])
+	idClause := orClauses[1]["_id"].(map[string]interface{})
+	assert.Equal(t, "ZTEGCFLN12345678", idClause["$regex"])
 }
 
 func TestBuildDevicesSearchFilter_PPPoE(t *testing.T) {
@@ -194,6 +200,34 @@ func TestDeviceSummaryFromTree_Full(t *testing.T) {
 func TestDeviceSummaryFromTree_Empty(t *testing.T) {
 	d := deviceSummaryFromTree(map[string]interface{}{})
 	assert.Empty(t, d.DeviceID)
+}
+
+func TestDeviceSummaryFromTree_IDFallback(t *testing.T) {
+	// When DeviceInfo params are not yet populated, model and serial
+	// should be extracted from the _id (OUI-ProductClass-Serial).
+	d := deviceSummaryFromTree(map[string]interface{}{
+		"_id":         "347839-F670L-ZTEKQB8PH641353",
+		"_lastInform": "2026-07-20T11:53:08Z",
+	})
+	assert.Equal(t, "347839-F670L-ZTEKQB8PH641353", d.DeviceID)
+	assert.Equal(t, "F670L", d.Model)
+	assert.Equal(t, "ZTEKQB8PH641353", d.Serial)
+	assert.Equal(t, "2026-07-20T11:53:08Z", d.LastInform)
+}
+
+func TestDeviceSummaryFromTree_IDFallback_ParamsOverride(t *testing.T) {
+	// When DeviceInfo params ARE populated, they take precedence over _id.
+	d := deviceSummaryFromTree(map[string]interface{}{
+		"_id": "347839-F670L-ZTEKQB8PH641353",
+		"InternetGatewayDevice": map[string]interface{}{
+			"DeviceInfo": map[string]interface{}{
+				"ModelName":    map[string]interface{}{"_value": "ZXHN F670L"},
+				"SerialNumber": map[string]interface{}{"_value": "ZTEKQB8PH641353"},
+			},
+		},
+	})
+	assert.Equal(t, "ZXHN F670L", d.Model) // full name from params, not _id
+	assert.Equal(t, "ZTEKQB8PH641353", d.Serial)
 }
 
 func TestDeviceSummaryFromTree_MalformedID(t *testing.T) {
