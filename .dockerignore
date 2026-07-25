@@ -18,3 +18,14 @@ Thumbs.db
 
 # Node / frontend stuff (jaga2 kalau ada di repo)
 node_modules/
+
+# AI assistant tooling — local only, never committed
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+.mcp.json
+.cursor/
+.cursorrules
+.aider*
+.omc/
