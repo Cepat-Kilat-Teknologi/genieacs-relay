@@ -293,6 +293,10 @@ nano .env
 make run
 ```
 
+> **Production:** `.env.production` contains the production configuration template
+> with placeholder secrets. Copy it and fill in real values for deployment.
+> Both `.env` and `.env.production` are gitignored — never commit real credentials.
+
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
 ---
