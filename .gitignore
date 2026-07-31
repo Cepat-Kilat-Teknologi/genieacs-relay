@@ -31,6 +31,7 @@ Thumbs.db
 # Environment files (NEVER commit these - contain secrets)
 .env
 .env.local
+.env.production
 .env.*.local
 .env_templates
 
