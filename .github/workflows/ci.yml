@@ -58,6 +58,13 @@ jobs:
       - name: Run Unit Tests with Coverage
         run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /docs)
 
+      - name: coverage gate (80%)
+        run: |
+          go tool cover -func=coverage.out
+          total=$(go tool cover -func=coverage.out | awk '/^total:/{print $3}' | tr -d '%')
+          echo "total coverage: ${total}%"
+          awk "BEGIN{exit !(${total:-0} >= 80)}" || { echo '::error::coverage below 80%'; exit 1; }
+
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
         with:
