@@ -1,0 +1,110 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: genieacs-relay-alerts
+  namespace: misindo-acs-relay-prod
+  labels:
+    app: genieacs-relay
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: genieacs-relay.rules
+      rules:
+        # ── Availability ──────────────────────────────────────────────
+        - alert: genieacs-relay_Down
+          expr: up{job="genieacs-relay", namespace="misindo-acs-relay-prod"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: genieacs-relay
+          annotations:
+            summary: "genieacs-relay is down"
+            description: "{{ $labels.instance }} has been unreachable for >1m."
+
+        # ── Error rate ────────────────────────────────────────────────
+        - alert: genieacs-relay_HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="genieacs-relay", status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="genieacs-relay"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            service: genieacs-relay
+          annotations:
+            summary: "genieacs-relay error rate >5%"
+            description: "5xx rate is {{ $value | humanizePercentage }} over the last 5m."
+
+        - alert: genieacs-relay_CriticalErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="genieacs-relay", status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="genieacs-relay"}[5m]))
+            ) > 0.15
+          for: 2m
+          labels:
+            severity: critical
+            service: genieacs-relay
+          annotations:
+            summary: "genieacs-relay error rate >15%"
+            description: "5xx rate is {{ $value | humanizePercentage }} — immediate attention needed."
+
+        # ── Latency ───────────────────────────────────────────────────
+        - alert: genieacs-relay_HighLatencyP99
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{job="genieacs-relay"}[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            service: genieacs-relay
+          annotations:
+            summary: "genieacs-relay p99 latency >2s"
+            description: "p99 latency is {{ $value | humanizeDuration }}."
+
+        # ── Pod restarts ──────────────────────────────────────────────
+        - alert: genieacs-relay_PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace="misindo-acs-relay-prod", container="genieacs-relay"
+            }[1h]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            service: genieacs-relay
+          annotations:
+            summary: "genieacs-relay pod crash-looping"
+            description: "{{ $labels.pod }} has restarted {{ $value }} times in the last hour."
+
+        # ── In-flight requests ────────────────────────────────────────
+        - alert: genieacs-relay_HighInFlight
+          expr: http_requests_in_flight{job="genieacs-relay"} > 100
+          for: 5m
+          labels:
+            severity: warning
+            service: genieacs-relay
+          annotations:
+            summary: "genieacs-relay high in-flight requests"
+            description: "{{ $value }} concurrent requests — possible resource exhaustion."
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: genieacs-relay
+  namespace: misindo-acs-relay-prod
+  labels:
+    app: genieacs-relay
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: genieacs-relay
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
