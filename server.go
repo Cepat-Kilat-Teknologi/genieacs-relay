@@ -236,7 +236,7 @@ func runServer(addr string) error {
 		structuredLoggerMiddleware,
 		metricsMiddleware,
 		auditMiddleware,
-		middleware.Recoverer,
+		sentryRecoverer,
 	)
 	r.Use(middleware.Timeout(60 * time.Second))
 	// Apply rate limiting middleware

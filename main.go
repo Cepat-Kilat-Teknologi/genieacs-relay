@@ -63,6 +63,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/Cepat-Kilat-Teknologi/genieacs-relay/pkg/sentry"
 )
 
 // Legacy task type constants for backward compatibility with existing code
@@ -173,6 +175,16 @@ func main() {
 			log.Printf("Failed to sync logger: %v", err)
 		}
 	}()
+
+	// Sentry error tracking — no-op when SENTRY_DSN is empty (local dev).
+	if err := sentry.Init(
+		os.Getenv("SENTRY_DSN"),
+		os.Getenv("ENVIRONMENT"),
+		version,
+	); err != nil {
+		logger.Warn("Sentry init failed, continuing without error tracking", zap.Error(err))
+	}
+	defer sentry.Flush()
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {

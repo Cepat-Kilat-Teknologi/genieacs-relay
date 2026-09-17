@@ -2,14 +2,18 @@ package main
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/Cepat-Kilat-Teknologi/genieacs-relay/pkg/sentry"
 )
 
 // authAttemptTracker tracks failed authentication attempts per IP for brute force protection
@@ -449,6 +453,30 @@ func corsMiddleware(allowedOrigins []string, maxAge int) func(next http.Handler)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// sentryRecoverer is a drop-in replacement for chi's middleware.Recoverer
+// that additionally reports panics to Sentry before returning 500.
+// When Sentry is not initialised (no DSN) the CaptureException call is a
+// silent no-op, so this middleware is safe to use unconditionally.
+func sentryRecoverer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				reqID := RequestIDFromContext(r.Context())
+				logger.Error("panic recovered",
+					zap.Any("error", rec),
+					zap.String("method", r.Method),
+					zap.String("path", r.URL.Path),
+					zap.String("request_id", reqID),
+					zap.String("stack", string(debug.Stack())),
+				)
+				sentry.CaptureException(fmt.Errorf("panic: %v", rec))
+				sendError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // securityHeadersMiddleware adds security headers to all responses
