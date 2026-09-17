@@ -21,19 +21,19 @@ func TestInit_InvalidDSN(t *testing.T) {
 }
 
 func TestFlush(t *testing.T) {
-	// Flush should not panic even when no client is initialised (empty DSN).
+	// Flush should not panic even when no client is initialized (empty DSN).
 	_ = Init("", "test", "v0.0.0")
 	Flush() // must not panic
 }
 
 func TestCaptureException_NoPanic(t *testing.T) {
-	// CaptureException should not panic when no client is initialised.
+	// CaptureException should not panic when no client is initialized.
 	_ = Init("", "test", "v0.0.0")
 	CaptureException(errors.New("test error"))
 }
 
 func TestCaptureMessage_NoPanic(t *testing.T) {
-	// CaptureMessage should not panic when no client is initialised.
+	// CaptureMessage should not panic when no client is initialized.
 	_ = Init("", "test", "v0.0.0")
 	CaptureMessage("test message")
 }

@@ -457,7 +457,7 @@ func corsMiddleware(allowedOrigins []string, maxAge int) func(next http.Handler)
 
 // sentryRecoverer is a drop-in replacement for chi's middleware.Recoverer
 // that additionally reports panics to Sentry before returning 500.
-// When Sentry is not initialised (no DSN) the CaptureException call is a
+// When Sentry is not initialized (no DSN) the CaptureException call is a
 // silent no-op, so this middleware is safe to use unconditionally.
 func sentryRecoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

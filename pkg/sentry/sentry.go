@@ -25,13 +25,13 @@ func Init(dsn, env, release string) error {
 }
 
 // CaptureException sends an error to Sentry as an exception event.
-// When Sentry is not initialised (no DSN) the call is a silent no-op.
+// When Sentry is not initialized (no DSN) the call is a silent no-op.
 func CaptureException(err error) {
 	sentrygo.CaptureException(err)
 }
 
 // CaptureMessage sends a text message to Sentry.
-// When Sentry is not initialised (no DSN) the call is a silent no-op.
+// When Sentry is not initialized (no DSN) the call is a silent no-op.
 func CaptureMessage(msg string) {
 	sentrygo.CaptureMessage(msg)
 }
