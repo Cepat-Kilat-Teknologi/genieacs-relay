@@ -88,7 +88,7 @@ func metricsMiddleware(next http.Handler) http.Handler {
 
 		path := chi.RouteContext(r.Context()).RoutePattern()
 		if path == "" {
-			path = "unknown"
+			path = string(BandTypeUnknown)
 		}
 		httpRequestsTotal.WithLabelValues(r.Method, path, strconv.Itoa(ww.Status())).Inc()
 		httpRequestDuration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())

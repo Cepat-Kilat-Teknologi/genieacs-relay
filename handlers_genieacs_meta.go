@@ -156,7 +156,7 @@ func tagNBICall(ctx context.Context, method, deviceID, tag string) error {
 	// validateTagsRequest AND url.PathEscape'd below, so the
 	// SSRF taint is already sanitized before reaching this call.
 	//nolint:gosec // G704: validated + path-escaped
-	resp, err := httpClient.Do(req)
+	resp, err := nbiDo(req)
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func presetQueryNBI(ctx context.Context, name string) ([]byte, int, error) {
 		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
 	//nolint:gosec // G704: name is regex-validated + query-escaped above
-	resp, err := httpClient.Do(req)
+	resp, err := nbiDo(req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -374,7 +374,7 @@ func presetNBICall(ctx context.Context, method, name string, body []byte) ([]byt
 	// the handler AND url.PathEscape'd above, so the SSRF taint is
 	// already sanitized before reaching this call.
 	//nolint:gosec // G704: validated + path-escaped
-	resp, err := httpClient.Do(req)
+	resp, err := nbiDo(req)
 	if err != nil {
 		return nil, 0, err
 	}
