@@ -46,7 +46,7 @@ func postJSONRequest(ctx context.Context, urlQ string, payload interface{}) (*ht
 		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
 	// Execute HTTP request and return response
-	return httpClient.Do(req) //nolint:gosec // G107: URL built from trusted internal config (geniesBaseURL)
+	return nbiDo(req)
 }
 
 // deviceIDQuery represents the MongoDB query structure for device ID lookup
@@ -79,7 +79,7 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 	if nbiAuth && nbiAuthKey != "" {
 		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
-	resp, err := httpClient.Do(req) // Execute HTTP request
+	resp, err := nbiDo(req) // Execute HTTP request through circuit breaker
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
 	// Execute HTTP request
-	resp, err := httpClient.Do(req)
+	resp, err := nbiDo(req)
 	if err != nil {
 		return "", err
 	}

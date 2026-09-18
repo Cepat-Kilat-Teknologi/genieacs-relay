@@ -203,7 +203,7 @@ func queryDevicesNBI(ctx context.Context, filter map[string]interface{}, limit, 
 	if nbiAuth && nbiAuthKey != "" {
 		req.Header.Set(HeaderXAPIKey, nbiAuthKey)
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := nbiDo(req)
 	if err != nil {
 		return nil, err
 	}

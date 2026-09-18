@@ -184,6 +184,9 @@ func runServer(addr string) error {
 
 	logger.Info("Starting server", zap.String("genieacs_url", geniesBaseURL))
 
+	// Initialize circuit breaker for GenieACS NBI outbound calls.
+	initBreaker(LoadBreakerConfigFromEnv(), logger)
+
 	// Start worker pool for async task processing (setParameterValues, applyChanges, refreshWLAN)
 	taskWorkerPool.Start()
 	defer taskWorkerPool.Stop()
