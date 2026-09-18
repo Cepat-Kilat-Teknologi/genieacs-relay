@@ -1,6 +1,6 @@
 module github.com/Cepat-Kilat-Teknologi/genieacs-relay
 
-go 1.26.2
+go 1.26.6
 
 require (
 	github.com/getsentry/sentry-go v0.49.0
