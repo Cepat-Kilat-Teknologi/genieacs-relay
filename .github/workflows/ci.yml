@@ -66,7 +66,7 @@ jobs:
           awk "BEGIN{exit !(${total:-0} >= 80)}" || { echo '::error::coverage below 80%'; exit 1; }
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.out
