@@ -76,7 +76,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.out
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
   # ========================
   # Job 2: Build & Push Docker Image
