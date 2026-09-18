@@ -195,8 +195,8 @@ func initBreaker(cfg BreakerConfig, log *zap.Logger) {
 		},
 	}
 
-	nbiBreaker = gobreaker.NewCircuitBreaker[*http.Response](settings)
-	cbStateGauge.WithLabelValues(nbiCBTarget).Set(0) // initialize to closed
+	nbiBreaker = gobreaker.NewCircuitBreaker[*http.Response](settings) //nolint:bodyclose // body closed by callers of nbiDo
+	cbStateGauge.WithLabelValues(nbiCBTarget).Set(0)                   // initialize to closed
 
 	log.Info("circuit breaker initialized",
 		zap.String("target", nbiCBTarget),
@@ -234,6 +234,9 @@ func nbiDo(req *http.Request) (*http.Response, error) {
 
 	// Circuit is open — reject immediately.
 	if errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
 		return nil, ErrCircuitOpen
 	}
 
@@ -245,13 +248,4 @@ func nbiDo(req *http.Request) (*http.Response, error) {
 	}
 
 	return nil, err
-}
-
-// nbiState returns the current state of the NBI circuit breaker.
-// Returns StateClosed when the breaker is disabled.
-func nbiState() gobreaker.State {
-	if nbiBreaker == nil {
-		return gobreaker.StateClosed
-	}
-	return nbiBreaker.State()
 }

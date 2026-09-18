@@ -13,6 +13,15 @@ import (
 	"go.uber.org/zap"
 )
 
+// nbiState returns the current state of the NBI circuit breaker.
+// Returns StateClosed when the breaker is disabled.
+func nbiState() gobreaker.State {
+	if nbiBreaker == nil {
+		return gobreaker.StateClosed
+	}
+	return nbiBreaker.State()
+}
+
 func testBreakerConfig(threshold uint32) BreakerConfig {
 	return BreakerConfig{
 		Enabled:       true,
