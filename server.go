@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/riandyrn/otelchi"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 
@@ -233,6 +234,7 @@ func runServer(addr string) error {
 	// structuredLoggerMiddleware replaces chi's middleware.Logger so we can emit zap-structured
 	// logs with request_id and skip noisy health/probe paths.
 	r.Use(
+		otelchi.Middleware("genieacs-relay"),
 		middleware.RequestID,
 		requestIDMiddleware,
 		apiVersionHeadersMiddleware,

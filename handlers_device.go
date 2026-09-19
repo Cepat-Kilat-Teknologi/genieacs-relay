@@ -30,7 +30,7 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Check if refresh parameter is set to true to force data refresh
-	if r.URL.Query().Get("refresh") == "true" {
+	if r.URL.Query().Get("refresh") == BoolStrTrue {
 		// Refresh DHCP data from device
 		if err := refreshDHCP(r.Context(), deviceID); err != nil {
 			// Log error and return 500 if refresh fails
@@ -150,7 +150,7 @@ func getOpticalStatsHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.URL.Query().Get("refresh") == "true" {
+	if r.URL.Query().Get("refresh") == BoolStrTrue {
 		if err := refreshOpticalStats(r.Context(), deviceID); err != nil {
 			logger.Info("Optical refresh task failed", zap.String("deviceID", deviceID), zap.Error(err))
 			sendError(w, r, http.StatusInternalServerError, ErrCodeInternal, ErrOpticalReadFailed)
