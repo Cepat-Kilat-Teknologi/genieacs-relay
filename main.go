@@ -205,9 +205,11 @@ func main() {
 		Version:     version,
 	})
 	if err != nil {
-		log.Fatalf("init tracing: %v", err)
+		log.Printf("[WARN] init tracing failed: %v — continuing without tracing", err)
 	}
-	defer otelShutdown(context.Background())
+	if otelShutdown != nil {
+		defer func() { _ = otelShutdown(context.Background()) }()
+	}
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {
