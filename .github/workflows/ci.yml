@@ -4,8 +4,36 @@ on:
   push:
     branches: [ "main", "develop" ]
     tags: [ "v*.*.*" ]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".editorconfig"
+      - ".claude/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE/**"
+      - ".github/dependabot.yml"
+      - ".gitleaks.toml"
+      - ".golangci.yml"
+      - "CODEOWNERS"
+      - "lefthook.yml"
   pull_request:
     branches: [ "main", "develop" ]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".editorconfig"
+      - ".claude/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE/**"
+      - ".github/dependabot.yml"
+      - ".gitleaks.toml"
+      - ".golangci.yml"
+      - "CODEOWNERS"
+      - "lefthook.yml"
   workflow_dispatch:
 
 # Cancel in-flight CI for the same branch/PR — keeps only the latest run.
