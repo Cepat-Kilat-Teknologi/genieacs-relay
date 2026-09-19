@@ -1,0 +1,60 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: genieacs-relay-slo-recording-rules
+  namespace: misindo-acs-relay-prod
+  labels:
+    app: genieacs-relay
+    prometheus: kube-prometheus
+    role: recording-rules
+spec:
+  groups:
+    - name: genieacs-relay.slo.rules
+      interval: 30s
+      rules:
+        # ── Availability SLO (target: 99.9%) ─────────────────────
+        - record: genieacs_relay:availability:rate5m
+          expr: |
+            1 - (
+              sum(rate(http_requests_total{job="genieacs-relay", status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="genieacs-relay"}[5m]))
+            )
+
+        - record: genieacs_relay:availability:rate1h
+          expr: |
+            1 - (
+              sum(rate(http_requests_total{job="genieacs-relay", status=~"5.."}[1h]))
+              /
+              sum(rate(http_requests_total{job="genieacs-relay"}[1h]))
+            )
+
+        - record: genieacs_relay:availability:rate24h
+          expr: |
+            1 - (
+              sum(rate(http_requests_total{job="genieacs-relay", status=~"5.."}[24h]))
+              /
+              sum(rate(http_requests_total{job="genieacs-relay"}[24h]))
+            )
+
+        # ── Latency SLO (target: p99 < 500ms) ───────────────────
+        - record: genieacs_relay:latency_p99:rate5m
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{job="genieacs-relay"}[5m])) by (le)
+            )
+
+        - record: genieacs_relay:latency_p95:rate5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="genieacs-relay"}[5m])) by (le)
+            )
+
+        # ── Error budget burn rate ───────────────────────────────
+        - record: genieacs_relay:error_budget_burn:rate1h
+          expr: |
+            (
+              sum(rate(http_requests_total{job="genieacs-relay", status=~"5.."}[1h]))
+              /
+              sum(rate(http_requests_total{job="genieacs-relay"}[1h]))
+            ) / (1 - 0.999)
