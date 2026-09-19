@@ -1,0 +1,14 @@
+[allowlist]
+description = "Known false positives in docs, test files, and templates"
+paths = [
+  '''_test\.go$''',
+  '''API_REFERENCE\.md$''',
+  '''API_TEST\.md$''',
+  '''README\.md$''',
+  '''DOC\.md$''',
+  '''test_dualband\.http$''',
+  '''test\.http$''',
+  '''\.env_templates$''',
+  '''\.env\.example$''',
+]
+regexes = ['''WLAN24''']
