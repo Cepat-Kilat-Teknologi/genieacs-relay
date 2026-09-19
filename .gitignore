@@ -40,7 +40,7 @@ Thumbs.db
 # Binary (root only, not examples/helm/genieacs-relay/)
 /genieacs-relay
 # AI assistant tooling — local only, never committed
-.claude/
+.claude/*
 !.claude/settings.json
 CLAUDE.md
 CLAUDE.local.md
