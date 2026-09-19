@@ -41,6 +41,7 @@ Thumbs.db
 /genieacs-relay
 # AI assistant tooling — local only, never committed
 .claude/
+!.claude/settings.json
 CLAUDE.md
 CLAUDE.local.md
 AGENTS.md
