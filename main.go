@@ -65,6 +65,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/Cepat-Kilat-Teknologi/genieacs-relay/pkg/sentry"
+	"github.com/Cepat-Kilat-Teknologi/genieacs-relay/pkg/tracing"
 )
 
 // Legacy task type constants for backward compatibility with existing code
@@ -185,6 +186,28 @@ func main() {
 		logger.Warn("Sentry init failed, continuing without error tracking", zap.Error(err))
 	}
 	defer sentry.Flush()
+
+	// OpenTelemetry distributed tracing — disabled by default (OTEL_ENABLED=false).
+	// Zero overhead when off; when enabled, spans export via OTLP/gRPC.
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otelEndpoint == "" {
+		otelEndpoint = "localhost:4317"
+	}
+	otelServiceName := os.Getenv("OTEL_SERVICE_NAME")
+	if otelServiceName == "" {
+		otelServiceName = "genieacs-relay"
+	}
+	otelShutdown, err := tracing.Init(context.Background(), tracing.Config{
+		Enabled:     os.Getenv("OTEL_ENABLED") == "true",
+		Endpoint:    otelEndpoint,
+		ServiceName: otelServiceName,
+		Environment: os.Getenv("APP_ENV"),
+		Version:     version,
+	})
+	if err != nil {
+		log.Fatalf("init tracing: %v", err)
+	}
+	defer otelShutdown(context.Background())
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {
