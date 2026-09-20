@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: genieacs-relay-alerts
-  namespace: misindo-acs-relay-prod
+  namespace: genieacs-relay
   labels:
     app: genieacs-relay
     prometheus: kube-prometheus
@@ -12,7 +12,7 @@ spec:
       rules:
         # ── Availability ──────────────────────────────────────────────
         - alert: genieacs-relay_Down
-          expr: up{job="genieacs-relay", namespace="misindo-acs-relay-prod"} == 0
+          expr: up{job="genieacs-relay", namespace="genieacs-relay"} == 0
           for: 1m
           labels:
             severity: critical
@@ -70,7 +70,7 @@ spec:
         - alert: genieacs-relay_PodCrashLooping
           expr: |
             increase(kube_pod_container_status_restarts_total{
-              namespace="misindo-acs-relay-prod", container="genieacs-relay"
+              namespace="genieacs-relay", container="genieacs-relay"
             }[1h]) > 3
           for: 5m
           labels:
@@ -95,7 +95,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: genieacs-relay
-  namespace: misindo-acs-relay-prod
+  namespace: genieacs-relay
   labels:
     app: genieacs-relay
     prometheus: kube-prometheus

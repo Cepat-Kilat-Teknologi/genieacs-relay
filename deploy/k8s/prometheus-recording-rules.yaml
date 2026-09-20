@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: genieacs-relay-slo-recording-rules
-  namespace: misindo-acs-relay-prod
+  namespace: genieacs-relay
   labels:
     app: genieacs-relay
     prometheus: kube-prometheus
