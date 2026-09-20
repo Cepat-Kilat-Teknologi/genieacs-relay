@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: genieacs-relay-grafana-dashboard
-  namespace: misindo-acs-relay-prod
+  namespace: genieacs-relay
   labels:
     app: genieacs-relay
     grafana_dashboard: "1"
