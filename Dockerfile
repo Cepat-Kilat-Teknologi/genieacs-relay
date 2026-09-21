@@ -28,28 +28,18 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-w -s -X main.version=${APP_VERSION} -X main.commit=${APP_COMMIT} -X main.buildTs=${APP_BUILD_TIME}" \
     -o /app/main .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+    -ldflags="-s -w" -o /bin/healthcheck ./cmd/healthcheck/main.go
 
 # Stage 3: Final image
-FROM alpine:3.21 AS production
+FROM gcr.io/distroless/static-debian12:nonroot AS production
 LABEL org.opencontainers.image.source="https://github.com/Cepat-Kilat-Teknologi/genieacs-relay"
-# Force package upgrade to pick up the latest patched security packages. The alpine:3.21
-# base image ships a snapshot at tag time, so CVEs fixed AFTER the tag's mint date (e.g.
-# CVE-2026-28390 in libcrypto3/libssl3, fixed in 3.3.7-r0 while base still has 3.3.6-r0)
-# require an explicit `apk upgrade` against the live 3.21 repo. This keeps us on the
-# alpine 3.21 track without chasing minor base bumps every time a new CVE lands.
-RUN apk update && apk upgrade --no-cache \
-    && apk add --no-cache tzdata ca-certificates \
-    && cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime \
-    && echo "Asia/Jakarta" > /etc/timezone \
-    && apk del tzdata \
-    && addgroup -S appgroup && adduser -S appuser -G appgroup
 
-USER appuser
-WORKDIR /app
-COPY --from=builder --chown=appuser:appgroup /app/main /app/main
+COPY --from=builder /app/main /app/main
+COPY --from=builder /bin/healthcheck /healthcheck
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/health || exit 1
+    CMD ["/healthcheck"]
 
 ENTRYPOINT ["/app/main"]
