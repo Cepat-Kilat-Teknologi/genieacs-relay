@@ -55,7 +55,7 @@ jobs:
   # ========================
   test:
     name: Lint, Test & Govulncheck
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, jkt-runner]
     environment: ci
     steps:
       - name: Checkout code
@@ -110,7 +110,7 @@ jobs:
   # ========================
   build-and-push:
     name: Build & Push Docker Image
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, jkt-runner]
     needs: test
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     environment: ci
@@ -264,7 +264,7 @@ jobs:
   # ========================
   release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, jkt-runner]
     needs: build-and-push
     if: startsWith(github.ref, 'refs/tags/')
     environment: ci
