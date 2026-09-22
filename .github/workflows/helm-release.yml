@@ -12,7 +12,7 @@ on:
 jobs:
   release:
     name: Release Helm Chart
-    runs-on: [self-hosted, jkt-runner]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pages: write
