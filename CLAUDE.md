@@ -1,4 +1,4 @@
-# genieacs-relay — TR-069 CPE Adapter
+# genieacs-relay - TR-069 CPE Adapter
 
 ## Overview
 
@@ -8,9 +8,9 @@ pool for slow WLAN provisioning. Powers all 7 CPE workflows in isp-agent.
 
 - **Module:** `github.com/Cepat-Kilat-Teknologi/genieacs-relay`
 - **Go:** 1.26.6
-- **Router:** chi v5 (deliberate framework mix — NOT Fiber)
+- **Router:** chi v5 (deliberate framework mix, NOT Fiber)
 - **Logger:** zap (structured JSON)
-- **Layout:** flat — all source in `package main`, no `internal/` or `cmd/`
+- **Layout:** flat: all source in `package main`, no `internal/` or `cmd/`
 - **Entry:** `main.go` → `runServer(":8080")`
 - **Version:** v2.2.1 (latest tagged release)
 
@@ -71,12 +71,12 @@ structuredLogger → metrics → audit → Recoverer
 
 Key invariants:
 - `requestIDMiddleware` MUST run before anything that logs
-- `metricsMiddleware` reads `chi.RouteContext` — must run after route resolution
+- `metricsMiddleware` reads `chi.RouteContext`: must run after route resolution
 - Idempotency caches only status < 500 (retries re-execute on server errors)
 
 ## Key Patterns
 
-- **Error responses** always via `sendError(w, r, code, errCode, data)` — never
+- **Error responses** always via `sendError(w, r, code, errCode, data)`: never
   write to `w` directly (loses `request_id` injection)
 - **Request-scoped logger**: `WithRequestIDLogger(r.Context())` for correlation
 - **Context propagation**: all GenieACS calls use `r.Context()` via
@@ -113,8 +113,8 @@ Key invariants:
 
 **Required:** `GENIEACS_BASE_URL` (default `http://localhost:7557`)
 
-**Auth:** `MIDDLEWARE_AUTH=true` + `AUTH_KEY` — API key on `/api/v1/genieacs/*`.
-`NBI_AUTH=true` + `NBI_AUTH_KEY` — forward key to GenieACS NBI.
+**Auth:** `MIDDLEWARE_AUTH=true` + `AUTH_KEY`: API key on `/api/v1/genieacs/*`.
+`NBI_AUTH=true` + `NBI_AUTH_KEY`: forward key to GenieACS NBI.
 
 **Optional:** `SERVER_ADDR` (`:8080`), `CORS_ALLOWED_ORIGINS` (`*`),
 `RATE_LIMIT_REQUESTS` (`100`), `RATE_LIMIT_WINDOW` (`60s`),
@@ -125,17 +125,17 @@ Key invariants:
 `OPTICAL_RX_OVERLOAD_DBM` (`-8.0`).
 
 **Observability (Sprint 18-19):**
-- `SENTRY_DSN` — Sentry error tracking; empty = disabled
-- `OTEL_ENABLED` (`false`) — OpenTelemetry tracing
-- `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317`) — OTel collector
-- `OTEL_SERVICE_NAME` (`genieacs-relay`) — OTel service name
+- `SENTRY_DSN`: Sentry error tracking; empty = disabled
+- `OTEL_ENABLED` (`false`): OpenTelemetry tracing
+- `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317`): OTel collector
+- `OTEL_SERVICE_NAME` (`genieacs-relay`): OTel service name
 
 **Security middleware (Sprint 19):** security headers
-(`securityHeadersMiddleware` in `middleware.go`) — no env vars, always active.
+(`securityHeadersMiddleware` in `middleware.go`): no env vars, always active.
 
 ## Config Loading
 
-Uses raw `os.Getenv` with defaults — does NOT auto-load `.env`. When running
+Uses raw `os.Getenv` with defaults: does NOT auto-load `.env`. When running
 via overmind, env comes from `.overmind.env`. For standalone, export vars or
 use a wrapper script.
 
@@ -146,13 +146,13 @@ go build -ldflags "-X main.version=<semver> -X main.commit=<sha> -X main.buildTs
 ```
 
 Variable names MUST be **lowercase** (`main.version`, not `main.Version`).
-Go silently ignores `-X` for non-existent symbols — uppercase produces a
+Go silently ignores `-X` for non-existent symbols, uppercase produces a
 binary reporting `"dev"/"none"` with no error.
 
 ## Gotchas
 
 - **Factory-reset upstream blocker**: GenieACS `PeriodicInformTime` write
-  conflict blocks post-reset device wake. Not a relay bug — needs
+  conflict blocks post-reset device wake. Not a relay bug, needs
   genieacs-stack fix.
 - **HTTP 202**: GenieACS NBI returns 202 for `?connection_request` tasks,
   not 200. Handlers accept `status < 400` as success.
@@ -163,8 +163,8 @@ binary reporting `"dev"/"none"` with no error.
 
 | Feature | Status | Details |
 |---------|:------:|---------|
-| OTel tracing | ✅ | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` |
-| Sentry | ✅ | `SENTRY_DSN` (empty = disabled) |
-| Rate limiting | ✅ | Per-IP token bucket — `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` |
-| Security headers | ✅ | `securityHeadersMiddleware` in `middleware.go` (always active, no env vars) |
-| Body size limit | ✅ | 1 MB (JSON-only CPE commands) |
+| OTel tracing | Yes | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` |
+| Sentry | Yes | `SENTRY_DSN` (empty = disabled) |
+| Rate limiting | Yes | Per-IP token bucket: `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` |
+| Security headers | Yes | `securityHeadersMiddleware` in `middleware.go` (always active, no env vars) |
+| Body size limit | Yes | 1 MB (JSON-only CPE commands) |

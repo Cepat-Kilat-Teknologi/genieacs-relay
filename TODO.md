@@ -1,8 +1,8 @@
-# TODO — genieacs-relay roadmap
+# TODO - genieacs-relay roadmap
 
-## v2.2.0 — auto-learn OLT support ✅ RELEASE-READY 2026-04-15 (tag pending)
+## v2.2.0 - auto-learn OLT support Yes RELEASE-READY 2026-04-15 (tag pending)
 
-**Status (2026-04-15):** ✅ **RELEASE-READY.** Code + tests
+**Status (2026-04-15):** Yes **RELEASE-READY.** Code + tests
 + real-device verification + docs + wiki all complete. The only
 outstanding work is the explicit `git tag v2.2.0` command (pending
 user instruction per repo convention) and CI-triggered Docker
@@ -11,37 +11,37 @@ fires.
 
 ### Shipped
 
-- [x] **Structural foundations** — `tr069.go` (generic TR-069
+- [x] **Structural foundations**: `tr069.go` (generic TR-069
       RPC dispatcher: factoryReset / connectionRequest /
       getParameterValuesLive / downloadFile / addObject / deleteObject
       + `validateTRParamPath` input sanitizer) + `param_walker.go`
       (typed accessors over `map[string]interface{}`: `LookupValue`,
       `LookupString`, `LookupInt`, `LookupBool`, `LookupTime`,
       `EnumerateInstances`, `CollectPaths`). 100% coverage.
-- [x] **HIGH-priority endpoints (7)** — factory-reset, wake, status, wan,
+- [x] **HIGH-priority endpoints (7)**: factory-reset, wake, status, wan,
       params, pppoe, firmware). 100% coverage. `handlers_lifecycle.go`,
       `handlers_inspection.go`, `handlers_pppoe.go`, `handlers_firmware.go`.
-- [x] **MEDIUM-priority endpoints (8)** — diag/ping, diag/traceroute,
+- [x] **MEDIUM-priority endpoints (8)**: diag/ping, diag/traceroute,
       wifi-clients, wifi-stats, devices list, devices search, qos with
       capability probe, bridge-mode). 100% coverage. `handlers_diag.go`,
       `handlers_devices.go`, `handlers_qos_bridge.go`, + append to
       `handlers_inspection.go` for M3+M7.
-- [x] **LOW-priority endpoints (10)** — port-forwarding, dmz, ddns,
+- [x] **LOW-priority endpoints (10)**: port-forwarding, dmz, ddns,
       wifi-schedule, mac-filter, static-dhcp, ntp, admin-password,
       tags, presets CRUD). 100% coverage. `handlers_admin.go`,
       `handlers_dmz_ddns.go`, `handlers_portforward.go`,
       `handlers_static_dhcp.go`, `handlers_wifi_advanced.go`,
       `handlers_genieacs_meta.go`.
-- [x] **F670L real-device hardening** — optical `extractZTEWanPon()`
+- [x] **F670L real-device hardening**: optical `extractZTEWanPon()`
       sixth vendor extractor, `wlan/available` `provisioned_wlan[]`
       enrichment, QoS 501 capability probe, `refreshObject` trailing-
       dot sanitation. Commit `0ff2e0e`. 11 new unit tests.
-- [x] **F670L real-device sweep** — 38 endpoints fully
+- [x] **F670L real-device sweep**: 38 endpoints fully
       exercised end-to-end + 1 correct 501 (QoS) + 6 validator-wired
       empty-body probes, 2 safety-skipped (reboot + factory-reset).
-- [x] **Close the 2 safety-skipped items** — reboot and
+- [x] **Close the 2 safety-skipped items**: reboot and
       factory-reset E2E verified on the same F670L. Reboot HTTP 202
-      + ping drop T+32s + recovery T+7:24 (6:52 total downtime — see
+      + ping drop T+32s + recovery T+7:24 (6:52 total downtime, see
       slow-boot anomaly note below). Factory-reset HTTP 202 + ping
       drop T+11s + recovery T+1:45 (1:34 total downtime, within
       spec) + PASS via 4 independent evidence vectors (downtime
@@ -54,32 +54,32 @@ fires.
       real-device verification block at top + stale TODO footer
       replaced with a proper retrospective release checklist.
 - [x] **README v2.2.0 release banner** + full v2.2.0 feature section.
-- [x] **Wiki sync** — `~/Projects/knowledge-base/wiki/genieacs-relay.md`
+- [x] **Wiki sync**: `~/Projects/knowledge-base/wiki/genieacs-relay.md`
       frontmatter bumped (`version: v2.2.0-dev` → `v2.2.0`,
       `git_state: unreleased_committed` → `release_ready`, phase
       text updated), real-device verification narrative added, versioning
       track table extended with v2.2.0 row.
-- [x] **TODO this file** — v2.2.0 shipped section added (this block).
+- [x] **TODO this file**: v2.2.0 shipped section added (this block).
 
 ### Pending (outside scope of the docs-update pass)
 
 - [ ] **`swag init` regen + commit** `docs/swagger.json` + `docs/swagger.yaml`
-      — optional: annotations are already in-source, regen only
+, optional: annotations are already in-source, regen only
       updates the generated artifacts for Swagger UI. Safe to defer
       to the first post-v2.2.0 patch.
-- [ ] **`git tag v2.2.0`** — **pending explicit user instruction**.
+- [ ] **`git tag v2.2.0`**: **pending explicit user instruction**.
       Repo convention: no push / tag without explicit request.
 - [ ] **Docker multi-arch build** `cepatkilatteknologi/genieacs-relay:{2.2.0, 2.2, 2, latest}`
-      + `ghcr.io/cepat-kilat-teknologi/genieacs-relay:{same}` —
+      + `ghcr.io/cepat-kilat-teknologi/genieacs-relay:{same}`:
       **CI-triggered automatically** by the `release.yml` workflow on
       tag push. No manual step.
 - [x] **Helm chart appVersion bump** `examples/helm/genieacs-relay/Chart.yaml`
-      — chart `version: 0.3.0` → `0.4.0` + `appVersion: "2.1.0"` →
+, chart `version: 0.3.0` → `0.4.0` + `appVersion: "2.1.0"` →
       `"2.2.0"`. Companion chart release is auto-published by the
       `helm-release.yml` workflow when the chart file changes (same
       pattern as v2.0.0 chart `v0.2.0` release auto-publish). Done
       in the release-prep commit.
-- [ ] **GitHub release publish** — auto-triggered by tag push via
+- [ ] **GitHub release publish**: auto-triggered by tag push via
       `release.yml` workflow. No manual step.
 
 ### Known issues / notes for v2.2.1 patch
@@ -100,21 +100,21 @@ fires.
 
 ---
 
-## v2.1.0 — CPE lifecycle operations + optical health ✅ RELEASED 2026-04-15
+## v2.1.0 - CPE lifecycle operations + optical health Yes RELEASED 2026-04-15
 
-**Status (2026-04-15):** ✅ **SHIPPED.** All items complete. Tag `v2.1.0`
+**Status (2026-04-15):** Yes **SHIPPED.** All items complete. Tag `v2.1.0`
 pushed, CI release workflow green (Docker multi-arch + GitHub release +
 codecov 100% on main package). Post-release hardening commit `8a66b64`
 closed the remaining coverage gaps (3 new handlers + optical + reboot
 transport + loadOpticalThresholdConfig parse error branch) bringing
 main-package coverage from 97.0% to 100.0% via `-coverpkg` scoping.
 
-- [x] **2.1.1** `POST /api/v1/genieacs/reboot/{ip}` — CPE reboot via
+- [x] **2.1.1** `POST /api/v1/genieacs/reboot/{ip}`: CPE reboot via
       TR-069 Reboot RPC. `reboot.go` + handler + route + tests.
-- [x] **2.1.2** `POST /api/v1/genieacs/dhcp/{ip}/refresh` — dedicated
+- [x] **2.1.2** `POST /api/v1/genieacs/dhcp/{ip}/refresh`: dedicated
       DHCP host cache refresh endpoint. Reuses existing `refreshDHCP()`,
       new handler + route, idempotency-cached.
-- [x] **2.1.3** `GET /api/v1/genieacs/optical/{ip}` — read CPE optical
+- [x] **2.1.3** `GET /api/v1/genieacs/optical/{ip}`: read CPE optical
       interface health metrics (TX/RX power, temperature, voltage,
       bias current). Auto-detects vendor parameter tree (ZTE CT-COM
       EPON/GPON, Huawei HW_DEBUG, Realtek EPON, standard TR-181).
@@ -124,10 +124,10 @@ main-package coverage from 97.0% to 100.0% via `-coverpkg` scoping.
 - [x] **2.1.4** `CHANGELOG.md [2.1.0]` + this `TODO.md` + `CLAUDE.md`
       outstanding-work note + `.env.example` with new optical
       threshold env vars + `README.md` v2.1.0 feature section +
-      `API_REFERENCE.md` §14-16 full endpoint documentation.
+      `API_REFERENCE.md` section 14-16 full endpoint documentation.
 - [x] **2.1.5** Tests pass, lint clean (0 issues), vulncheck clean
       (0 vulnerabilities).
-- [x] **2.1.6** Tag `v2.1.0` pushed, CI release workflow green —
+- [x] **2.1.6** Tag `v2.1.0` pushed, CI release workflow green,
       Docker image published to
       `cepatkilatteknologi/genieacs-relay:2.1.0` (multi-arch) +
       GitHub release published at
@@ -142,17 +142,17 @@ review context.**
 
 ---
 
-## v2.1.0 — CPE lifecycle operations (PLANNED, original spec)
+## v2.1.0 - CPE lifecycle operations (PLANNED, original spec)
 
-Triggered by **isp-agent v0.1.0** workflow-integration milestone — the Temporal worker
+Triggered by **isp-agent v0.1.0** workflow-integration milestone, the Temporal worker
 needs these endpoints to orchestrate full CPE management workflows.
 None of these exist in v2.0.0 yet.
 
 **Requested by:** `isp-agent` maintainer, 2026-04-13.
-**Related:** `~/Projects/isp-agent/TODO.md` §v1 completion (TerminateCustomer,
+**Related:** `~/Projects/isp-agent/TODO.md` sectionv1 completion (TerminateCustomer,
 ChangeOnu, RefreshDhcp, RestartOnu workflows).
 
-### 2.1.1 Add `POST /api/v1/genieacs/reboot/{ip}` endpoint — CPE reboot
+### 2.1.1 Add `POST /api/v1/genieacs/reboot/{ip}` endpoint - CPE reboot
 
 **Use case:** remote reboot customer modem via TR-069 `Reboot` RPC.
 Support operator uses this when CPE is stuck but physically reachable.
@@ -166,7 +166,7 @@ genieacs-relay has NO handler or internal function for this yet.
       `device.go` or new `reboot.go`. Sends `POST /devices/{id}/tasks?connection_request`
       with JSON body `{"name": "reboot"}` to the GenieACS NBI.
 - [ ] Handle 202 Accepted (queued async) and 200 OK (applied synchronously)
-      the same way as existing `refreshDHCP` function — both are success,
+      the same way as existing `refreshDHCP` function, both are success,
       only 4xx/5xx are errors.
 - [ ] New handler `rebootDeviceHandler(w, r)` that parses `{ip}` from URL
       path, resolves device ID via `resolveDeviceID(ctx, ip)` (reuse existing
@@ -175,7 +175,7 @@ genieacs-relay has NO handler or internal function for this yet.
       ```go
       r.Post("/reboot/{ip}", rebootDeviceHandler)
       ```
-- [ ] Apply `idempotencyMiddleware` (reuse existing). TTL 5 min — reboots
+- [ ] Apply `idempotencyMiddleware` (reuse existing). TTL 5 min, reboots
       should be deduplicated if operator double-clicks.
 - [ ] Audit log entry with `operation: "reboot_cpe"`.
 - [ ] Structured log fields: `device_id`, `ip`, `operation: "reboot_cpe"`,
@@ -195,7 +195,7 @@ genieacs-relay has NO handler or internal function for this yet.
 - TR-069 reboot is async. HTTP call to genieacs-relay returns as soon as
   GenieACS queues the task (fast, <1s). Actual CPE reboot takes 30-90
   seconds before the modem reconnects. The workflow on the isp-agent
-  side treats this as fire-and-forget — a follow-up `RefreshDhcp`
+  side treats this as fire-and-forget: a follow-up `RefreshDhcp`
   workflow can poll status if verification is needed.
 - Authentication: apply existing `apiKeyAuthMiddleware` + idempotency
   middleware same as other `/api/v1/genieacs/*` endpoints.
@@ -207,7 +207,7 @@ genieacs-relay has NO handler or internal function for this yet.
 **Use case:** isp-agent `RefreshDhcp` workflow needs a dedicated trigger
 endpoint. Currently `refreshDHCP()` is only called indirectly from
 `GET /dhcp-client/{ip}` when the cache is stale, which is a side effect
-of a read operation — not a clean "force refresh" primitive.
+of a read operation: not a clean "force refresh" primitive.
 
 **Scope:**
 - [ ] New handler `refreshDHCPHandler(w, r)` that parses `{ip}`,
@@ -215,22 +215,22 @@ of a read operation — not a clean "force refresh" primitive.
       returns success envelope. No return body beyond `{"refreshed": true}`.
 - [ ] Register route: `r.Post("/dhcp/{ip}/refresh", refreshDHCPHandler)`
 - [ ] Apply idempotency middleware, TTL 5 min.
-- [ ] Reuse existing `refreshDHCP()` internal function — no changes to
+- [ ] Reuse existing `refreshDHCP()` internal function, no changes to
       `dhcp.go` needed.
 - [ ] Tests: happy path, not found, upstream error, idempotency replay.
 - [ ] Audit log with `operation: "refresh_dhcp"`.
 
 **Why a dedicated endpoint** (instead of reusing `GET /dhcp-client/{ip}`):
-- Semantics clarity — workflow is intentionally triggering a refresh,
+- Semantics clarity: workflow is intentionally triggering a refresh,
   not fetching data.
-- Idempotency key scoping — write operations (POST) get dedup cache
+- Idempotency key scoping: write operations (POST) get dedup cache
   treatment via existing middleware.
-- API cleanliness — follows POST-for-side-effects convention.
+- API cleanliness: follows POST-for-side-effects convention.
 - Audit log gets the right operation name.
 
 **Effort estimate:** ~30 minutes (endpoint + test + docs).
 
-### 2.1.3 (optional) `POST /api/v1/genieacs/factory-reset/{ip}` — CPE factory reset
+### 2.1.3 (optional) `POST /api/v1/genieacs/factory-reset/{ip}` - CPE factory reset
 
 **Use case:** last-resort action when CPE is stuck in a bad config state
 and even `reboot` doesn't fix it. Forces TR-069 `FactoryReset` RPC which
@@ -240,10 +240,10 @@ clears all CPE configuration including WLAN credentials.
 via GenieACS NBI task `{"name": "factoryReset"}`.
 
 **Caveats:**
-- **DESTRUCTIVE** — wipes customer WLAN configuration. Follow-up workflow
+- **DESTRUCTIVE**: wipes customer WLAN configuration. Follow-up workflow
   must re-provision the CPE (re-set SSID, password, VLAN).
 - Should require admin-level auth in production. For v2.1.0 just same
-  API key as other endpoints — v2.2.0 can add role-based auth.
+  API key as other endpoints: v2.2.0 can add role-based auth.
 - Audit log with `operation: "factory_reset_cpe"`, flag as sensitive.
 
 **Effort estimate:** ~1 hour (endpoint + test + docs + safety notes).
@@ -256,7 +256,7 @@ via GenieACS NBI task `{"name": "factoryReset"}`.
 - [ ] Document new endpoints with request/response examples.
 - [ ] Regenerate Swagger spec (`make swagger`).
 - [ ] Add CHANGELOG v2.1.0 section listing the new endpoints and
-      migration notes (none — additive changes only).
+      migration notes (none: additive changes only).
 
 ### 2.1.5 Release v2.1.0
 
@@ -264,7 +264,7 @@ via GenieACS NBI task `{"name": "factoryReset"}`.
 - [ ] Push Docker image to Docker Hub (`cepatkilatteknologi/genieacs-relay:2.1.0`)
 - [ ] GitHub release notes
 - [ ] Update isp-agent docker-compose to pin `2.1.0` image tag
-      (currently builds from sibling source — when moved to image pulls
+      (currently builds from sibling source: when moved to image pulls
       in a later isp-agent roadmap milestone, pin this version)
 
 ### Exit criteria
@@ -295,7 +295,7 @@ blocked on this v2.1.0 release.
 
 ---
 
-# Historical — v2.0.0 Agent Integration Readiness
+# Historical - v2.0.0 Agent Integration Readiness
 
 > **STATUS: COMPLETED in v2.0.0 (2026-04-12).**
 > All items below were resolved on the `feature/v3-standardization` branch.
@@ -334,7 +334,7 @@ Reference: `~/Projects/architecture-isp-app/docs/LOGGING.md`
 
 ### 2.0 Standardize log schema per LOGGING.md
 - **Files:** `main.go`, `config.go`, all handler/service files
-- **Current:** zap.NewProduction() — sudah JSON, tapi belum lengkap
+- **Current:** zap.NewProduction(): sudah JSON, tapi belum lengkap
 - **Tasks:**
   - [ ] Centralize logger init di `logger.go` (saat ini inline di `config.go`)
   - [ ] Add required base fields: `service`, `version`, `module`
@@ -448,4 +448,4 @@ All items must pass before billing-agent can integrate:
 
 - freeradius-api v1.2.0 response format: `pkg/httputil/response.go`, `pkg/httputil/error_codes.go`
 - Billing agent design spec: `~/Projects/billing-agent/docs/specs/2026-04-12-billing-agent-design.md`
-- Wiki: [[module-planning]] — full prerequisites checklist
+- Wiki: [[module-planning]]: full prerequisites checklist
