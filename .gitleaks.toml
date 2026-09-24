@@ -1,3 +1,11 @@
+# gitleaks configuration.
+#
+# [extend] useDefault = true pulls in the full upstream gitleaks rule set.
+# Without it, a config that only declares an allowlist runs with zero
+# detection rules and never reports anything (audit finding xc-cicd-01).
+[extend]
+useDefault = true
+
 [allowlist]
 description = "Known false positives in docs, test files, and templates"
 paths = [
@@ -12,3 +20,37 @@ paths = [
   '''\.env\.example$''',
 ]
 regexes = ['''WLAN24''']
+
+# --- Custom rules (xc-cicd-01) ------------------------------------------------
+# Both rules only fire on literal values. Struct/field names, type annotations
+# and environment/secret references (process.env.X, os.Getenv, ${VAR},
+# ${{ secrets.X }}, cfg.X) are not matched or are allowlisted below.
+
+[[rules]]
+id = "pppoe-password"
+description = "Literal PPPoE / RADIUS cleartext password (radcheck Cleartext-Password row or pppoe_password assignment)"
+regex = '''(?i)(?:\bcleartext-password['"]?\s*(?:,\s*['"]:?=['"]\s*,|:?=)|\bppp(?:oe)?[_-]?pass(?:word|wd)?\b['"]?\s*(?:=|:=|:)|\bppp(?:oe)?[_-]?pass(?:word|wd)?\b['"]?\s*=>)\s*['"]([^'"\s$]{6,})['"]'''
+secretGroup = 1
+keywords = ["cleartext-password", "ppp"]
+
+[[rules.allowlists]]
+description = "Placeholders"
+regexTarget = "secret"
+regexes = ['''(?i)^(?:x{6,}|\*{6,}|changeme|change_me|password|secret|example|redacted|placeholder)$''', '''^<.*>$''']
+
+[[rules]]
+id = "smtp-password"
+description = "Literal SMTP password (smtp_pass / smtp_password assignment, incl. Gmail app-password shape)"
+regex = '''(?i)(?:\bsmtp[_-]?pass(?:word|wd)?\b['"]?\s*(?:=|:=|:|=>)\s*['"]?([^'"\s$,;(){}]{8,})|\bsmtp[\w.-]{0,30}['"]?\s*(?:=|:=|:|=>)\s*['"]?((?-i:[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}))(?:['"\s]|$))'''
+keywords = ["smtp"]
+
+[[rules.allowlists]]
+description = "Environment / config references and placeholders, not literals"
+regexTarget = "secret"
+regexes = [
+  '''^(?:process\.env|import\.meta\.env|os\.(?:Getenv|LookupEnv|environ)|env\.|cfg\.|config\.|conf\.|viper\.|settings\.|secrets\.|var\.|this\.|self\.|opts?\.|c\.|s\.|r\.)''',
+  '''(?i)^(?:x{8,}|\*{8,}|changeme|change_me|password|placeholder|redacted|your[_-].*|<.*>)$''',
+  '''^[a-z][a-zA-Z]*(?:Password|Pass|Pwd)$''',
+  '''^[A-Z][a-zA-Z]*(?:Password|Pass|Pwd)$''',
+  '''^[A-Z0-9_]*(?:PASSWORD|PASS|PWD)$''',
+]
