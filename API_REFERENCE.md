@@ -3,7 +3,7 @@
 **Version:** 2.2.0-dev (25 new endpoints complete, release pending)
 **Last Updated:** 2026-04-14
 
-This document provides complete API reference with request/response examples for all GenieACS Relay endpoints. **v2.2.0** adds 25 new endpoints (Section 17) to support auto-learning OLT deployments where the OLT doesn't push customer profile config — see `V2.2.0-DESIGN.md` in the repo root for the design doc.
+This document provides complete API reference with request/response examples for all GenieACS Relay endpoints. **v2.2.0** adds 25 new endpoints (Section 17) to support auto-learning OLT deployments where the OLT doesn't push customer profile config, see `V2.2.0-DESIGN.md` in the repo root for the design doc.
 
 > **Note:** For device-specific test results, see:
 > - [TEST_RESULT_SINGLEBAND.md](TEST_RESULT_SINGLEBAND.md) - Single-band device tests (CDATA FD512XW-R460)
@@ -11,7 +11,7 @@ This document provides complete API reference with request/response examples for
 
 ---
 
-## v2.0.0 Response Envelope — Standard Contract
+## v2.0.0 Response Envelope - Standard Contract
 
 All endpoints follow a uniform JSON envelope per `isp-adapter-standard`.
 This is a **breaking change** from v2.x, which used `"status":"OK"` and a flat `error` string.
@@ -69,7 +69,7 @@ and its response cached; subsequent requests with the same key within a
 7-day TTL replay the cached response without re-executing. Saga-style
 retries from billing-agent are safe by design.
 
-Server errors (5xx) are NOT cached — they remain retryable.
+Server errors (5xx) are NOT cached, they remain retryable.
 
 ---
 
@@ -91,7 +91,7 @@ Server errors (5xx) are NOT cached — they remain retryable.
 14. [CPE Reboot Endpoint (v2.1.0)](#14-cpe-reboot-endpoint-v210)
 15. [DHCP Refresh Endpoint (v2.1.0)](#15-dhcp-refresh-endpoint-v210)
 16. [Optical Health Endpoint (v2.1.0)](#16-optical-health-endpoint-v210)
-17. [v2.2.0 Endpoints — Auto-Learn OLT Support (25 new)](#17-v220-endpoints--auto-learn-olt-support-25-new)
+17. [v2.2.0 Endpoints: Auto-Learn OLT Support (25 new)](#17-v220-endpoints--auto-learn-olt-support-25-new)
 18. [Error Cases](#18-error-cases)
 19. [Authentication Error Cases](#19-authentication-error-cases-middleware_authtrue)
 
@@ -193,7 +193,7 @@ GET http://localhost:8080/version
 }
 ```
 
-> **Tip:** after any Docker build, `curl /version` is the fastest way to verify ldflags injection actually worked — a silently-broken Dockerfile will return `"dev"` here.
+> **Tip:** after any Docker build, `curl /version` is the fastest way to verify ldflags injection actually worked, a silently-broken Dockerfile will return `"dev"` here.
 
 ---
 
@@ -204,10 +204,10 @@ GET http://localhost:8080/version
 Prometheus exposition format. Public (no authentication). Used by Prometheus scrape jobs every 15s.
 
 **Standard collectors:**
-- `http_requests_total{method, path, status}` — uses chi RoutePattern labels (e.g. `/api/v1/genieacs/wlan/create/{wlan}/{ip}`) to prevent cardinality explosion from IPs-in-path
-- `http_request_duration_seconds_bucket{method, path, le}` — latency histogram
-- `http_requests_in_flight` — current active requests gauge
-- `go_*` / `process_*` — default Go runtime collectors
+- `http_requests_total{method, path, status}`: uses chi RoutePattern labels (e.g. `/api/v1/genieacs/wlan/create/{wlan}/{ip}`) to prevent cardinality explosion from IPs-in-path
+- `http_request_duration_seconds_bucket{method, path, le}`: latency histogram
+- `http_requests_in_flight`: current active requests gauge
+- `go_*` / `process_*`: default Go runtime collectors
 
 ---
 
@@ -1007,10 +1007,10 @@ successful task submission per the NBI contract.
 Actual CPE reboot takes 30-90 seconds typical before the device
 reconnects to the ACS. Callers (typically the future `RestartOnu`
 workflow in `isp-agent` v2+) should **NOT** block waiting for the
-device to come back — the workflow's retry policy or a follow-up
+device to come back: the workflow's retry policy or a follow-up
 health check is the right tool for that.
 
-> **Slow-boot anomaly observed during real-device verification** — on
+> **Slow-boot anomaly observed during real-device verification**: on
 > a real ZTE F670L running V9.0.10P1N12A, the observed total downtime
 > was **6 min 52 seconds**, well outside the 30-90s docstring spec.
 > Root cause unconfirmed but likely specific to this ZTE firmware
@@ -1057,7 +1057,7 @@ X-Idempotency-Key: cmd_abc123
 
 Forces GenieACS to refresh the `LANDevice.1` (DHCP host) subtree on the
 CPE. This is the dedicated endpoint for the side-effect "force refresh"
-— distinct from the read endpoint `GET /dhcp-client/{ip}?refresh=true`
+, distinct from the read endpoint `GET /dhcp-client/{ip}?refresh=true`
 which mixes read and side-effect semantics.
 
 Use case: future `RefreshDhcpStatus` workflow in `isp-agent` that
@@ -1098,7 +1098,7 @@ X-Idempotency-Key: cmd_abc124
 
 ### GET /api/v1/genieacs/optical/{ip}
 
-Reads **optical interface health metrics** from the CPE — TX power,
+Reads **optical interface health metrics** from the CPE, TX power,
 RX power, temperature, voltage, and bias current. Vendor detection
 picks the correct TR-069 parameter path automatically across **5
 vendor variants**:
@@ -1137,7 +1137,7 @@ GET http://localhost:8080/api/v1/genieacs/optical/192.168.1.100
 X-API-Key: your-api-key
 ```
 
-**Request (force refresh before reading — slower but guaranteed fresh):**
+**Request (force refresh before reading: slower but guaranteed fresh):**
 ```http
 GET http://localhost:8080/api/v1/genieacs/optical/192.168.1.100?refresh=true
 X-API-Key: your-api-key
@@ -1178,12 +1178,12 @@ accepts the refresh task the call proceeds.
 
 ---
 
-## 17. v2.2.0 Endpoints — Auto-Learn OLT Support (25 new)
+## 17. v2.2.0 Endpoints - Auto-Learn OLT Support (25 new)
 
 This section documents the 25 new endpoints added in v2.2.0 to
 support **auto-learning OLT deployments** (Hioso, HSGQ, Jolink, CDATA
 auto mode, etc.). In those topologies the OLT does **not** push
-customer profile config — it only bridges traffic — so **all**
+customer profile config, it only bridges traffic, so **all**
 customer-facing configuration must flow through TR-069 from the
 GenieACS plane. v2.1.0's CRUD slice was too narrow for that workflow;
 v2.2.0 expands the surface to cover lifecycle, inspection,
@@ -1191,10 +1191,10 @@ provisioning, diagnostics, and customer self-service features.
 
 Endpoints are grouped by priority tier:
 
-- **HIGH priority (7)** — operational essentials for auto-learn ISP
+- **HIGH priority (7)**: operational essentials for auto-learn ISP
   scenarios
-- **MEDIUM priority (8)** — NOC support tools
-- **LOW priority (10)** — customer-facing self-service + metadata
+- **MEDIUM priority (8)**: NOC support tools
+- **LOW priority (10)**: customer-facing self-service + metadata
 
 All 25 endpoints share the same response envelope, idempotency
 middleware, audit logging, and API-key authentication as the v1.x /
@@ -1212,7 +1212,7 @@ locally-stored config (PPPoE credentials, WLAN, port-forward rules,
 static DHCP leases, etc.), reboots, and rejoins the ACS in a fresh
 provisioning state. Unreachable for 60-180 seconds during the reset
 cycle. Used by RMA flows and customer-requested "reset my modem"
-support tickets. Fire-and-forget — does NOT block waiting for the
+support tickets. Fire-and-forget: does NOT block waiting for the
 device to come back.
 
 ```bash
@@ -1231,23 +1231,23 @@ curl -X POST http://localhost:8080/api/v1/genieacs/factory-reset/192.168.1.1 \
 }
 ```
 
-**⚠️ Real-lab constraint:** DO NOT run against production CPE
-without a recovery plan — the device's admin-set config is lost
+**Real-lab constraint:** DO NOT run against production CPE
+without a recovery plan: the device's admin-set config is lost
 permanently once the reset is applied.
 
-> **Real-device verification (2026-04-15)** — end-to-end verified on
+> **Real-device verification (2026-04-15)**: end-to-end verified on
 > a real ZTE F670L V9.0.10P1N12A via VPN lab. Observed: HTTP 202,
 > ping drop at T+11s (faster than reboot's T+32s because FactoryReset
 > is a more direct RPC), full ping recovery at T+1:45 for **1:34
-> total downtime** — within the documented 60-180s window. PASS
+> total downtime**: within the documented 60-180s window. PASS
 > verdict supported by four independent evidence vectors (downtime
 > signature distinct from reboot on the same unit, post-recovery
 > credential drift proving device-side creds were wiped, clean task
 > queue transition, timing match). See CHANGELOG.md `[2.2.0]`
 > real-device verification block for the full reasoning chain.
 
-> **⚠️ Production-deployment blocker (genieacs-stack v1.3.1 pending)**
-> — after factory-reset, genieacs cannot wake the device via
+> **Production-deployment blocker (genieacs-stack v1.3.1 pending)**
+>: after factory-reset, genieacs cannot wake the device via
 > `POST /wake/{ip}` until the device informs on its own periodic cycle
 > (30 min default). Root cause is a stock `/init` provision in
 > upstream genieacs-stack: it writes a numeric `PeriodicInformTime`
@@ -1329,7 +1329,7 @@ curl http://localhost:8080/api/v1/genieacs/status/192.168.1.1 \
 
 #### GET /api/v1/genieacs/wan/{ip}  (H4)
 
-**Returns WAN connection state(s) — type, status, external IP, uptime.**
+**Returns WAN connection state(s): type, status, external IP, uptime.**
 
 Walks every `WANDevice.{n}.WANConnectionDevice.{m}.WANPPPConnection.{k}`
 and `WANIPConnection.{k}` instance in the cached tree and surfaces
@@ -1371,15 +1371,15 @@ curl http://localhost:8080/api/v1/genieacs/wan/192.168.1.1 \
 
 **Generic GetParameterValues passthrough.**
 
-NOC L2/L3 debugging tool — inspect arbitrary TR-069 parameter values
+NOC L2/L3 debugging tool: inspect arbitrary TR-069 parameter values
 without the relay needing a dedicated endpoint per parameter. Up to
 50 paths per request, each validated against
 `^[a-zA-Z][a-zA-Z0-9_.]*$` (no shell metacharacters or query
 injection). Two modes:
 
-- `live=false` (default) — walks the cached device tree immediately
+- `live=false` (default): walks the cached device tree immediately
   (sub-100ms)
-- `live=true` — dispatches a fresh GetParameterValues task with
+- `live=true`: dispatches a fresh GetParameterValues task with
   `?connection_request`, clears the cache, then reads the refreshed
   tree
 
@@ -1465,7 +1465,7 @@ to complete (typical 60-300s depending on file size and link speed).
 Includes HTTPS-only validation + SSRF guard rejecting private IPs /
 loopback / link-local / metadata service hostnames.
 
-**⚠️ REAL-LAB CONSTRAINT:** DO NOT test against production CPE
+**REAL-LAB CONSTRAINT:** DO NOT test against production CPE
 without an offline-verified firmware blob matching the exact ONU
 model. A wrong firmware image **bricks the device**.
 
@@ -1513,7 +1513,7 @@ curl -X POST http://localhost:8080/api/v1/genieacs/firmware/192.168.1.1 \
 
 Sets the IPPingDiagnostics parameters (Host, NumberOfRepetitions,
 Timeout, DataBlockSize, DSCP) + `DiagnosticsState=Requested` to
-trigger the run. The trigger entry MUST be last per TR-069 §A.4.1 so
+trigger the run. The trigger entry MUST be last per TR-069 sectionA.4.1 so
 the CPE applies all inputs before starting the diagnostic. Returns
 202 + the list of result parameter paths the caller should poll via
 `POST /params/{ip}` after 5-15 seconds. Polling is delegated to the
@@ -1572,7 +1572,7 @@ curl -X POST http://localhost:8080/api/v1/genieacs/diag/traceroute/192.168.1.1 \
 **Returns associated WiFi clients across all WLAN radios.**
 
 Walks `LANDevice.1.WLANConfiguration.{n}.AssociatedDevice.{m}`
-(TR-098). Distinct from `/dhcp-client/{ip}` — this reads the WLAN
+(TR-098). Distinct from `/dhcp-client/{ip}`: this reads the WLAN
 association table directly, which includes clients on static IPs or
 clients that haven't asked for DHCP. Per-client fields: MAC, WLAN
 instance, SSID, band, signal strength dBm, authentication state.
@@ -1621,13 +1621,13 @@ curl http://localhost:8080/api/v1/genieacs/wifi-stats/192.168.1.1 \
 
 #### GET /api/v1/genieacs/devices  (M4)
 
-**Paginated device listing — FIRST endpoint without an `{ip}` URL param.**
+**Paginated device listing: FIRST endpoint without an `{ip}` URL param.**
 
 Wraps the GenieACS NBI `/devices?query=...` call directly. Optional
 filters: `model` (substring), `online` (last inform within 3x stale
 threshold), `pppoe_username` (substring). Pagination via
 `?page=N&page_size=N` (1-indexed, max 200). Returns lightweight
-`DeviceSummary` rows — not the full device tree. Used by admin UI
+`DeviceSummary` rows: not the full device tree. Used by admin UI
 device discovery flow.
 
 ```bash
@@ -1695,7 +1695,7 @@ curl -X PUT http://localhost:8080/api/v1/genieacs/qos/192.168.1.1 \
 
 **Toggle CPE bridge / router mode. COARSE APPROXIMATION.**
 
-Sets `WANPPPConnection.Enable` — `enabled=true` puts CPE in bridge
+Sets `WANPPPConnection.Enable`: `enabled=true` puts CPE in bridge
 mode (PPPoE off, customer router handles termination); `enabled=false`
 reverts to router mode. Real bridge-mode toggling varies by vendor
 and may require multiple parameter writes (disable PPPoE + enable
@@ -1718,7 +1718,7 @@ curl -X PUT http://localhost:8080/api/v1/genieacs/bridge-mode/192.168.1.1 \
 **Set NTP servers and/or timezone.**
 
 Max 5 NTP server entries (TR-098 schema limit). Either field alone
-is valid — "timezone-only" or "servers-only" updates are allowed.
+is valid: "timezone-only" or "servers-only" updates are allowed.
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/genieacs/ntp/192.168.1.1 \
@@ -1781,7 +1781,7 @@ curl -X PUT http://localhost:8080/api/v1/genieacs/ddns/192.168.1.1 \
 
 **Set port forwarding rules at caller-specified slot indexes.**
 
-v2.2.0 uses **set-at-index** semantics — caller specifies which
+v2.2.0 uses **set-at-index** semantics: caller specifies which
 PortMapping slot to write. Does NOT auto-create new instances
 (v2.3.0 enhancement). Use `enabled=false` to disable a slot without
 removing it. Max 32 rules per request.
@@ -1873,7 +1873,7 @@ curl -X PUT http://localhost:8080/api/v1/genieacs/mac-filter/192.168.1.1 \
 
 **Add and remove GenieACS device tags via the NBI.**
 
-Tags are metadata only — they don't trigger TR-069 RPCs. Used by ops
+Tags are metadata only: they don't trigger TR-069 RPCs. Used by ops
 to group devices for bulk operations, alerting, or fleet rollouts.
 Wraps NBI `POST /devices/{id}/tags/{tag}` and `DELETE /devices/{id}/tags/{tag}`.
 Tag names must match `[a-zA-Z0-9_-]{1,64}`. First failure aborts

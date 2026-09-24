@@ -281,23 +281,23 @@ Version numbers are `MAJOR.MINOR.PATCH`:
 
 | Bump | When to use | Examples |
 |---|---|---|
-| **MAJOR** (X.y.z) | **Breaking changes** — any change that would require clients (especially `billing-agent`) to update their integration code | JSON envelope shape change, removal of an endpoint, rename of a field, change in HTTP status code semantics, change in auth scheme |
-| **MINOR** (x.Y.z) | **Additive features** — new endpoints, new optional fields, new middleware, new observability — anything that is backwards-compatible with existing clients | New endpoint, new optional request field, new response header, new Prometheus metric, new env var with default, new error code |
-| **PATCH** (x.y.Z) | **Bug fixes** only — no API change, no new feature, no config change | Status code fix, panic fix, race condition fix, dependency bump, lint fix |
+| **MAJOR** (X.y.z) | **Breaking changes**: any change that would require clients (especially `billing-agent`) to update their integration code | JSON envelope shape change, removal of an endpoint, rename of a field, change in HTTP status code semantics, change in auth scheme |
+| **MINOR** (x.Y.z) | **Additive features**, new endpoints, new optional fields, new middleware, new observability, anything that is backwards-compatible with existing clients | New endpoint, new optional request field, new response header, new Prometheus metric, new env var with default, new error code |
+| **PATCH** (x.y.Z) | **Bug fixes** only: no API change, no new feature, no config change | Status code fix, panic fix, race condition fix, dependency bump, lint fix |
 
 ### Version History
 
 | Version | Released | Type | Summary |
 |---|---|---|---|
-| **v2.2.0** | 2026-04-15 (release-ready, tag pending) | MINOR | Auto-learn OLT support — 25 new operational endpoints grouped by priority (7 HIGH CPE lifecycle + 8 MEDIUM NOC tools + 10 LOW customer self-service + metadata) plus structural `tr069.go` / `param_walker.go` foundations + real-device F670L hardening (sixth optical extractor `X_ZTE-COM_WANPONInterfaceConfig`, `wlan/available` `provisioned_wlan[]` enrichment, QoS 501 capability probe, trailing-dot `refreshObject` sanitation) + reboot/factory-reset E2E close-out (40/40 endpoints verified on real ZTE F670L V9.0.10P1N12A). 100% main-package coverage maintained. |
-| **v2.1.0** | 2026-04-15 | MINOR | CPE lifecycle operations + optical health — added `POST /reboot/{ip}`, `POST /dhcp/{ip}/refresh`, `GET /optical/{ip}` with 5-vendor auto-detection (ZTE CT-COM EPON/GPON, Huawei HW_DEBUG, Realtek EPON, standard TR-181) and env-tunable health classification thresholds. Post-release hardening closed coverage to 100.0%. |
-| **v2.0.0** | 2026-04-12 | MAJOR | v1 standardization — breaking response envelope change, new health/readiness/version/metrics endpoints, request-ID correlation, idempotency middleware, multi-arch Docker, bug fix for HTTP 202 status handling, alpine CVE-2026-28390 patched |
+| **v2.2.0** | 2026-04-15 (release-ready, tag pending) | MINOR | Auto-learn OLT support: 25 new operational endpoints grouped by priority (7 HIGH CPE lifecycle + 8 MEDIUM NOC tools + 10 LOW customer self-service + metadata) plus structural `tr069.go` / `param_walker.go` foundations + real-device F670L hardening (sixth optical extractor `X_ZTE-COM_WANPONInterfaceConfig`, `wlan/available` `provisioned_wlan[]` enrichment, QoS 501 capability probe, trailing-dot `refreshObject` sanitation) + reboot/factory-reset E2E close-out (40/40 endpoints verified on real ZTE F670L V9.0.10P1N12A). 100% main-package coverage maintained. |
+| **v2.1.0** | 2026-04-15 | MINOR | CPE lifecycle operations + optical health, added `POST /reboot/{ip}`, `POST /dhcp/{ip}/refresh`, `GET /optical/{ip}` with 5-vendor auto-detection (ZTE CT-COM EPON/GPON, Huawei HW_DEBUG, Realtek EPON, standard TR-181) and env-tunable health classification thresholds. Post-release hardening closed coverage to 100.0%. |
+| **v2.0.0** | 2026-04-12 | MAJOR | v1 standardization: breaking response envelope change, new health/readiness/version/metrics endpoints, request-ID correlation, idempotency middleware, multi-arch Docker, bug fix for HTTP 202 status handling, alpine CVE-2026-28390 patched |
 | v1.0.1 | (prior) | PATCH | legacy release |
 | v1.0.0 | (prior) | MAJOR | initial release |
 
 ### Rules of thumb
 
-1. **Never silently break the response envelope** — if the JSON shape changes in any
+1. **Never silently break the response envelope**: if the JSON shape changes in any
    way that could surprise a client that parses the old shape, it is a MAJOR bump.
 2. **Adding a new error code is MINOR** (clients should have a fallback to the HTTP
    status code anyway per isp-adapter-standard). Removing or renaming an error
@@ -305,11 +305,11 @@ Version numbers are `MAJOR.MINOR.PATCH`:
 3. **Changing the default value of an env var** is MINOR if the old value remains
    valid, MAJOR if the old value is no longer accepted.
 4. **Ldflags injection bugs** (e.g. wrong `-X` target name) are PATCH even though
-   they affect the `/version` endpoint, because the API contract is unchanged —
+   they affect the `/version` endpoint, because the API contract is unchanged,
    only the reported value was wrong.
 5. **The Docker image tag must match the semver tag**. A git tag of `v2.1.0` must
    publish `:2.1.0`, `:2.1`, `:2`, and `:latest` via the CI release workflow.
-6. **Update `CHANGELOG.md` in the same commit** that bumps the version — never
+6. **Update `CHANGELOG.md` in the same commit** that bumps the version, never
    tag a release whose changelog section is missing or incomplete.
 
 ---

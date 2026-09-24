@@ -1,16 +1,16 @@
-# GenieACS Relay — Issue Tracker
+# GenieACS Relay - Issue Tracker
 
 > Hasil review menyeluruh codebase pada 2026-04-05.
 > Total: 28 issues ditemukan.
 
 ---
 
-## CRITICAL — Harus Segera Diperbaiki
+## CRITICAL - Harus Segera Diperbaiki
 
 ### C-01: Go Version 1.25 Tidak Exist
 
 - **File**: `Dockerfile:4,14`, `.github/workflows/ci.yml:19`
-- **Detail**: `FROM golang:1.25-alpine` dan `GO_VERSION: '1.25'` — Go 1.25 belum dirilis. Docker build dan CI pipeline akan **gagal**.
+- **Detail**: `FROM golang:1.25-alpine` dan `GO_VERSION: '1.25'`: Go 1.25 belum dirilis. Docker build dan CI pipeline akan **gagal**.
 - **Impact**: Build failure di local dan CI. Tidak bisa deploy image baru.
 - **Fix**: Ganti ke `1.24` sesuai `go.mod` (`go 1.24.2`).
 
@@ -18,7 +18,7 @@
 
 - **File**: `main.go`, `server.go`, `worker.go`
 - **Detail**: `NewWorkerPool()` dipanggil untuk inisialisasi, tetapi `Start()` yang menjalankan goroutines tidak pernah dipanggil. Worker goroutines tidak pernah berjalan.
-- **Impact**: Semua task (`setParameterValues`, `applyChanges`, `refreshWLAN`) masuk channel buffer (cap: 100) tapi **tidak pernah diproses**. Setelah buffer penuh, semua task berikutnya silently dropped. Artinya semua operasi WLAN create/update/delete/optimize **tidak pernah dieksekusi** ke GenieACS. API return 200 tapi device tidak berubah — **silent data loss**.
+- **Impact**: Semua task (`setParameterValues`, `applyChanges`, `refreshWLAN`) masuk channel buffer (cap: 100) tapi **tidak pernah diproses**. Setelah buffer penuh, semua task berikutnya silently dropped. Artinya semua operasi WLAN create/update/delete/optimize **tidak pernah dieksekusi** ke GenieACS. API return 200 tapi device tidak berubah, **silent data loss**.
 - **Fix**: Panggil `taskWorkerPool.Start()` setelah inisialisasi di `main.go` atau `server.go`.
 
 ### C-03: Helm Secret Regeneration on Upgrade
@@ -34,7 +34,7 @@
 
 ---
 
-## HIGH — Prioritas Tinggi
+## HIGH - Prioritas Tinggi
 
 ### H-01: Worker Tasks Silently Dropped When Queue Full
 
@@ -43,18 +43,18 @@
 - **Impact**: Caller menerima response sukses padahal operasi tidak dijalankan. Tidak ada mekanisme retry atau notification ke caller.
 - **Fix**: Pertimbangkan: (1) synchronous fallback jika queue penuh, (2) return error dari `Submit()` agar handler bisa kirim 503, atau (3) perbesar buffer dengan monitoring.
 
-### H-02: Shallow Cache Copy — Potential Data Corruption
+### H-02: Shallow Cache Copy - Potential Data Corruption
 
 - **File**: `cache.go:33`
 - **Detail**: `deviceCache.get()` hanya melakukan single-level map copy. Nested maps (e.g., `deviceData["InternetGatewayDevice"]`) masih shared reference ke cached data.
-- **Impact**: Jika caller memodifikasi nested map, cached data ikut berubah — data corruption untuk request berikutnya yang baca dari cache. Saat ini parsers hanya read, tapi ini fragile invariant tanpa enforcement.
+- **Impact**: Jika caller memodifikasi nested map, cached data ikut berubah, data corruption untuk request berikutnya yang baca dari cache. Saat ini parsers hanya read, tapi ini fragile invariant tanpa enforcement.
 - **Fix**: Implement deep copy (JSON marshal/unmarshal round-trip) atau gunakan copy-on-write pattern.
 
 ### H-03: WLAN ID Validation Inconsistency
 
 - **File**: `validation.go` (`validateWLANID`), `capability.go` (`validateWLANIDForDevice`)
 - **Detail**: `validateWLANID` menerima range 1–99, tetapi `validateWLANIDForDevice` hanya menerima 1–8. Outer validator loloskan nilai 9–99 yang inner validator selalu tolak.
-- **Impact**: Confusing error messages — user mendapat generic error dari inner validator setelah outer validator sudah lolos. Wasted processing.
+- **Impact**: Confusing error messages: user mendapat generic error dari inner validator setelah outer validator sudah lolos. Wasted processing.
 - **Fix**: Seragamkan range di `validateWLANID` ke 1–8, atau gunakan single validation point.
 
 ### H-04: Force Handler Blocking Sleep in HTTP Goroutine
@@ -68,7 +68,7 @@
 
 - **File**: `handlers_wlan.go`
 - **Detail**: WLAN 1 adalah primary SSID pada sebagian besar ONU/ONT. API mengizinkan `DELETE /wlan/delete/1/{ip}` tanpa warning atau konfirmasi.
-- **Impact**: User bisa tidak sengaja disable primary WiFi SSID pada device — device kehilangan konektivitas WiFi dan harus di-reset manual atau via TR-069 direct.
+- **Impact**: User bisa tidak sengaja disable primary WiFi SSID pada device, device kehilangan konektivitas WiFi dan harus di-reset manual atau via TR-069 direct.
 - **Fix**: Tambahkan guard atau warning header untuk WLAN ID 1. Opsi: tolak deletion, require force flag, atau return warning di response.
 
 ### H-06: Makefile Path Typo
@@ -80,7 +80,7 @@
 
 ---
 
-## MEDIUM — Perlu Diperbaiki
+## MEDIUM - Perlu Diperbaiki
 
 ### M-01: HSTS Header on HTTP
 
@@ -107,7 +107,7 @@
 
 - **File**: `worker.go:62-65`
 - **Detail**: `taskTypeApplyChanges` dan `taskTypeRefreshWLAN` keduanya memanggil `refreshWLANConfig()`. Dua constant berbeda dengan behavior identik.
-- **Impact**: Confusing codebase — developer bisa salah asumsi bahwa ada perbedaan behavior. Jika GenieACS mengubah API, perubahan harus diterapkan di satu tempat tapi ada dua entry point.
+- **Impact**: Confusing codebase: developer bisa salah asumsi bahwa ada perbedaan behavior. Jika GenieACS mengubah API, perubahan harus diterapkan di satu tempat tapi ada dua entry point.
 - **Fix**: Gabungkan ke satu task type, atau implementasikan `applyChanges` yang benar-benar memanggil GenieACS `addObject`/`setParameterValues` apply flow terpisah dari refresh.
 
 ### M-05: Alpine 3.19 Outdated di Dockerfile
@@ -121,7 +121,7 @@
 
 - **File**: `Dockerfile:20`
 - **Detail**: `go mod tidy` dijalankan di builder stage. Ini bisa memodifikasi `go.mod`/`go.sum` saat build.
-- **Impact**: Non-reproducible builds — output bisa berbeda tergantung waktu build dan available module versions.
+- **Impact**: Non-reproducible builds: output bisa berbeda tergantung waktu build dan available module versions.
 - **Fix**: Hapus `go mod tidy` dari Dockerfile. Pastikan `go.mod` dan `go.sum` sudah clean sebelum commit.
 
 ### M-07: Linter Version Inconsistency
@@ -155,19 +155,19 @@
 ### M-11: Production Docker Compose Image Hardcoded
 
 - **File**: `examples/docker/docker-compose.yml`
-- **Detail**: Image di-pin ke `cepatkilatteknologi/genieacs-relay:1.0.0` — hardcoded, bukan variable.
+- **Detail**: Image di-pin ke `cepatkilatteknologi/genieacs-relay:1.0.0`: hardcoded, bukan variable.
 - **Impact**: User harus manual edit file untuk setiap upgrade. Mudah lupa update.
 - **Fix**: Gunakan environment variable atau `.env` file: `image: cepatkilatteknologi/genieacs-relay:${VERSION:-latest}`.
 
 ---
 
-## LOW — Nice to Have
+## LOW - Nice to Have
 
 ### L-01: `strconv.Atoi` Error Ignored di `buildChannelParams`
 
 - **File**: `utils.go:503`
 - **Detail**: `strconv.Atoi(channel)` error di-ignore dengan `_`. Upstream `ValidateWLANChannel` sudah memastikan channel valid, tapi ini code smell.
-- **Impact**: Minimal — guarded oleh upstream validation. Tapi jika validation path berubah, ini bisa jadi silent bug.
+- **Impact**: Minimal: guarded oleh upstream validation. Tapi jika validation path berubah, ini bisa jadi silent bug.
 - **Fix**: Handle error explicitly, atau tambahkan comment menjelaskan kenapa aman.
 
 ### L-02: Global Variables di `main.go`
@@ -219,14 +219,14 @@
 - **Impact**: Cache clearing bugs dan race conditions tidak terdeteksi oleh tests.
 - **Fix**: Tambahkan test untuk clear operations dan concurrent goroutine access patterns.
 
-### L-09: Helm `values.yaml` — `pullPolicy: Always` dengan Semver Tags
+### L-09: Helm `values.yaml` - `pullPolicy: Always` dengan Semver Tags
 
 - **File**: `examples/helm/genieacs-relay/values.yaml`
 - **Detail**: `image.pullPolicy: Always` meskipun production menggunakan semver-pinned tags.
 - **Impact**: Unnecessary image pulls pada setiap pod restart. Sedikit memperlambat startup dan menambah registry load.
 - **Fix**: Ubah default ke `IfNotPresent` untuk pinned tags. User bisa override jika pakai `latest`.
 
-### L-10: Helm Chart — No `helm test` Hook
+### L-10: Helm Chart - No `helm test` Hook
 
 - **File**: `examples/helm/genieacs-relay/templates/`
 - **Detail**: Tidak ada test Pod dengan `helm.sh/hook: test` annotation. `helm test <release>` adalah no-op.
@@ -250,4 +250,4 @@
 | **HIGH** | 6 | Prioritas tinggi |
 | **MEDIUM** | 11 | Perlu diperbaiki |
 | **LOW** | 11 | Nice to have |
-| **Total** | **31** | — |
+| **Total** | **31** | - |

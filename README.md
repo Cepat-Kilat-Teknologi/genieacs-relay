@@ -10,7 +10,7 @@
 A lightweight **Relay** for managing devices via **GenieACS**, built with **Go**.
 This service provides HTTP endpoints for CPE lifecycle operations
 (reboot, DHCP refresh, optical health read), SSID/WLAN management, device
-capability detection, and DHCP client retrieval — all via the GenieACS NBI.
+capability detection, and DHCP client retrieval, all via the GenieACS NBI.
 
 ---
 
@@ -76,55 +76,55 @@ See [SECURITY.md](SECURITY.md) for details.
 | Method | Endpoint | Description | Idempotent |
 |--------|----------|-------------|:-:|
 | | **WLAN Management** | | |
-| GET | `/ssid/{ip}` | Get SSID configurations for device | — |
-| GET | `/force/ssid/{ip}` | Get SSID with force refresh + retry loop | — |
-| POST | `/ssid/{ip}/refresh` | Trigger async SSID refresh task | ✅ |
-| GET | `/capability/{ip}` | Get device band capability (single / dualband) | — |
-| GET | `/wlan/available/{ip}` | Get available WLAN slots with configuration options | — |
-| POST | `/wlan/create/{wlan}/{ip}` | Create new WLAN on slot 1–8 | ✅ |
-| PUT | `/wlan/update/{wlan}/{ip}` | Update WLAN (SSID / password / auth / encryption / hidden / max_clients) | ✅ |
-| PUT | `/wlan/enable/{wlan}/{ip}` | Enable or disable a WLAN slot | ✅ |
-| DELETE | `/wlan/delete/{wlan}/{ip}` | Disable WLAN slot (soft-delete, preserves configuration) | ✅ |
-| PUT | `/wlan/optimize/{wlan}/{ip}` | Optimize radio settings (channel, bandwidth, mode, transmit_power) | ✅ |
+| GET | `/ssid/{ip}` | Get SSID configurations for device | - |
+| GET | `/force/ssid/{ip}` | Get SSID with force refresh + retry loop | - |
+| POST | `/ssid/{ip}/refresh` | Trigger async SSID refresh task | Yes |
+| GET | `/capability/{ip}` | Get device band capability (single / dualband) | - |
+| GET | `/wlan/available/{ip}` | Get available WLAN slots with configuration options | - |
+| POST | `/wlan/create/{wlan}/{ip}` | Create new WLAN on slot 1–8 | Yes |
+| PUT | `/wlan/update/{wlan}/{ip}` | Update WLAN (SSID / password / auth / encryption / hidden / max_clients) | Yes |
+| PUT | `/wlan/enable/{wlan}/{ip}` | Enable or disable a WLAN slot | Yes |
+| DELETE | `/wlan/delete/{wlan}/{ip}` | Disable WLAN slot (soft-delete, preserves configuration) | Yes |
+| PUT | `/wlan/optimize/{wlan}/{ip}` | Optimize radio settings (channel, bandwidth, mode, transmit_power) | Yes |
 | | **WiFi Inspection** | | |
-| GET | `/wifi-clients/{ip}` | List connected WiFi clients | — |
-| GET | `/wifi-stats/{ip}` | Get WiFi radio statistics | — |
+| GET | `/wifi-clients/{ip}` | List connected WiFi clients | - |
+| GET | `/wifi-stats/{ip}` | Get WiFi radio statistics | - |
 | | **DHCP** | | |
-| GET | `/dhcp-client/{ip}` | Get DHCP clients (optional `?refresh=true`) | — |
-| POST | `/dhcp/{ip}/refresh` | Refresh DHCP client cache | ✅ |
+| GET | `/dhcp-client/{ip}` | Get DHCP clients (optional `?refresh=true`) | - |
+| POST | `/dhcp/{ip}/refresh` | Refresh DHCP client cache | Yes |
 | | **Device Management** | | |
-| GET | `/status/{ip}` | Get device status summary | — |
-| GET | `/optical/{ip}` | Get optical power / signal stats | — |
-| GET | `/wan/{ip}` | Get WAN connection info | — |
-| POST | `/params/{ip}` | Set arbitrary TR-069 parameters | ✅ |
-| POST | `/reboot/{ip}` | Reboot device | ✅ |
-| POST | `/factory-reset/{ip}` | Factory reset device | ✅ |
-| POST | `/wake/{ip}` | Wake device (connection request) | ✅ |
-| PUT | `/tags/{ip}` | Set device tags | ✅ |
-| POST | `/cache/clear` | Clear device cache (specific or all) | — |
-| GET | `/devices` | List all devices | — |
-| GET | `/devices/search` | Search devices by query | — |
+| GET | `/status/{ip}` | Get device status summary | - |
+| GET | `/optical/{ip}` | Get optical power / signal stats | - |
+| GET | `/wan/{ip}` | Get WAN connection info | - |
+| POST | `/params/{ip}` | Set arbitrary TR-069 parameters | Yes |
+| POST | `/reboot/{ip}` | Reboot device | Yes |
+| POST | `/factory-reset/{ip}` | Factory reset device | Yes |
+| POST | `/wake/{ip}` | Wake device (connection request) | Yes |
+| PUT | `/tags/{ip}` | Set device tags | Yes |
+| POST | `/cache/clear` | Clear device cache (specific or all) | - |
+| GET | `/devices` | List all devices | - |
+| GET | `/devices/search` | Search devices by query | - |
 | | **Network Configuration** | | |
-| PUT | `/pppoe/{ip}` | Configure PPPoE credentials | ✅ |
-| PUT | `/qos/{ip}` | Configure QoS settings | ✅ |
-| PUT | `/bridge-mode/{ip}` | Set bridge mode | ✅ |
-| PUT | `/ntp/{ip}` | Configure NTP server | ✅ |
-| PUT | `/admin-password/{ip}` | Change admin password | ✅ |
-| PUT | `/dmz/{ip}` | Configure DMZ | ✅ |
-| PUT | `/ddns/{ip}` | Configure DDNS | ✅ |
-| PUT | `/port-forwarding/{ip}` | Configure port forwarding rules | ✅ |
-| PUT | `/static-dhcp/{ip}` | Configure static DHCP reservations | ✅ |
-| PUT | `/wifi-schedule/{ip}` | Configure WiFi schedule | ✅ |
-| PUT | `/mac-filter/{ip}` | Configure MAC address filter | ✅ |
+| PUT | `/pppoe/{ip}` | Configure PPPoE credentials | Yes |
+| PUT | `/qos/{ip}` | Configure QoS settings | Yes |
+| PUT | `/bridge-mode/{ip}` | Set bridge mode | Yes |
+| PUT | `/ntp/{ip}` | Configure NTP server | Yes |
+| PUT | `/admin-password/{ip}` | Change admin password | Yes |
+| PUT | `/dmz/{ip}` | Configure DMZ | Yes |
+| PUT | `/ddns/{ip}` | Configure DDNS | Yes |
+| PUT | `/port-forwarding/{ip}` | Configure port forwarding rules | Yes |
+| PUT | `/static-dhcp/{ip}` | Configure static DHCP reservations | Yes |
+| PUT | `/wifi-schedule/{ip}` | Configure WiFi schedule | Yes |
+| PUT | `/mac-filter/{ip}` | Configure MAC address filter | Yes |
 | | **Diagnostics** | | |
-| POST | `/diag/ping/{ip}` | Run ping diagnostic | ✅ |
-| POST | `/diag/traceroute/{ip}` | Run traceroute diagnostic | ✅ |
+| POST | `/diag/ping/{ip}` | Run ping diagnostic | Yes |
+| POST | `/diag/traceroute/{ip}` | Run traceroute diagnostic | Yes |
 | | **Firmware** | | |
-| POST | `/firmware/{ip}` | Upload and apply firmware | ✅ |
+| POST | `/firmware/{ip}` | Upload and apply firmware | Yes |
 | | **Presets** | | |
-| GET | `/presets/{name}` | Get preset by name | — |
-| PUT | `/presets/{name}` | Create or update preset | ✅ |
-| DELETE | `/presets/{name}` | Delete preset | ✅ |
+| GET | `/presets/{name}` | Get preset by name | - |
+| PUT | `/presets/{name}` | Create or update preset | Yes |
+| DELETE | `/presets/{name}` | Delete preset | Yes |
 
 Write endpoints honor `X-Idempotency-Key` header; repeated calls within a
 7-day TTL replay the cached response without re-executing.
@@ -183,7 +183,7 @@ make run
 
 > **Production:** `.env.production` contains the production configuration template
 > with placeholder secrets. Copy it and fill in real values for deployment.
-> Both `.env` and `.env.production` are gitignored — never commit real credentials.
+> Both `.env` and `.env.production` are gitignored, never commit real credentials.
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
@@ -246,12 +246,12 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
 ### Standard Response Envelope
 
-**Success (2xx)** — always `status:"success"` with `data` as the resource payload:
+**Success (2xx)**: always `status:"success"` with `data` as the resource payload:
 ```json
 { "code": 200, "status": "success", "data": { ... } }
 ```
 
-**Error (4xx/5xx)** — includes `error_code` for machine handling and `request_id` for end-to-end tracing:
+**Error (4xx/5xx)**: includes `error_code` for machine handling and `request_id` for end-to-end tracing:
 ```json
 {
   "code": 404,
