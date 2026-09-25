@@ -6,6 +6,14 @@ All notable changes to genieacs-relay are documented in this file. The format is
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/readyz` reports a rejected NBI key** -- the GenieACS ping treated every
+  status below 500 as up, so a wrong `NBI_AUTH_KEY` (401/403 from the NBI auth
+  proxy) still reported `ready` while every real NBI call failed. 401 and 403
+  now return `down` with `nbi auth rejected (status N)` and `/readyz` returns
+  503. Other 4xx, including the 404 GenieACS returns for `GET /`, stay up.
+
 ### Security
 
 - **MongoDB regex injection prevention** -- user-supplied `model` and

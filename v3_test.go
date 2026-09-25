@@ -319,6 +319,44 @@ func TestHealthCheckerPingDown(t *testing.T) {
 	assert.Equal(t, "down", state.Dependencies["genieacs"].State)
 }
 
+func TestHealthCheckerPingAuthRejected(t *testing.T) {
+	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(code)
+		}))
+
+		origURL := geniesBaseURL
+		geniesBaseURL = ts.URL
+
+		hc := &healthChecker{cacheTTL: 0, httpDo: http.DefaultClient.Do}
+		state := hc.check(context.Background())
+		assert.Equal(t, "not_ready", state.Status, "status %d", code)
+		assert.Equal(t, "down", state.Dependencies["genieacs"].State, "status %d", code)
+		assert.Contains(t, state.Dependencies["genieacs"].Error, "auth rejected", "status %d", code)
+
+		geniesBaseURL = origURL
+		ts.Close()
+	}
+}
+
+func TestHealthCheckerPingNotFoundIsUp(t *testing.T) {
+	// GenieACS NBI answers 404 on GET / once the nginx auth proxy lets the
+	// request through; that proves both reachability and a valid key.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	origURL := geniesBaseURL
+	geniesBaseURL = ts.URL
+	defer func() { geniesBaseURL = origURL }()
+
+	hc := &healthChecker{cacheTTL: 0, httpDo: http.DefaultClient.Do}
+	state := hc.check(context.Background())
+	assert.Equal(t, "ready", state.Status)
+	assert.Equal(t, "up", state.Dependencies["genieacs"].State)
+}
+
 func TestHealthCheckerCache(t *testing.T) {
 	calls := 0
 	hc := &healthChecker{
