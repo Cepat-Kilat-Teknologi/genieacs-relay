@@ -133,7 +133,7 @@ GET http://localhost:8080/healthz
 
 ### GET /readyz
 
-Kubernetes readiness probe. Checks upstream GenieACS NBI reachability with a cached 5-second TTL probe (prevents probe storms on k8s). Returns 200 when ready, 503 when GenieACS is unreachable.
+Kubernetes readiness probe. Checks upstream GenieACS NBI reachability with a cached 5-second TTL probe (prevents probe storms on k8s). Returns 200 when ready, 503 when GenieACS is unreachable, returns 5xx, or the NBI auth proxy rejects `NBI_AUTH_KEY` (401/403). Any other status, including the 404 the NBI returns for `GET /`, counts as up.
 
 **Request:**
 ```http
@@ -160,6 +160,19 @@ GET http://localhost:8080/readyz
     "genieacs": {
       "state": "down",
       "error": "request failed: Get \"http://localhost:7557/\": dial tcp: connect: connection refused"
+    }
+  }
+}
+```
+
+**Response (503, wrong `NBI_AUTH_KEY`):**
+```json
+{
+  "status": "not_ready",
+  "dependencies": {
+    "genieacs": {
+      "state": "down",
+      "error": "nbi auth rejected (status 401)"
     }
   }
 }
