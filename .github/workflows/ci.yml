@@ -288,11 +288,12 @@ jobs:
           GH_SHA: ${{ github.sha }}
         run: |
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-          # Prefer semver tag for APP_VERSION on tag builds, fall back to branch+sha.
+          # APP_VERSION is the semver tag on tag builds and the short SHA
+          # otherwise. It also feeds the Sentry release (genieacs-relay@<version>).
           if [[ "$REF_TYPE" == "tag" ]]; then
             echo "app_version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "app_version=${REF_NAME}-${GH_SHA:0:7}" >> "$GITHUB_OUTPUT"
+            echo "app_version=${GH_SHA:0:7}" >> "$GITHUB_OUTPUT"
           fi
 
       # Build and push to both registries

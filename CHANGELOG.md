@@ -6,6 +6,16 @@ All notable changes to genieacs-relay are documented in this file. The format is
 
 ## [Unreleased]
 
+### Changed
+
+- **Sentry release and environment** -- the Sentry release is now
+  `genieacs-relay@<version>`, where the version is the tag on tag builds and the
+  short commit SHA on main builds (CI now passes the short SHA as `APP_VERSION`
+  instead of `<branch>-<sha>`), and `dev` for local builds. `SENTRY_RELEASE`
+  overrides it. The environment is `SENTRY_ENVIRONMENT`, falling back to
+  `APP_ENV` and then the legacy `ENVIRONMENT` variable (previously only
+  `ENVIRONMENT` was read). (ref: MIS-13)
+
 ### Security
 
 - **MongoDB regex injection prevention** -- user-supplied `model` and

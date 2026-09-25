@@ -178,10 +178,11 @@ func main() {
 	}()
 
 	// Sentry error tracking — no-op when SENTRY_DSN is empty (local dev).
+	sentryEnv, sentryRelease := resolveSentryConfig(os.Getenv, version)
 	if err := sentry.Init(
 		os.Getenv("SENTRY_DSN"),
-		os.Getenv("ENVIRONMENT"),
-		version,
+		sentryEnv,
+		sentryRelease,
 	); err != nil {
 		logger.Warn("Sentry init failed, continuing without error tracking", zap.Error(err))
 	}

@@ -126,6 +126,10 @@ Key invariants:
 
 **Observability (Sprint 18-19):**
 - `SENTRY_DSN`: Sentry error tracking; empty = disabled
+- `SENTRY_ENVIRONMENT`: Sentry environment (e.g. `prod-jkt`); falls back to
+  `APP_ENV`, then the legacy `ENVIRONMENT`
+- `SENTRY_RELEASE`: overrides the Sentry release; default
+  `genieacs-relay@<version>` from `main.version` (tag, short SHA, or `dev`)
 - `OTEL_ENABLED` (`false`): OpenTelemetry tracing
 - `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317`): OTel collector
 - `OTEL_SERVICE_NAME` (`genieacs-relay`): OTel service name
@@ -164,7 +168,7 @@ binary reporting `"dev"/"none"` with no error.
 | Feature | Status | Details |
 |---------|:------:|---------|
 | OTel tracing | Yes | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` |
-| Sentry | Yes | `SENTRY_DSN` (empty = disabled) |
+| Sentry | Yes | `SENTRY_DSN` (empty = disabled), `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` |
 | Rate limiting | Yes | Per-IP token bucket: `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` |
 | Security headers | Yes | `securityHeadersMiddleware` in `middleware.go` (always active, no env vars) |
 | Body size limit | Yes | 1 MB (JSON-only CPE commands) |
