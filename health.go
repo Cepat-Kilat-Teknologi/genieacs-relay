@@ -44,8 +44,13 @@ func (h *healthChecker) pingGenieACS(ctx context.Context) DependencyState {
 		return DependencyState{State: "down", Error: fmt.Sprintf("request failed: %v", err)}
 	}
 	defer safeClose(resp.Body)
-	// GenieACS NBI returns 200 on GET /; any 2xx/3xx/4xx means the process is up
-	// (auth errors still confirm reachability). Only connection-level errors count as down.
+	// 401/403 come from the NBI auth proxy: GenieACS is reachable but every real
+	// call would fail, so the relay is not ready. A wrong NBI_AUTH_KEY was
+	// reported "up" for days before this check existed.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return DependencyState{State: "down", Error: fmt.Sprintf("nbi auth rejected (status %d)", resp.StatusCode)}
+	}
+	// Other 2xx/3xx/4xx mean the NBI answered; GenieACS NBI returns 404 on GET /.
 	if resp.StatusCode >= http.StatusInternalServerError {
 		return DependencyState{State: "down", Error: fmt.Sprintf("status %d", resp.StatusCode)}
 	}
