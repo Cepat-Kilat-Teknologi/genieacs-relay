@@ -1,0 +1,24 @@
+vendor: intelbras
+description: >
+  Intelbras ONT path overrides. Covers ONT 121AC, ONT 142NW, ONT 242W, and
+  similar models used in Brazilian ISP deployments.
+  TODO (v2.3.0): Full parameter tree dump required from a live Intelbras ONT
+  to complete vendor-specific path mappings. Volunteer lab submissions
+  welcome — see issue #1 for instructions.
+
+# ManufacturerOUI values reported by Intelbras devices in TR-069 Inform.
+oui:
+  - "000B82"   # Intelbras S.A.
+
+# ProductClass values reported by Intelbras ONTs (case-insensitive match).
+product_class:
+  - "ONT 121AC"
+  - "ONT 142NW"
+  - "ONT 242W"
+  - "ONT 121W"
+
+# features: {}
+# TODO: populate from live device parameter tree dump.
+# Intelbras ONTs are OEM'd from multiple chipset vendors; paths may vary
+# between product lines. Submit a GET /params/{ip} dump from a live
+# Intelbras ONT to unlock vendor-specific path overrides.

@@ -1,0 +1,22 @@
+vendor: fiberhome
+description: >
+  FiberHome ONT path overrides. Covers HG6243C, HG6145F, AN5506-04 and
+  similar models. FiberHome ONTs generally follow TR-098 standard paths for
+  PPPoE / DMZ / port-forwarding; optical stats use the standard subtrees.
+
+# ManufacturerOUI values reported by FiberHome devices in TR-069 Inform.
+oui:
+  - "0019E0"   # FiberHome Telecommunication Technologies Co., Ltd.
+  - "241815"   # FiberHome (alternative OUI)
+
+# ProductClass values reported by FiberHome ONTs (case-insensitive match).
+product_class:
+  - "HG6243C"
+  - "HG6145F"
+  - "AN5506-04-FA"
+  - "AN5506-04-F"
+  - "AN5506-04-FS"
+
+# FiberHome uses standard TR-098 paths for most features.
+# No overrides needed at this time; vendor file retained for OUI/product_class
+# identification. Optical paths inherit from default.yaml.
