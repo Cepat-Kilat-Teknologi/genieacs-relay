@@ -50,3 +50,7 @@ AGENTS.md
 .cursorrules
 .aider*
 .omc/
+
+# Screenshots and dev tool artifacts
+.playwright-mcp/
+graphify-out/
