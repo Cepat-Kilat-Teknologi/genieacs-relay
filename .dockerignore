@@ -28,6 +28,10 @@ Makefile
 Dockerfile*
 docker-compose*.yml
 
+# Screenshots and dev tool artifacts
+.playwright-mcp/
+graphify-out/
+
 # AI assistant tooling — local only, never committed
 .claude/
 CLAUDE.md
