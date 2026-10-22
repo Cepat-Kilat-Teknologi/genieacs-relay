@@ -3,7 +3,7 @@ module github.com/Cepat-Kilat-Teknologi/genieacs-relay
 go 1.26.10
 
 require (
-	github.com/getsentry/sentry-go v0.49.0
+	github.com/getsentry/sentry-go v0.50.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/riandyrn/otelchi v0.12.3
