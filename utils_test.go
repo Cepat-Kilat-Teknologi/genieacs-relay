@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -443,4 +444,63 @@ func TestExtractDeviceIDByIP_LookupTimeout(t *testing.T) {
 	assert.Equal(t, http.StatusRequestTimeout, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"error_code":"TIMEOUT"`)
 	assert.Contains(t, rr.Body.String(), ErrDeviceLookupTimeout)
+}
+
+func TestExtractDeviceIDByIP_LookupErrorMapping(t *testing.T) {
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+	}
+
+	tests := []struct {
+		name       string
+		lookup     int // status the NBI returns for the device lookup
+		breaker    bool
+		prime      bool // send one request first to trip the breaker
+		wantStatus int
+		wantCode   string
+		wantMsg    string
+	}{
+		{name: "NBI 500", lookup: http.StatusInternalServerError, wantStatus: http.StatusBadGateway, wantCode: ErrCodeGenieACS, wantMsg: ErrDeviceLookupUpstream},
+		{name: "NBI 503", lookup: http.StatusServiceUnavailable, wantStatus: http.StatusBadGateway, wantCode: ErrCodeGenieACS, wantMsg: ErrDeviceLookupUpstream},
+		{name: "circuit open", lookup: http.StatusInternalServerError, breaker: true, prime: true, wantStatus: http.StatusServiceUnavailable, wantCode: ErrCodeServiceUnavailable, wantMsg: ErrDeviceLookupUnavailable},
+		{name: "device not found", lookup: http.StatusOK, wantStatus: http.StatusNotFound, wantCode: ErrCodeNotFound, wantMsg: "Device not found"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.lookup)
+				_, _ = w.Write([]byte(`[]`))
+			}))
+			defer srv.Close()
+
+			originalURL := geniesBaseURL
+			geniesBaseURL = srv.URL
+			defer func() { geniesBaseURL = originalURL }()
+
+			if tc.breaker {
+				initBreaker(testBreakerConfig(1), zap.NewNop())
+				defer func() { nbiBreaker = nil }()
+			}
+
+			r := chi.NewRouter()
+			r.Get("/test/{ip}", func(w http.ResponseWriter, r *http.Request) {
+				_, _ = ExtractDeviceIDByIP(w, r)
+			})
+			serve := func() *httptest.ResponseRecorder {
+				rr := httptest.NewRecorder()
+				r.ServeHTTP(rr, httptest.NewRequest("GET", "/test/192.168.1.100", nil))
+				return rr
+			}
+
+			if tc.prime {
+				require.Equal(t, http.StatusBadGateway, serve().Code)
+			}
+			rr := serve()
+
+			assert.Equal(t, tc.wantStatus, rr.Code)
+			assert.Contains(t, rr.Body.String(), `"error_code":"`+tc.wantCode+`"`)
+			assert.Contains(t, rr.Body.String(), tc.wantMsg)
+		})
+	}
 }
