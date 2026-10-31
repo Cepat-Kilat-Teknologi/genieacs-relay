@@ -148,6 +148,8 @@ const (
 	EnvRateLimitRequests = "RATE_LIMIT_REQUESTS"
 	// EnvRateLimitWindow is the environment variable for rate limit window in seconds
 	EnvRateLimitWindow = "RATE_LIMIT_WINDOW"
+	// EnvRateLimitTrustedProxies lists the CIDRs/IPs whose forwarding headers are honored
+	EnvRateLimitTrustedProxies = "RATE_LIMIT_TRUSTED_PROXIES"
 	// DefaultRateLimitRequests is the default rate limit (100 requests per window)
 	DefaultRateLimitRequests = 100
 	// DefaultRateLimitWindow is the default rate limit window (60 seconds)
