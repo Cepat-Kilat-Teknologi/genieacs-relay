@@ -36,13 +36,16 @@ All notable changes to genieacs-relay are documented in this file. The format is
   - `503 SERVICE_UNAVAILABLE` (`GenieACS is temporarily unavailable, retry
     later`) when the NBI circuit breaker is open
   - `502 GENIEACS_ERROR` (`GenieACS returned an error while looking up the
-    device`) when the NBI answers with a 5xx
+    device`) when the NBI answers with a 5xx, or with 401/403 because
+    `NBI_AUTH_KEY` is wrong; the upstream body is never echoed
+  - `400 VALIDATION_ERROR` before any NBI call when `{ip}` is not a usable
+    IPv4 address (malformed, loopback, multicast, unspecified or IPv6)
 
   A device GenieACS does not know, a stale device and any other lookup error
   keep `404 NOT_FOUND`. Callers that treat 404 as "device absent", such as
   isp-agent read activities that stop retrying on `NOT_FOUND`, now retry
   these transient failures instead of failing the workflow. Swagger documents
-  408, 502 and 503 on all 36 `{ip}` endpoints. (ref: billing-platform#84)
+  400, 408, 502 and 503 on all 36 `{ip}` endpoints. (ref: billing-platform#84)
 - **Flaky `TestGetSSIDByIPForceHandler`** -- the `Timeout` and `Context timeout
   in retry loop` subtests used 5-10 ms wall-clock deadlines that also covered
   the device lookup, so under load they failed with 404 in about 3% of runs
