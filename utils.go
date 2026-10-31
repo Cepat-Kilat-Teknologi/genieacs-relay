@@ -60,14 +60,29 @@ func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) 
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
-		if errors.Is(err, context.DeadlineExceeded) {
-			sendError(w, r, http.StatusRequestTimeout, ErrCodeTimeout, ErrDeviceLookupTimeout)
-			return "", false
-		}
-		sendError(w, r, http.StatusNotFound, ErrCodeNotFound, sanitizeErrorMessage(err))
+		status, code, msg := lookupErrorResponse(err)
+		sendError(w, r, status, code, msg)
 		return "", false
 	}
 	return deviceID, true
+}
+
+// lookupErrorResponse maps a device lookup error to the HTTP status, error
+// code and message sent to the client. Only a lookup that reached GenieACS
+// and found no usable device is a 404; timeouts, an open circuit and NBI
+// server errors say so, so callers do not mistake them for a missing device.
+func lookupErrorResponse(err error) (int, string, string) {
+	var statusErr *nbiStatusError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusRequestTimeout, ErrCodeTimeout, ErrDeviceLookupTimeout
+	case errors.Is(err, ErrCircuitOpen):
+		return http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrDeviceLookupUnavailable
+	case errors.As(err, &statusErr) && statusErr.StatusCode >= http.StatusInternalServerError:
+		return http.StatusBadGateway, ErrCodeGenieACS, ErrDeviceLookupUpstream
+	default:
+		return http.StatusNotFound, ErrCodeNotFound, sanitizeErrorMessage(err)
+	}
 }
 
 // getIPParam returns the `{ip}` URL path parameter from the request.
