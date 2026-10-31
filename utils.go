@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -58,6 +60,10 @@ func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) 
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
+		if errors.Is(err, context.DeadlineExceeded) {
+			sendError(w, r, http.StatusRequestTimeout, ErrCodeTimeout, ErrDeviceLookupTimeout)
+			return "", false
+		}
 		sendError(w, r, http.StatusNotFound, ErrCodeNotFound, sanitizeErrorMessage(err))
 		return "", false
 	}
