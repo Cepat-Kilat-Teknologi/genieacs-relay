@@ -18,6 +18,10 @@ All notable changes to genieacs-relay are documented in this file. The format is
 
 ### Fixed
 
+- **Swagger out of sync with the annotations** -- `docs/docs.go` and
+  `docs/swagger.json` were missing `PUT /wlan/enable/{wlan}/{ip}`, which only
+  `docs/swagger.yaml` listed. The three files are regenerated with swag
+  v1.16.6 (the go.mod version) and now match the annotations.
 - **`/readyz` reports a rejected NBI key** -- the GenieACS ping treated every
   status below 500 as up, so a wrong `NBI_AUTH_KEY` (401/403 from the NBI auth
   proxy) still reported `ready` while every real NBI call failed. 401 and 403
