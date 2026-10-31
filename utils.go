@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,16 +13,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// GetClientIP extracts the client IP address from the request.
-// It checks X-Real-IP header first (for proxied requests), then falls back to RemoteAddr.
+// GetClientIP returns the client address for audit logs, auth lockout and
+// rate limiting. Forwarding headers count only from RATE_LIMIT_TRUSTED_PROXIES.
 func GetClientIP(r *http.Request) string {
-	clientIP := r.RemoteAddr
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		if parsedIP := net.ParseIP(realIP); parsedIP != nil {
-			clientIP = realIP
-		}
-	}
-	return clientIP
+	return trustedProxies.ClientIP(r)
 }
 
 // safeClose safely closes an io.Closer resource and logs any errors
