@@ -35,7 +35,7 @@ func TestGetDHCPClientByIPHandler(t *testing.T) {
 }
 
 func TestGetDHCPClientByIPHandler_Complete(t *testing.T) {
-	t.Run("Error Getting Device ID", func(t *testing.T) {
+	t.Run("Invalid IP rejected before lookup", func(t *testing.T) {
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
@@ -46,7 +46,8 @@ func TestGetDHCPClientByIPHandler_Complete(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
-		assert.Equal(t, http.StatusNotFound, rr.Code)
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), `"error_code":"VALIDATION_ERROR"`)
 	})
 
 	t.Run("Error Getting DHCP Clients", func(t *testing.T) {
