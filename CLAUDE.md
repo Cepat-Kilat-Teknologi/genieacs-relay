@@ -85,10 +85,12 @@ Key invariants:
 - **Context propagation**: all GenieACS calls use `r.Context()` via
   `http.NewRequestWithContext` for timeouts/cancellation
 - **Worker pool**: if `taskWorkerPool.Submit()` returns false → 503, never drop
-- **Device lookup**: `ExtractDeviceIDByIP` maps lookup errors in
+- **Device lookup**: `ExtractDeviceIDByIP` rejects an invalid `{ip}` with 400
+  `VALIDATION_ERROR` before calling the NBI, then maps lookup errors in
   `lookupErrorResponse`: deadline 408 `TIMEOUT`, `ErrCircuitOpen` 503
-  `SERVICE_UNAVAILABLE`, NBI 5xx (`nbiStatusError`) 502 `GENIEACS_ERROR`,
-  anything else 404 `NOT_FOUND`. Only 404 means the device is absent
+  `SERVICE_UNAVAILABLE`, NBI 5xx/401/403 (`nbiStatusError`) 502
+  `GENIEACS_ERROR`, anything else 404 `NOT_FOUND`. Only 404 means the device
+  is absent
 
 ## API Routes
 
