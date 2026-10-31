@@ -32,8 +32,11 @@ import (
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/factory-reset/{ip} [post]
 func factoryResetDeviceHandler(w http.ResponseWriter, r *http.Request) {
@@ -76,8 +79,11 @@ func factoryResetDeviceHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wake/{ip} [post]
 func wakeDeviceHandler(w http.ResponseWriter, r *http.Request) {
