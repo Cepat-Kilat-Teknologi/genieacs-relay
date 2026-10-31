@@ -263,7 +263,6 @@ const (
 	ErrPasswordTooLong      = "Password must be at most 63 characters"
 	ErrWLANValidationFailed = "Could not verify WLAN status."
 	ErrOperationTimeout     = "Operation timed out while retrieving WLAN data"
-	ErrDeviceLookupTimeout  = "Operation timed out while looking up the device"
 	ErrDeviceStale          = "device with IP %s is stale (last seen: %s ago). The IP may have been reassigned to another device"
 	ErrInvalidIPAddress     = "invalid IP address format: %s"
 	ErrInvalidWLANID        = "WLAN ID must be a number between 1 and 8"
@@ -377,6 +376,13 @@ const (
 	ErrPresetBodyRequired         = "preset body is required for PUT"
 	ErrPresetDispatchFailed       = "Failed to dispatch preset operation via NBI"
 	ErrEnabledRequired            = "enabled is required (true or false)"
+)
+
+// Device lookup errors returned by ExtractDeviceIDByIP when resolving {ip}.
+const (
+	ErrDeviceLookupTimeout     = "Operation timed out while looking up the device"
+	ErrDeviceLookupUpstream    = "GenieACS returned an error while looking up the device"
+	ErrDeviceLookupUnavailable = "GenieACS is temporarily unavailable, retry later"
 )
 
 // Firmware default values
