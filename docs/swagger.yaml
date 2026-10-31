@@ -3375,8 +3375,8 @@ paths:
       - WLAN
   /wlan/enable/{wlan}/{ip}:
     put:
-      description: Re-enables a previously disabled WLAN. Only sets Enable=true;
-        SSID and password remain unchanged.
+      description: Re-enables a previously disabled WLAN. Only sets Enable=true; SSID
+        and password remain unchanged.
       parameters:
       - description: WLAN ID (1-8)
         example: "2"
