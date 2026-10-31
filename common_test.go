@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -249,3 +250,30 @@ func TestMain(m *testing.M) {
 func init() {
 	loadConfigFromEnv()
 }
+
+// expiringCtx is a context whose deadline the test expires explicitly. Tests
+// that need a timeout at a specific point in a handler (for example while the
+// WLAN fetch is in flight, after the device lookup has returned) call expire()
+// from the mock upstream, so the outcome does not depend on scheduler timing.
+type expiringCtx struct {
+	context.Context
+	done chan struct{}
+	once sync.Once
+}
+
+func newExpiringCtx() *expiringCtx {
+	return &expiringCtx{Context: context.Background(), done: make(chan struct{})}
+}
+
+func (c *expiringCtx) Done() <-chan struct{} { return c.done }
+
+func (c *expiringCtx) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (c *expiringCtx) expire() { c.once.Do(func() { close(c.done) }) }
