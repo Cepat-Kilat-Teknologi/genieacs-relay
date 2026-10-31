@@ -66,8 +66,11 @@ var (
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/qos/{ip} [put]
 func setQoSHandler(w http.ResponseWriter, r *http.Request) {
@@ -250,8 +253,11 @@ var (
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/bridge-mode/{ip} [put]
 func setBridgeModeHandler(w http.ResponseWriter, r *http.Request) {
