@@ -122,7 +122,7 @@ func TestGetDeviceCapabilityHandlerErrors(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
-		assert.True(t, rr.Code == http.StatusNotFound || rr.Code == http.StatusInternalServerError)
+		assert.Equal(t, http.StatusBadGateway, rr.Code)
 	})
 
 	t.Run("Device found but capability fetch fails", func(t *testing.T) {
@@ -214,12 +214,14 @@ func TestGetDeviceIDByIPNonOKStatusHandler(t *testing.T) {
 	_, router := setupTestServer(t, mockHandler)
 	deviceCacheInstance.clearAll()
 
-	req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/1/10.90.14.50", nil)
+	req := httptest.NewRequest("GET", "/api/v1/genieacs/ssid/10.90.14.50", nil)
+	req.Header.Set("X-API-Key", mockAPIKey)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
-	// Should return 404 because device lookup failed
-	assert.Equal(t, http.StatusNotFound, rr.Code)
+	// An NBI 5xx on the lookup is an upstream failure, not a missing device.
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"error_code":"GENIEACS_ERROR"`)
 }
 
 // TestGetDeviceIDByIPInvalidJSONHandler tests invalid JSON response from GenieACS via handler
