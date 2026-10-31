@@ -19,8 +19,11 @@ import (
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/dhcp-client/{ip} [get]
 func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,8 +65,11 @@ func getDHCPClientByIPHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/reboot/{ip} [post]
 func rebootDeviceHandler(w http.ResponseWriter, r *http.Request) {
@@ -99,8 +105,11 @@ func rebootDeviceHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/dhcp/{ip}/refresh [post]
 func refreshDHCPHandler(w http.ResponseWriter, r *http.Request) {
@@ -141,8 +150,11 @@ func refreshDHCPHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response	"Device not found OR optical interface not supported by this CPE model"
+//	@Failure		408		{object}	Response	"Device not found OR optical interface not supported by this CPE model"
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response	"Device not found OR optical interface not supported by this CPE model"
+//	@Failure		503		{object}	Response	"Device not found OR optical interface not supported by this CPE model"
 //	@Security		ApiKeyAuth
 //	@Router			/optical/{ip} [get]
 func getOpticalStatsHandler(w http.ResponseWriter, r *http.Request) {
@@ -187,8 +199,11 @@ func getOpticalStatsHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/capability/{ip} [get]
 func getDeviceCapabilityHandler(w http.ResponseWriter, r *http.Request) {
