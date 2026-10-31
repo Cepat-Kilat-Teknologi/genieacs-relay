@@ -54,8 +54,11 @@ const MaxNTPServers = 5
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/ntp/{ip} [put]
 func setNTPHandler(w http.ResponseWriter, r *http.Request) {
@@ -185,8 +188,11 @@ const AdminPasswordMaxLength = 64
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/admin-password/{ip} [put]
 func setAdminPasswordHandler(w http.ResponseWriter, r *http.Request) {
