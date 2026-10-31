@@ -81,6 +81,23 @@ Configurable per-IP rate limiting to prevent abuse:
 |----------|---------|-------------|
 | `RATE_LIMIT_REQUESTS` | `100` | Maximum requests per window |
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
+| `RATE_LIMIT_TRUSTED_PROXIES` | empty | Comma-separated IPs or CIDRs whose forwarding headers are honored |
+
+### Client IP
+
+The rate limiter, the brute force lockout, audit events and request logs all key on the same client IP.
+
+- `RATE_LIMIT_TRUSTED_PROXIES` empty (the default): the client IP is the TCP peer address only.
+  `X-Forwarded-For` and `X-Real-IP` are ignored, so a caller cannot pick its own rate limit bucket
+  or lockout key.
+- The TCP peer is in `RATE_LIMIT_TRUSTED_PROXIES`: `X-Forwarded-For` is walked right to left and the
+  first hop that is not itself a trusted proxy is the client. Hops to its left were written by that
+  client and are ignored. A malformed hop falls back to the peer address. `X-Real-IP` is read only
+  when `X-Forwarded-For` is absent.
+- The client IP excludes the source port, so opening a new connection does not reset the bucket.
+- A malformed entry in `RATE_LIMIT_TRUSTED_PROXIES` fails startup.
+
+In Kubernetes, set it to the pod or ingress CIDR that fronts the service.
 
 ### Rate Limit Error
 
