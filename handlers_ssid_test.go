@@ -206,7 +206,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		_, router := setupTestServerWithForce(t, mockHandler)
 
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP+"?retry_delay_ms=1", nil)
 		req.Header.Set("X-API-Key", mockAPIKey)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -258,23 +258,21 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 	// Subtest: Timeout (covers errors.Is(err, context.DeadlineExceeded))
 	t.Run("Timeout", func(t *testing.T) {
+		// A wall-clock deadline also covers the device lookup, which under
+		// load can outlast it and turn the expected 408 into a lookup error.
+		// Expire the deadline only once the WLAN fetch is in flight.
+		ctx := newExpiringCtx()
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
-			// Simulate slow response to trigger timeout in getWLANData
-			time.Sleep(100 * time.Millisecond)
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("[" + mockDeviceDataJSON + "]"))
+			ctx.expire()
+			<-r.Context().Done()
 		})
 
 		_, router := setupTestServerWithForce(t, mockHandler)
-
-		// Create request with short timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-		defer cancel()
 
 		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
 		req = req.WithContext(ctx)
@@ -449,7 +447,7 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 
 		_, router := setupTestServerWithForce(t, mockHandler)
 
-		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
+		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP+"?retry_delay_ms=1", nil)
 		req.Header.Set("X-API-Key", mockAPIKey)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -598,22 +596,26 @@ func TestGetSSIDByIPForceHandler(t *testing.T) {
 		logger = testLogger
 		defer func() { logger = originalLogger }()
 
+		// Empty WLAN data sends the loop into a refresh. The deadline expires
+		// during the refresh call, so the loop sees ctx.Done() while waiting
+		// for the next attempt, independent of how long the lookup took.
+		ctx := newExpiringCtx()
 		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Query().Get("projection"), "_id") {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(mockDeviceResponseWithLastInform()))
 				return
 			}
-			// Respond instantly with empty WLAN data to enter retry loop
+			if strings.Contains(r.URL.Path, "/tasks") && r.Method == http.MethodPost {
+				ctx.expire()
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`[{"_id": "` + mockDeviceID + `", "InternetGatewayDevice": {"LANDevice": {"1": {}}}}]`))
 		})
 
 		_, router := setupTestServerWithForce(t, mockHandler)
-
-		// Create request with short timeout to trigger ctx.Done() in retry loop
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-		defer cancel()
 
 		req := httptest.NewRequest("GET", "/api/v1/genieacs/force/ssid/"+mockDeviceIP, nil)
 		req = req.WithContext(ctx)
