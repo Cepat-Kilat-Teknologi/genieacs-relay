@@ -276,40 +276,29 @@ func TestExtractDeviceIDByIP_ErrorSanitization(t *testing.T) {
 }
 
 func TestGetClientIP(t *testing.T) {
-	t.Run("Uses RemoteAddr when no X-Real-IP header", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "192.168.1.100:12345"
-
-		clientIP := GetClientIP(req)
-		assert.Equal(t, "192.168.1.100:12345", clientIP)
-	})
-
-	t.Run("Uses valid X-Real-IP header", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "192.168.1.100:12345"
-		req.Header.Set("X-Real-IP", "10.0.0.1")
-
-		clientIP := GetClientIP(req)
-		assert.Equal(t, "10.0.0.1", clientIP)
-	})
-
-	t.Run("Ignores invalid X-Real-IP header", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "192.168.1.100:12345"
-		req.Header.Set("X-Real-IP", "not-a-valid-ip")
-
-		clientIP := GetClientIP(req)
-		assert.Equal(t, "192.168.1.100:12345", clientIP)
-	})
-
-	t.Run("Uses X-Real-IP with IPv6", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "192.168.1.100:12345"
-		req.Header.Set("X-Real-IP", "::1")
-
-		clientIP := GetClientIP(req)
-		assert.Equal(t, "::1", clientIP)
-	})
+	tests := []struct {
+		name    string
+		trusted string
+		realIP  string
+		want    string
+	}{
+		{"peer without headers drops the port", "", "", "192.168.1.100"},
+		{"x-real-ip from untrusted peer ignored", "", "10.0.0.1", "192.168.1.100"},
+		{"x-real-ip from trusted peer used", "192.168.1.0/24", "10.0.0.1", "10.0.0.1"},
+		{"invalid x-real-ip from trusted peer ignored", "192.168.1.0/24", "not-a-valid-ip", "192.168.1.100"},
+		{"ipv6 x-real-ip from trusted peer", "192.168.1.0/24", "::1", "::1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withTrustedProxies(t, tt.trusted)
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = "192.168.1.100:12345"
+			if tt.realIP != "" {
+				req.Header.Set("X-Real-IP", tt.realIP)
+			}
+			assert.Equal(t, tt.want, GetClientIP(req))
+		})
+	}
 }
 
 func TestParseJSONRequest(t *testing.T) {
