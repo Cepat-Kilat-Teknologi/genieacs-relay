@@ -27,6 +27,20 @@ All notable changes to genieacs-relay are documented in this file. The format is
   proxy) still reported `ready` while every real NBI call failed. 401 and 403
   now return `down` with `nbi auth rejected (status N)` and `/readyz` returns
   503. Other 4xx, including the 404 GenieACS returns for `GET /`, stay up.
+- **Device lookup timeout reported as 404** -- when the GenieACS device lookup
+  by IP hit the request deadline, every endpoint that resolves `{ip}` returned
+  `404 NOT_FOUND` with a generic message, so callers could not tell a slow NBI
+  from a missing device. A lookup deadline now returns `408` with
+  `error_code: TIMEOUT` and `Operation timed out while looking up the device`.
+  Other lookup errors keep the previous 404. Callers that treat 404 as "device
+  absent" no longer see it for timeouts. (ref: billing-platform#84)
+- **Flaky `TestGetSSIDByIPForceHandler`** -- the `Timeout` and `Context timeout
+  in retry loop` subtests used 5-10 ms wall-clock deadlines that also covered
+  the device lookup, so under load they failed with 404 in about 3% of runs
+  (11 of 400). They now expire the deadline from the mock upstream at a fixed
+  point in the handler. Two subtests that waited for the 5 s default retry
+  delay pass `retry_delay_ms=1`, cutting the test from about 15 s to under 1 s.
+  (ref: billing-platform#84)
 
 ### Security
 
