@@ -23,8 +23,11 @@ import (
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/ssid/{ip} [get]
 func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +65,8 @@ func getSSIDByIPHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		408				{object}	Response
 //	@Failure		429				{object}	Response
 //	@Failure		500				{object}	Response
+//	@Failure		502				{object}	Response
+//	@Failure		503				{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/force/ssid/{ip} [get]
 func getSSIDByIPForceHandler(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +191,10 @@ func handleWLANRetryError(w http.ResponseWriter, r *http.Request, err error, max
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/ssid/{ip}/refresh [post]
 func refreshSSIDHandler(w http.ResponseWriter, r *http.Request) {
