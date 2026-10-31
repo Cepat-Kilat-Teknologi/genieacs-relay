@@ -27,13 +27,22 @@ All notable changes to genieacs-relay are documented in this file. The format is
   proxy) still reported `ready` while every real NBI call failed. 401 and 403
   now return `down` with `nbi auth rejected (status N)` and `/readyz` returns
   503. Other 4xx, including the 404 GenieACS returns for `GET /`, stay up.
-- **Device lookup timeout reported as 404** -- when the GenieACS device lookup
-  by IP hit the request deadline, every endpoint that resolves `{ip}` returned
-  `404 NOT_FOUND` with a generic message, so callers could not tell a slow NBI
-  from a missing device. A lookup deadline now returns `408` with
-  `error_code: TIMEOUT` and `Operation timed out while looking up the device`.
-  Other lookup errors keep the previous 404. Callers that treat 404 as "device
-  absent" no longer see it for timeouts. (ref: billing-platform#84)
+- **Device lookup failures reported as 404** -- every endpoint that resolves
+  `{ip}` returned `404 NOT_FOUND` for any failed GenieACS device lookup, so
+  callers could not tell a slow or failing NBI from a missing device. The
+  lookup now returns:
+  - `408 TIMEOUT` (`Operation timed out while looking up the device`) when it
+    hits the request deadline
+  - `503 SERVICE_UNAVAILABLE` (`GenieACS is temporarily unavailable, retry
+    later`) when the NBI circuit breaker is open
+  - `502 GENIEACS_ERROR` (`GenieACS returned an error while looking up the
+    device`) when the NBI answers with a 5xx
+
+  A device GenieACS does not know, a stale device and any other lookup error
+  keep `404 NOT_FOUND`. Callers that treat 404 as "device absent", such as
+  isp-agent read activities that stop retrying on `NOT_FOUND`, now retry
+  these transient failures instead of failing the workflow. Swagger documents
+  408, 502 and 503 on all 36 `{ip}` endpoints. (ref: billing-platform#84)
 - **Flaky `TestGetSSIDByIPForceHandler`** -- the `Timeout` and `Context timeout
   in retry loop` subtests used 5-10 ms wall-clock deadlines that also covered
   the device lookup, so under load they failed with 404 in about 3% of runs
