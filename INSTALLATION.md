@@ -166,6 +166,7 @@ make up
 |----------|----------|---------|-------------|
 | `RATE_LIMIT_REQUESTS` | No | `100` | Maximum requests per window |
 | `RATE_LIMIT_WINDOW` | No | `60` | Rate limit window in seconds |
+| `RATE_LIMIT_TRUSTED_PROXIES` | No | empty | Comma-separated IPs or CIDRs (for example `10.42.0.0/16,10.0.0.5`) whose `X-Forwarded-For` and `X-Real-IP` are honored. Empty: the client IP is the TCP peer address only and forwarding headers are ignored. From a trusted peer, `X-Forwarded-For` is walked right to left and the first hop that is not a trusted proxy is the client; `X-Real-IP` is read only when `X-Forwarded-For` is absent. A malformed entry fails startup |
 
 ### Device Validation
 
@@ -201,6 +202,7 @@ MIDDLEWARE_AUTH=true
 AUTH_KEY=your-secure-api-key
 RATE_LIMIT_REQUESTS=50
 RATE_LIMIT_WINDOW=30
+RATE_LIMIT_TRUSTED_PROXIES=10.42.0.0/16
 STALE_THRESHOLD_MINUTES=15
 ```
 
