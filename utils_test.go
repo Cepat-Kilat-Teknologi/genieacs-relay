@@ -413,3 +413,34 @@ func TestValidatePassword(t *testing.T) {
 		assert.Empty(t, err)
 	})
 }
+
+func TestExtractDeviceIDByIP_LookupTimeout(t *testing.T) {
+	ctx := newExpiringCtx()
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx.expire()
+		<-r.Context().Done()
+	}))
+	defer mockServer.Close()
+
+	originalURL := geniesBaseURL
+	geniesBaseURL = mockServer.URL
+	defer func() { geniesBaseURL = originalURL }()
+
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+	}
+
+	r := chi.NewRouter()
+	r.Get("/test/{ip}", func(w http.ResponseWriter, r *http.Request) {
+		_, ok := ExtractDeviceIDByIP(w, r)
+		assert.False(t, ok)
+	})
+
+	req := httptest.NewRequest("GET", "/test/192.168.1.100", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"error_code":"TIMEOUT"`)
+	assert.Contains(t, rr.Body.String(), ErrDeviceLookupTimeout)
+}
