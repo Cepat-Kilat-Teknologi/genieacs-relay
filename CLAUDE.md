@@ -59,7 +59,10 @@ swag init -g main.go -o docs/
 ```
 
 Coverage: 100% statement coverage. Tests use httptest + testify (`require`,
-`assert`). Table-driven with `t.Run()` subtests.
+`assert`). Table-driven with `t.Run()` subtests. Timeout tests use
+`newExpiringCtx()` (`common_test.go`) and call `expire()` from the mock
+upstream instead of a short `context.WithTimeout`, so the deadline cannot fire
+during the device lookup under load.
 
 ## Middleware Chain (order matters)
 
@@ -82,6 +85,8 @@ Key invariants:
 - **Context propagation**: all GenieACS calls use `r.Context()` via
   `http.NewRequestWithContext` for timeouts/cancellation
 - **Worker pool**: if `taskWorkerPool.Submit()` returns false → 503, never drop
+- **Device lookup**: `ExtractDeviceIDByIP` returns 408 `TIMEOUT` when the lookup
+  hits the request deadline and 404 `NOT_FOUND` for any other lookup error
 
 ## API Routes
 
