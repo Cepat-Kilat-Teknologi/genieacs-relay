@@ -48,23 +48,27 @@ This is a **breaking change** from v2.x, which used `"status":"OK"` and a flat `
 | `TIMEOUT` | 408 | Upstream request timed out |
 | `RATE_LIMITED` | 429 | Rate limit exceeded |
 | `INTERNAL_ERROR` | 500 | Unhandled server error |
-| `GENIEACS_ERROR` | 500, 502 | GenieACS NBI failed (502 when the device lookup gets a 5xx) |
+| `GENIEACS_ERROR` | 500, 502 | GenieACS NBI failed (502 when the device lookup gets a 5xx, 401 or 403) |
 | `SERVICE_UNAVAILABLE` | 503 | Worker pool saturated or upstream down |
 
 ### Device lookup errors
 
-Every endpoint with an `{ip}` path parameter first resolves the IP to a
-GenieACS device. When that lookup fails, the response is:
+Every endpoint with an `{ip}` path parameter first validates the IP and
+then resolves it to a GenieACS device. When either step fails, the response
+is:
 
 | HTTP | `error_code` | `data` | Cause |
 |---|---|---|---|
+| 400 | `VALIDATION_ERROR` | `Invalid IP address format`, or the loopback, multicast, unspecified or IPv6 rejection message | `{ip}` is not a usable IPv4 address; GenieACS is not called |
 | 404 | `NOT_FOUND` | `Device not found` (or the stale/never-connected message) | GenieACS answered and no usable device matches the IP |
 | 408 | `TIMEOUT` | `Operation timed out while looking up the device` | The lookup hit the request deadline |
-| 502 | `GENIEACS_ERROR` | `GenieACS returned an error while looking up the device` | The NBI answered the lookup with a 5xx |
+| 502 | `GENIEACS_ERROR` | `GenieACS returned an error while looking up the device` | The NBI answered the lookup with a 5xx, or with 401/403 (wrong `NBI_AUTH_KEY`) |
 | 503 | `SERVICE_UNAVAILABLE` | `GenieACS is temporarily unavailable, retry later` | The NBI circuit breaker is open |
 
-Only 404 means the device is absent. 408, 502 and 503 are transient and safe
-to retry.
+Only 404 means the device is absent. 400 will not succeed on retry. 408, 503
+and a 5xx-caused 502 are transient and safe to retry; a 502 caused by 401/403
+persists until `NBI_AUTH_KEY` is fixed. Upstream response bodies are never
+included in `data`.
 
 ### Standard response headers
 
