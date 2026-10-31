@@ -57,6 +57,10 @@ func formatDuration(d time.Duration) string {
 // Returns the device ID and true if successful, or sends an error response and returns false
 func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) {
 	ip := chi.URLParam(r, "ip")
+	if err := validateIP(ip); err != nil {
+		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ipValidationMessage(err))
+		return "", false
+	}
 	deviceID, err := getDeviceIDByIP(r.Context(), ip)
 	if err != nil {
 		logger.Error("Failed to get device ID by IP", zap.String("ip", ip), zap.Error(err))
@@ -65,6 +69,24 @@ func ExtractDeviceIDByIP(w http.ResponseWriter, r *http.Request) (string, bool) 
 		return "", false
 	}
 	return deviceID, true
+}
+
+// nbiLookupFailed reports whether an NBI status on the device lookup is an
+// upstream failure: a 5xx, or a 401/403 from the NBI auth proxy, which means
+// NBI_AUTH_KEY is wrong rather than that the device is missing.
+func nbiLookupFailed(status int) bool {
+	return status >= http.StatusInternalServerError ||
+		status == http.StatusUnauthorized || status == http.StatusForbidden
+}
+
+// ipValidationMessage returns the client message for a validateIP error. The
+// format error embeds the raw path value, so it is replaced by a fixed text;
+// the other validateIP errors are fixed strings already.
+func ipValidationMessage(err error) string {
+	if strings.HasPrefix(err.Error(), "invalid IP address format") {
+		return "Invalid IP address format"
+	}
+	return err.Error()
 }
 
 // lookupErrorResponse maps a device lookup error to the HTTP status, error
@@ -78,7 +100,7 @@ func lookupErrorResponse(err error) (int, string, string) {
 		return http.StatusRequestTimeout, ErrCodeTimeout, ErrDeviceLookupTimeout
 	case errors.Is(err, ErrCircuitOpen):
 		return http.StatusServiceUnavailable, ErrCodeServiceUnavailable, ErrDeviceLookupUnavailable
-	case errors.As(err, &statusErr) && statusErr.StatusCode >= http.StatusInternalServerError:
+	case errors.As(err, &statusErr) && nbiLookupFailed(statusErr.StatusCode):
 		return http.StatusBadGateway, ErrCodeGenieACS, ErrDeviceLookupUpstream
 	default:
 		return http.StatusNotFound, ErrCodeNotFound, sanitizeErrorMessage(err)
