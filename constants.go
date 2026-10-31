@@ -263,6 +263,7 @@ const (
 	ErrPasswordTooLong      = "Password must be at most 63 characters"
 	ErrWLANValidationFailed = "Could not verify WLAN status."
 	ErrOperationTimeout     = "Operation timed out while retrieving WLAN data"
+	ErrDeviceLookupTimeout  = "Operation timed out while looking up the device"
 	ErrDeviceStale          = "device with IP %s is stale (last seen: %s ago). The IP may have been reassigned to another device"
 	ErrInvalidIPAddress     = "invalid IP address format: %s"
 	ErrInvalidWLANID        = "WLAN ID must be a number between 1 and 8"
