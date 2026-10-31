@@ -78,8 +78,11 @@ const PPPoEMaxWANInstance = 8
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/pppoe/{ip} [put]
 func setPPPoECredentialsHandler(w http.ResponseWriter, r *http.Request) {
