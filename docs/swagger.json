@@ -4101,6 +4101,79 @@
                 }
             }
         },
+        "/wlan/enable/{wlan}/{ip}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Re-enables a previously disabled WLAN. Only sets Enable=true; SSID and password remain unchanged.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WLAN"
+                ],
+                "summary": "Enable WLAN",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2",
+                        "description": "WLAN ID (1-8)",
+                        "name": "wlan",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "192.168.1.1",
+                        "description": "Device IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/wlan/optimize/{wlan}/{ip}": {
             "put": {
                 "security": [
