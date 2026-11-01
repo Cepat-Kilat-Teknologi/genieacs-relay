@@ -54,3 +54,6 @@ AGENTS.md
 # Screenshots and dev tool artifacts
 .playwright-mcp/
 graphify-out/
+
+# Binary built from cmd/healthcheck for the container health probe
+/healthcheck
