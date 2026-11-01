@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/subtle"
 	"fmt"
-	"net"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -315,18 +314,11 @@ func (rl *rateLimiter) cleanup() {
 // Uses constant-time comparison to prevent timing attacks.
 // Implements brute force protection with per-IP lockout after max failed attempts.
 //
-// SECURITY NOTE: X-Real-IP header is trusted if it contains a valid IP.
-// In multi-hop proxy environments, deploy behind a reverse proxy (nginx, envoy)
-// that strips and re-sets X-Real-IP from the actual client connection.
+// The lockout key comes from GetClientIP, so a caller outside
+// RATE_LIMIT_TRUSTED_PROXIES cannot dodge it with a forged X-Real-IP.
 func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get client IP for logging and rate limiting
-		clientIP := r.RemoteAddr
-		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-			if parsedIP := net.ParseIP(realIP); parsedIP != nil {
-				clientIP = realIP
-			}
-		}
+		clientIP := GetClientIP(r)
 
 		// Check if IP is blocked due to too many failed attempts
 		if authTracker.isBlocked(clientIP) {
@@ -379,20 +371,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 func rateLimitMiddleware(rl *rateLimiter) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get client IP - use RemoteAddr as default
-			ip := r.RemoteAddr
-
-			// Only trust X-Real-IP if it contains a valid IP address
-			// This prevents IP spoofing attacks to bypass rate limiting
-			if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-				if parsedIP := net.ParseIP(realIP); parsedIP != nil {
-					ip = realIP
-				}
-				// If X-Real-IP is invalid, fall back to RemoteAddr (don't trust spoofed header)
-			}
-
-			// Check rate limit
-			if !rl.Allow(ip) {
+			if !rl.Allow(GetClientIP(r)) {
 				sendError(w, r, http.StatusTooManyRequests, ErrCodeRateLimited, "Rate limit exceeded. Please try again later.")
 				return
 			}

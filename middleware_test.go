@@ -247,37 +247,46 @@ func TestRateLimitMiddleware(t *testing.T) {
 		assert.Contains(t, fmt.Sprint(resp.Data), "Rate limit exceeded")
 	})
 
-	t.Run("Uses X-Real-IP header when present", func(t *testing.T) {
+	t.Run("Ignores X-Real-IP from an untrusted peer", func(t *testing.T) {
+		withTrustedProxies(t, "")
 		rl := newRateLimiter(2, time.Minute)
 		handler := rateLimitMiddleware(rl)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 
-		// Exhaust limit for X-Real-IP
-		for i := 0; i < 2; i++ {
+		// Rotating X-Real-IP must not earn a fresh bucket.
+		codes := make([]int, 0, 3)
+		for i := 0; i < 3; i++ {
 			req := httptest.NewRequest("GET", "/test", nil)
 			req.RemoteAddr = "10.0.0.1:12345"
-			req.Header.Set("X-Real-IP", "192.168.1.1")
+			req.Header.Set("X-Real-IP", fmt.Sprintf("192.168.1.%d", i))
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusOK, rr.Code)
+			codes = append(codes, rr.Code)
+		}
+		assert.Equal(t, []int{http.StatusOK, http.StatusOK, http.StatusTooManyRequests}, codes)
+	})
+
+	t.Run("Keys on the forwarded client from a trusted peer", func(t *testing.T) {
+		withTrustedProxies(t, "10.0.0.0/8")
+		rl := newRateLimiter(2, time.Minute)
+		handler := rateLimitMiddleware(rl)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		send := func(xff string) int {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = "10.0.0.1:12345"
+			req.Header.Set("X-Forwarded-For", xff)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+			return rr.Code
 		}
 
-		// Should be blocked for X-Real-IP
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "10.0.0.1:12345"
-		req.Header.Set("X-Real-IP", "192.168.1.1")
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusTooManyRequests, rr.Code)
-
-		// Different X-Real-IP should still have its limit
-		req = httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "10.0.0.1:12345"
-		req.Header.Set("X-Real-IP", "192.168.1.2")
-		rr = httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusOK, rr.Code)
+		// The leftmost entry is client-written; rotating it changes nothing.
+		assert.Equal(t, http.StatusOK, send("6.6.6.1, 192.168.1.1"))
+		assert.Equal(t, http.StatusOK, send("6.6.6.2, 192.168.1.1"))
+		assert.Equal(t, http.StatusTooManyRequests, send("6.6.6.3, 192.168.1.1"))
+		assert.Equal(t, http.StatusOK, send("192.168.1.2"))
 	})
 }
 
@@ -691,8 +700,9 @@ func TestAPIKeyAuthMiddleware_BlockedIP(t *testing.T) {
 	authTracker.attempts = make(map[string]*authAttempt)
 	defer func() { authTracker.attempts = originalAttempts }()
 
-	// Block the IP (must match RemoteAddr exactly as middleware uses r.RemoteAddr)
-	authTracker.attempts["192.168.1.100:12345"] = &authAttempt{
+	// The lockout key is the peer IP without the port, so reconnecting from
+	// a new source port does not reset the lockout.
+	authTracker.attempts["192.168.1.100"] = &authAttempt{
 		failedCount: MaxFailedAuthAttempts,
 		lockedUntil: time.Now().Add(5 * time.Minute),
 	}
@@ -729,11 +739,28 @@ func TestAPIKeyAuthMiddleware_XRealIP(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	t.Run("Uses valid X-Real-IP header", func(t *testing.T) {
-		// Block the X-Real-IP
-		authTracker.attempts["10.0.0.1"] = &authAttempt{
-			failedCount: MaxFailedAuthAttempts,
-			lockedUntil: time.Now().Add(5 * time.Minute),
+	t.Run("Ignores X-Real-IP from an untrusted peer", func(t *testing.T) {
+		withTrustedProxies(t, "")
+		authTracker.attempts = map[string]*authAttempt{
+			"192.168.1.100": {failedCount: MaxFailedAuthAttempts, lockedUntil: time.Now().Add(5 * time.Minute)},
+		}
+
+		// A locked-out caller cannot escape the lockout by forging X-Real-IP.
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = "192.168.1.100:12345"
+		req.Header.Set("X-Real-IP", "10.0.0.1")
+		req.Header.Set(HeaderXAPIKey, "test-api-key")
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+	})
+
+	t.Run("Uses X-Real-IP from a trusted peer", func(t *testing.T) {
+		withTrustedProxies(t, "192.168.1.100")
+		authTracker.attempts = map[string]*authAttempt{
+			"10.0.0.1": {failedCount: MaxFailedAuthAttempts, lockedUntil: time.Now().Add(5 * time.Minute)},
 		}
 
 		req := httptest.NewRequest("GET", "/test", nil)

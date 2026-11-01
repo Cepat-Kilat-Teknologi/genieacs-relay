@@ -6,6 +6,17 @@ All notable changes to genieacs-relay are documented in this file. The format is
 
 ## [Unreleased]
 
+### Security
+
+- **Client IP no longer taken from a client-supplied X-Real-IP** -- the rate
+  limiter, the API-key brute-force lockout, audit events and request logs all
+  trusted `X-Real-IP` from any caller, so a client could reset its rate limit
+  or lockout and forge its audit IP. `GetClientIP` now reads `X-Forwarded-For`
+  (right to left, first untrusted hop) or, failing that, `X-Real-IP` only when
+  the TCP peer is in `RATE_LIMIT_TRUSTED_PROXIES` (default empty: trust
+  nobody). The key no longer includes the source port, so a new connection no
+  longer gets a fresh bucket. A malformed value fails startup.
+
 ### Changed
 
 - **Sentry release and environment** -- the Sentry release is now

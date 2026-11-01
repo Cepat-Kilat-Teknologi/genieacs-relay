@@ -67,7 +67,7 @@ during the device lookup under load.
 ## Middleware Chain (order matters)
 
 ```
-RequestID → requestIDMiddleware → RealIP → apiVersionHeaders →
+RequestID → requestIDMiddleware → apiVersionHeaders →
 structuredLogger → metrics → audit → Recoverer
   └─ per-route /api/v1/genieacs: apiKeyAuth → idempotency
 ```
@@ -129,6 +129,12 @@ Key invariants:
 `RATE_LIMIT_REQUESTS` (`100`), `RATE_LIMIT_WINDOW` (`60s`),
 `STALE_THRESHOLD_MINUTES` (`30`).
 
+**Client IP:** `RATE_LIMIT_TRUSTED_PROXIES` (empty): comma-separated CIDRs or
+IPs whose `X-Forwarded-For` / `X-Real-IP` are honored by `GetClientIP` (rate
+limit, auth lockout, audit and request logs). Empty trusts nobody and keys on
+the TCP peer. The XFF chain is walked right to left to the first untrusted hop;
+`X-Real-IP` is read only when XFF is absent. A malformed value fails startup.
+
 **Optical thresholds (dBm):** `OPTICAL_RX_NO_SIGNAL_DBM` (`-30.0`),
 `OPTICAL_RX_CRITICAL_DBM` (`-27.0`), `OPTICAL_RX_WARNING_DBM` (`-24.0`),
 `OPTICAL_RX_OVERLOAD_DBM` (`-8.0`).
@@ -178,6 +184,6 @@ binary reporting `"dev"/"none"` with no error.
 |---------|:------:|---------|
 | OTel tracing | Yes | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` |
 | Sentry | Yes | `SENTRY_DSN` (empty = disabled), `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` |
-| Rate limiting | Yes | Per-IP token bucket: `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` |
+| Rate limiting | Yes | Per-client token bucket: `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW`; client IP per `RATE_LIMIT_TRUSTED_PROXIES` |
 | Security headers | Yes | `securityHeadersMiddleware` in `middleware.go` (always active, no env vars) |
 | Body size limit | Yes | 1 MB (JSON-only CPE commands) |

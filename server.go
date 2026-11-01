@@ -57,6 +57,18 @@ func loadMiddlewareAuthConfig() error {
 	return nil
 }
 
+// loadTrustedProxiesConfig sets the peers whose X-Forwarded-For and X-Real-IP
+// GetClientIP honors. A malformed entry fails startup.
+func loadTrustedProxiesConfig() error {
+	tp, err := ParseTrustedProxies(getEnv(EnvRateLimitTrustedProxies, ""))
+	if err != nil {
+		return fmt.Errorf("%s: %w", EnvRateLimitTrustedProxies, err)
+	}
+	trustedProxies = tp
+	logger.Info("Trusted proxies", zap.Int("count", len(tp.prefixes)))
+	return nil
+}
+
 // loadStaleThresholdConfig loads stale threshold configuration
 func loadStaleThresholdConfig() {
 	staleThreshold = DefaultStaleThreshold
@@ -161,6 +173,10 @@ func loadServerConfig(addr string) (*serverConfig, error) {
 	}
 
 	if err := loadMiddlewareAuthConfig(); err != nil {
+		return nil, err
+	}
+
+	if err := loadTrustedProxiesConfig(); err != nil {
 		return nil, err
 	}
 

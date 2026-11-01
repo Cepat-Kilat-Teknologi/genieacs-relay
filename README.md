@@ -52,6 +52,10 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and per-release details.
 
 - **Brute Force Protection** - Automatic IP lockout after failed attempts
 - **Rate Limiting** - Configurable per-IP rate limiting
+- **Trusted Proxies** - `X-Forwarded-For` and `X-Real-IP` are honored only from peers listed in
+  `RATE_LIMIT_TRUSTED_PROXIES` (comma-separated IPs or CIDRs, default empty). Empty means the
+  client IP is the TCP peer address only. From a trusted peer, `X-Forwarded-For` is walked right to
+  left and the first hop that is not a trusted proxy is the client
 - **Audit Logging** - Security event logging
 - **Security Headers** - HSTS, CSP, X-Frame-Options
 - **Input Validation** - Strict validation for all inputs
