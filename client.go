@@ -112,6 +112,18 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 
 // getDeviceIDByIP finds device ID by searching for devices with matching IP address
 // It also validates that the device is not stale (last inform within threshold)
+// nbiStatusError reports a non-200 reply from the GenieACS NBI device lookup.
+// The message keeps the "GenieACS returned non-OK status" prefix that
+// sanitizeErrorMessage matches on.
+type nbiStatusError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *nbiStatusError) Error() string {
+	return "GenieACS returned non-OK status: " + e.Status
+}
+
 func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	// Validate IP address format to prevent query injection
 	if err := validateIP(ip); err != nil {
@@ -153,7 +165,7 @@ func getDeviceIDByIP(ctx context.Context, ip string) (string, error) {
 	defer safeClose(resp.Body)
 	// Check for HTTP errors
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GenieACS returned non-OK status: %s", resp.Status)
+		return "", &nbiStatusError{StatusCode: resp.StatusCode, Status: resp.Status}
 	}
 	// Read response body (M-SEC-06: limit to prevent OOM)
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))

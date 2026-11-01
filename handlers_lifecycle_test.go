@@ -48,7 +48,8 @@ func TestFactoryResetDeviceHandler_Success(t *testing.T) {
 
 func TestFactoryResetDeviceHandler_DeviceNotFound(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
 	})
 	_, router := setupTestServer(t, mockHandler)
 

@@ -145,7 +145,7 @@ func TestGetAvailableWLANHandlerErrors(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
-		assert.True(t, rr.Code == http.StatusNotFound || rr.Code == http.StatusInternalServerError)
+		assert.Equal(t, http.StatusBadGateway, rr.Code)
 	})
 }
 

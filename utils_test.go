@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -412,4 +415,116 @@ func TestValidatePassword(t *testing.T) {
 		err := ValidatePassword(maxPassword)
 		assert.Empty(t, err)
 	})
+}
+
+func TestExtractDeviceIDByIP_LookupTimeout(t *testing.T) {
+	ctx := newExpiringCtx()
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx.expire()
+		<-r.Context().Done()
+	}))
+	defer mockServer.Close()
+
+	originalURL := geniesBaseURL
+	geniesBaseURL = mockServer.URL
+	defer func() { geniesBaseURL = originalURL }()
+
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+	}
+
+	r := chi.NewRouter()
+	r.Get("/test/{ip}", func(w http.ResponseWriter, r *http.Request) {
+		_, ok := ExtractDeviceIDByIP(w, r)
+		assert.False(t, ok)
+	})
+
+	req := httptest.NewRequest("GET", "/test/192.168.1.100", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"error_code":"TIMEOUT"`)
+	assert.Contains(t, rr.Body.String(), ErrDeviceLookupTimeout)
+}
+
+func TestExtractDeviceIDByIP_LookupErrorMapping(t *testing.T) {
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+	}
+
+	tests := []struct {
+		name       string
+		ip         string // defaults to 192.168.1.100
+		lookup     int    // status the NBI returns for the device lookup
+		breaker    bool
+		prime      bool // send one request first to trip the breaker
+		wantStatus int
+		wantCode   string
+		wantMsg    string
+		wantNoNBI  bool // the request must be rejected before any NBI call
+	}{
+		{name: "NBI 500", lookup: http.StatusInternalServerError, wantStatus: http.StatusBadGateway, wantCode: ErrCodeGenieACS, wantMsg: ErrDeviceLookupUpstream},
+		{name: "NBI 503", lookup: http.StatusServiceUnavailable, wantStatus: http.StatusBadGateway, wantCode: ErrCodeGenieACS, wantMsg: ErrDeviceLookupUpstream},
+		{name: "circuit open", lookup: http.StatusInternalServerError, breaker: true, prime: true, wantStatus: http.StatusServiceUnavailable, wantCode: ErrCodeServiceUnavailable, wantMsg: ErrDeviceLookupUnavailable},
+		{name: "device not found", lookup: http.StatusOK, wantStatus: http.StatusNotFound, wantCode: ErrCodeNotFound, wantMsg: "Device not found"},
+		{name: "NBI 401", lookup: http.StatusUnauthorized, wantStatus: http.StatusBadGateway, wantCode: ErrCodeGenieACS, wantMsg: ErrDeviceLookupUpstream},
+		{name: "NBI 403", lookup: http.StatusForbidden, wantStatus: http.StatusBadGateway, wantCode: ErrCodeGenieACS, wantMsg: ErrDeviceLookupUpstream},
+		{name: "malformed ip", ip: "not-an-ip", wantStatus: http.StatusBadRequest, wantCode: ErrCodeValidation, wantMsg: "Invalid IP address format", wantNoNBI: true},
+		{name: "loopback ip", ip: "127.0.0.1", wantStatus: http.StatusBadRequest, wantCode: ErrCodeValidation, wantMsg: "loopback addresses are not allowed", wantNoNBI: true},
+		{name: "ipv6", ip: "2001:db8::1", wantStatus: http.StatusBadRequest, wantCode: ErrCodeValidation, wantMsg: "IPv6 addresses are not supported", wantNoNBI: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var nbiCalls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				nbiCalls.Add(1)
+				w.WriteHeader(tc.lookup)
+				if tc.lookup == http.StatusOK {
+					_, _ = w.Write([]byte(`[]`))
+					return
+				}
+				// Upstream body text must never reach the client.
+				_, _ = w.Write([]byte(`{"error":"upstream-secret-detail"}`))
+			}))
+			defer srv.Close()
+
+			originalURL := geniesBaseURL
+			geniesBaseURL = srv.URL
+			defer func() { geniesBaseURL = originalURL }()
+
+			if tc.breaker {
+				initBreaker(testBreakerConfig(1), zap.NewNop())
+				defer func() { nbiBreaker = nil }()
+			}
+
+			r := chi.NewRouter()
+			r.Get("/test/{ip}", func(w http.ResponseWriter, r *http.Request) {
+				_, _ = ExtractDeviceIDByIP(w, r)
+			})
+			ip := tc.ip
+			if ip == "" {
+				ip = "192.168.1.100"
+			}
+			serve := func() *httptest.ResponseRecorder {
+				rr := httptest.NewRecorder()
+				r.ServeHTTP(rr, httptest.NewRequest("GET", "/test/"+url.PathEscape(ip), nil))
+				return rr
+			}
+
+			if tc.prime {
+				require.Equal(t, http.StatusBadGateway, serve().Code)
+			}
+			rr := serve()
+
+			assert.Equal(t, tc.wantStatus, rr.Code)
+			assert.Contains(t, rr.Body.String(), `"error_code":"`+tc.wantCode+`"`)
+			assert.Contains(t, rr.Body.String(), tc.wantMsg)
+			assert.NotContains(t, rr.Body.String(), "upstream-secret-detail")
+			if tc.wantNoNBI {
+				assert.Zero(t, nbiCalls.Load(), "invalid ip must not reach the NBI")
+			}
+		})
+	}
 }

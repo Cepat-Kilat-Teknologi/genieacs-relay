@@ -18,11 +18,41 @@ All notable changes to genieacs-relay are documented in this file. The format is
 
 ### Fixed
 
+- **Swagger out of sync with the annotations** -- `docs/docs.go` and
+  `docs/swagger.json` were missing `PUT /wlan/enable/{wlan}/{ip}`, which only
+  `docs/swagger.yaml` listed. The three files are regenerated with swag
+  v1.16.6 (the go.mod version) and now match the annotations.
 - **`/readyz` reports a rejected NBI key** -- the GenieACS ping treated every
   status below 500 as up, so a wrong `NBI_AUTH_KEY` (401/403 from the NBI auth
   proxy) still reported `ready` while every real NBI call failed. 401 and 403
   now return `down` with `nbi auth rejected (status N)` and `/readyz` returns
   503. Other 4xx, including the 404 GenieACS returns for `GET /`, stay up.
+- **Device lookup failures reported as 404** -- every endpoint that resolves
+  `{ip}` returned `404 NOT_FOUND` for any failed GenieACS device lookup, so
+  callers could not tell a slow or failing NBI from a missing device. The
+  lookup now returns:
+  - `408 TIMEOUT` (`Operation timed out while looking up the device`) when it
+    hits the request deadline
+  - `503 SERVICE_UNAVAILABLE` (`GenieACS is temporarily unavailable, retry
+    later`) when the NBI circuit breaker is open
+  - `502 GENIEACS_ERROR` (`GenieACS returned an error while looking up the
+    device`) when the NBI answers with a 5xx, or with 401/403 because
+    `NBI_AUTH_KEY` is wrong; the upstream body is never echoed
+  - `400 VALIDATION_ERROR` before any NBI call when `{ip}` is not a usable
+    IPv4 address (malformed, loopback, multicast, unspecified or IPv6)
+
+  A device GenieACS does not know, a stale device and any other lookup error
+  keep `404 NOT_FOUND`. Callers that treat 404 as "device absent", such as
+  isp-agent read activities that stop retrying on `NOT_FOUND`, now retry
+  these transient failures instead of failing the workflow. Swagger documents
+  400, 408, 502 and 503 on all 36 `{ip}` endpoints. (ref: billing-platform#84)
+- **Flaky `TestGetSSIDByIPForceHandler`** -- the `Timeout` and `Context timeout
+  in retry loop` subtests used 5-10 ms wall-clock deadlines that also covered
+  the device lookup, so under load they failed with 404 in about 3% of runs
+  (11 of 400). They now expire the deadline from the mock upstream at a fixed
+  point in the handler. Two subtests that waited for the 5 s default retry
+  delay pass `retry_delay_ms=1`, cutting the test from about 15 s to under 1 s.
+  (ref: billing-platform#84)
 
 ### Security
 

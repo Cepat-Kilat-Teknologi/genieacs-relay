@@ -378,6 +378,13 @@ const (
 	ErrEnabledRequired            = "enabled is required (true or false)"
 )
 
+// Device lookup errors returned by ExtractDeviceIDByIP when resolving {ip}.
+const (
+	ErrDeviceLookupTimeout     = "Operation timed out while looking up the device"
+	ErrDeviceLookupUpstream    = "GenieACS returned an error while looking up the device"
+	ErrDeviceLookupUnavailable = "GenieACS is temporarily unavailable, retry later"
+)
+
 // Firmware default values
 const (
 	DefaultFirmwareFileType = "1 Firmware Upgrade Image"

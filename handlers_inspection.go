@@ -53,8 +53,11 @@ var _ = DeviceStatusResponse{}
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/status/{ip} [get]
 func getDeviceStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -204,8 +207,11 @@ var _ = WANConnectionsResponse{}
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wan/{ip} [get]
 func getWanStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -366,9 +372,12 @@ const MaxGenericParamPathsPerRequest = 50
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		413		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/params/{ip} [post]
 func getGenericParamsHandler(w http.ResponseWriter, r *http.Request) {
@@ -486,8 +495,11 @@ var (
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wifi-clients/{ip} [get]
 func getWifiClientsHandler(w http.ResponseWriter, r *http.Request) {
@@ -605,8 +617,11 @@ var (
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wifi-stats/{ip} [get]
 func getWifiStatsHandler(w http.ResponseWriter, r *http.Request) {

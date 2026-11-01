@@ -22,9 +22,12 @@ import (
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		409		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wlan/create/{wlan}/{ip} [post]
 func createWLANHandler(w http.ResponseWriter, r *http.Request) {
@@ -145,8 +148,11 @@ func buildCreateWLANParams(wlan, ssid, password string, cfg CreateWLANConfig, be
 //	@Failure		400	{object}	Response
 //	@Failure		401	{object}	Response
 //	@Failure		404	{object}	Response
+//	@Failure		408	{object}	Response
 //	@Failure		429	{object}	Response
 //	@Failure		500	{object}	Response
+//	@Failure		502	{object}	Response
+//	@Failure		503	{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wlan/available/{ip} [get]
 func getAvailableWLANHandler(w http.ResponseWriter, r *http.Request) {
@@ -244,8 +250,11 @@ func ensureIntSlice(s []int) []int {
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wlan/update/{wlan}/{ip} [put]
 func updateWLANHandler(w http.ResponseWriter, r *http.Request) {
@@ -343,8 +352,11 @@ func hasUpdateFields(req UpdateWLANRequest) bool {
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wlan/delete/{wlan}/{ip} [delete]
 func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
@@ -427,8 +439,11 @@ func deleteWLANHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wlan/enable/{wlan}/{ip} [put]
 func enableWLANHandler(w http.ResponseWriter, r *http.Request) {
@@ -499,8 +514,11 @@ func enableWLANHandler(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		404		{object}	Response
+//	@Failure		408		{object}	Response
 //	@Failure		429		{object}	Response
 //	@Failure		500		{object}	Response
+//	@Failure		502		{object}	Response
+//	@Failure		503		{object}	Response
 //	@Security		ApiKeyAuth
 //	@Router			/wlan/optimize/{wlan}/{ip} [put]
 func optimizeWLANHandler(w http.ResponseWriter, r *http.Request) {
