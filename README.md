@@ -215,7 +215,9 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 ├── dhcp.go                 # DHCP client helpers
 ├── constants.go            # Application constants
 ├── response.go             # HTTP response helpers
-├── utils.go                # Utility functions
+├── request.go              # Request helpers: device lookup by IP, JSON body, client IP
+├── wlan_request.go         # WLAN request validation and parameter builders
+├── tr069_path.go           # TR-069 parameter path builders
 ├── onu_models.go           # ONU/ONT model definitions
 ├── *_test.go               # Unit tests
 │

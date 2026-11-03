@@ -150,7 +150,7 @@ func validatePPPoERequest(req *SetPPPoERequest) string {
 // buildPPPoEParameterValues constructs the TR-069 setParameterValues
 // payload for updating PPPoE credentials on the given WAN instance.
 // Returns the same `[][]interface{}` shape that SubmitWLANUpdate
-// expects (see utils.go SubmitWLANUpdate). Pure function for unit testability.
+// expects (see wlan_request.go SubmitWLANUpdate). Pure function for unit testability.
 func buildPPPoEParameterValues(username, password string, wanInstance int) [][]interface{} {
 	usernamePath := fmt.Sprintf(
 		"InternetGatewayDevice.WANDevice.%d.WANConnectionDevice.1.WANPPPConnection.1.Username",
