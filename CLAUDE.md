@@ -124,6 +124,9 @@ Key invariants:
 
 **Auth:** `MIDDLEWARE_AUTH=true` + `AUTH_KEY`: API key on `/api/v1/genieacs/*`.
 `NBI_AUTH=true` + `NBI_AUTH_KEY`: forward key to GenieACS NBI.
+In production the service refuses to start unless `MIDDLEWARE_AUTH=true` and
+`AUTH_KEY` is set. Production means `APP_ENV`, `ENVIRONMENT` or
+`SENTRY_ENVIRONMENT` is `production`, `prod` or `prod-<site>` (`environment.go`).
 
 **Optional:** `SERVER_ADDR` (`:8080`), `CORS_ALLOWED_ORIGINS` (`*`),
 `RATE_LIMIT_REQUESTS` (`100`), `RATE_LIMIT_WINDOW` (`60s`),
