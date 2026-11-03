@@ -285,15 +285,15 @@ func TestClassifyOpticalHealth(t *testing.T) {
 		rxPowerDBm float64
 		want       string
 	}{
-		{"good_strong_signal", -10.0, "good"},     // -24 < -10 < -8
-		{"good_normal_pon", -20.0, "good"},        // -24 < -20 < -8
-		{"good_lower_normal", -23.5, "good"},      // -24 < -23.5 < -8
-		{"warning_attenuated", -25.0, "warning"},  // -27 < -25 <= -24
-		{"warning_marginal_top", -24.1, "warning"}, // -27 < -24.1 <= -24
-		{"critical_low_signal", -28.0, "critical"}, // -30 < -28 <= -27
-		{"critical_marginal_top", -27.0, "critical"}, // -30 < -27 <= -27
-		{"no_signal_dark_fiber", -35.0, "no_signal"}, // -35 <= -30
-		{"no_signal_threshold", -30.0, "no_signal"},  // -30 <= -30
+		{"good_strong_signal", -10.0, "good"},              // -24 < -10 < -8
+		{"good_normal_pon", -20.0, "good"},                 // -24 < -20 < -8
+		{"good_lower_normal", -23.5, "good"},               // -24 < -23.5 < -8
+		{"warning_attenuated", -25.0, "warning"},           // -27 < -25 <= -24
+		{"warning_marginal_top", -24.1, "warning"},         // -27 < -24.1 <= -24
+		{"critical_low_signal", -28.0, "critical"},         // -30 < -28 <= -27
+		{"critical_marginal_top", -27.0, "critical"},       // -30 < -27 <= -27
+		{"no_signal_dark_fiber", -35.0, "no_signal"},       // -35 <= -30
+		{"no_signal_threshold", -30.0, "no_signal"},        // -30 <= -30
 		{"warning_overload_close_to_olt", -7.5, "warning"}, // -7.5 >= -8
 		{"unknown_zero_value_unset_field", 0.0, "unknown"},
 	}
