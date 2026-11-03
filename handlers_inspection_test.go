@@ -435,10 +435,10 @@ func TestBuildWanConnectionsResponse_UnknownAddressingType(t *testing.T) {
 						"1": map[string]interface{}{
 							"WANIPConnection": map[string]interface{}{
 								"1": map[string]interface{}{
-									"AddressingType":   map[string]interface{}{"_value": "Unknown"},
-									"ConnectionStatus": map[string]interface{}{"_value": "Connected"},
-									"ExternalIPAddress": map[string]interface{}{"_value": "192.0.2.99"},
-									"Uptime":           map[string]interface{}{"_value": float64(42)},
+									"AddressingType":      map[string]interface{}{"_value": "Unknown"},
+									"ConnectionStatus":    map[string]interface{}{"_value": "Connected"},
+									"ExternalIPAddress":   map[string]interface{}{"_value": "192.0.2.99"},
+									"Uptime":              map[string]interface{}{"_value": float64(42)},
 									"LastConnectionError": map[string]interface{}{"_value": "ICMP_TIMEOUT"},
 								},
 							},

@@ -288,9 +288,9 @@ func TestNilRegistryLookup(t *testing.T) {
 // errReadFS is a minimal fs.FS that returns an error for all Open calls.
 // Used to exercise the "read file failed" error path in newPathRegistry.
 type errReadFS struct {
-	base      fs.FS
-	failPath  string // exact path that triggers the error
-	failErr   error
+	base     fs.FS
+	failPath string // exact path that triggers the error
+	failErr  error
 }
 
 func (e *errReadFS) Open(name string) (fs.File, error) {
@@ -351,8 +351,8 @@ func TestNewPathRegistryReadVendorsDirError(t *testing.T) {
 func TestNewPathRegistryReadVendorFileError(t *testing.T) {
 	// ReadFile on a vendor YAML file fails mid-iteration.
 	base := fstest.MapFS{
-		"paths/default.yaml":      {Data: []byte("vendor: default\n")},
-		"paths/vendors/zte.yaml":  {Data: []byte("vendor: zte\n")},
+		"paths/default.yaml":     {Data: []byte("vendor: default\n")},
+		"paths/vendors/zte.yaml": {Data: []byte("vendor: zte\n")},
 	}
 	fsys := &errReadFS{
 		base:     base,
@@ -399,8 +399,8 @@ func TestNewPathRegistrySkipsNonYAMLFiles(t *testing.T) {
 func TestNewPathRegistrySkipsSubdirectories(t *testing.T) {
 	// Subdirectories inside paths/vendors/ are ignored.
 	fsys := fstest.MapFS{
-		"paths/default.yaml":             {Data: []byte("vendor: default\n")},
-		"paths/vendors/sub/nested.yaml":  {Data: []byte("vendor: nested\n")},
+		"paths/default.yaml":            {Data: []byte("vendor: default\n")},
+		"paths/vendors/sub/nested.yaml": {Data: []byte("vendor: nested\n")},
 	}
 	reg, err := newPathRegistry(fsys)
 	require.NoError(t, err)

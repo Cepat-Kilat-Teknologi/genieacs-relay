@@ -70,14 +70,14 @@ func TestValidateFirmwareURL_PrivateHost_Names(t *testing.T) {
 
 func TestValidateFirmwareURL_PrivateHost_IPs(t *testing.T) {
 	cases := []string{
-		"https://127.0.0.1/file.bin",        // loopback
-		"https://10.0.0.1/file.bin",         // private
-		"https://192.168.1.1/file.bin",      // private
-		"https://172.16.5.4/file.bin",       // private
-		"https://169.254.169.254/file.bin",  // link-local (AWS metadata)
-		"https://0.0.0.0/file.bin",          // unspecified
-		"https://[::1]/file.bin",            // IPv6 loopback
-		"https://[fe80::1]/file.bin",        // IPv6 link-local
+		"https://127.0.0.1/file.bin",       // loopback
+		"https://10.0.0.1/file.bin",        // private
+		"https://192.168.1.1/file.bin",     // private
+		"https://172.16.5.4/file.bin",      // private
+		"https://169.254.169.254/file.bin", // link-local (AWS metadata)
+		"https://0.0.0.0/file.bin",         // unspecified
+		"https://[::1]/file.bin",           // IPv6 loopback
+		"https://[fe80::1]/file.bin",       // IPv6 link-local
 	}
 	for _, u := range cases {
 		t.Run(u, func(t *testing.T) {
