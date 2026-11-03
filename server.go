@@ -53,6 +53,13 @@ func loadMiddlewareAuthConfig() error {
 			"Set AUTH_KEY environment variable or disable MIDDLEWARE_AUTH")
 	}
 
+	// Without auth every CPE write endpoint (reboot, WLAN, PPPoE, firmware)
+	// is open to any in-cluster caller for every tenant, so production
+	// refuses to start rather than default to open.
+	if isProductionEnv(os.Getenv) && !middlewareAuth {
+		return fmt.Errorf("%s must be %q in production", EnvMiddlewareAuth, BoolStrTrue)
+	}
+
 	logger.Info("Middleware authentication", zap.Bool("enabled", middlewareAuth))
 	return nil
 }
