@@ -59,6 +59,8 @@ const (
 	HeaderXAPIKey     = "X-API-Key"
 	EnvMiddlewareAuth = "MIDDLEWARE_AUTH"
 	EnvAuthKey        = "AUTH_KEY"
+	//nolint:gosec // G101: env var name, not a credential
+	EnvNOCMCPAPIKey = "NOC_MCP_API_KEY"
 )
 
 // Boolean string representations for env var parsing

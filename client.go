@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,10 @@ import (
 	"strings"
 	"time"
 )
+
+// errDeviceNotFound signals that GenieACS NBI returned no device for a deviceID.
+// sanitizeErrorMessage matches on this text, so keep it stable.
+var errDeviceNotFound = errors.New("no device found with ID")
 
 // ipQuery represents the MongoDB query structure for IP-based device lookup
 type ipQuery struct {
@@ -60,7 +65,12 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 	if cachedData, found := deviceCacheInstance.get(deviceID); found {
 		return cachedData, nil // Return cached data if available and fresh
 	}
+	return fetchDeviceData(ctx, deviceID)
+}
 
+// fetchDeviceData reads the device tree from GenieACS NBI, skipping the cache,
+// and caches the result for the other routes.
+func fetchDeviceData(ctx context.Context, deviceID string) (map[string]interface{}, error) {
 	// Build query using proper JSON marshaling to prevent injection
 	queryStruct := deviceIDQuery{ID: deviceID}
 	queryBytes, err := jsonMarshal(queryStruct)
@@ -103,7 +113,7 @@ func getDeviceData(ctx context.Context, deviceID string) (map[string]interface{}
 	}
 	// Check if device was found
 	if len(result) == 0 {
-		return nil, fmt.Errorf("no device found with ID: %s", deviceID)
+		return nil, fmt.Errorf("%w: %s", errDeviceNotFound, deviceID)
 	}
 	deviceData := result[0]                       // Get first (and should be only) device
 	deviceCacheInstance.set(deviceID, deviceData) // Cache the retrieved data
