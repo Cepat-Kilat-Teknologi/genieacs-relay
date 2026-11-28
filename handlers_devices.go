@@ -185,6 +185,9 @@ func queryDevicesNBI(ctx context.Context, filter map[string]interface{}, limit, 
 		"InternetGatewayDevice.DeviceInfo.Manufacturer," +
 		"InternetGatewayDevice.DeviceInfo.ModelName," +
 		"InternetGatewayDevice.DeviceInfo.SerialNumber," +
+		"Device.DeviceInfo.Manufacturer," +
+		"Device.DeviceInfo.ModelName," +
+		"Device.DeviceInfo.SerialNumber," +
 		"InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress," +
 		"InternetGatewayDevice.LANDevice.1.LANEthernetInterfaceConfig.1.MACAddress"
 
@@ -209,10 +212,10 @@ func queryDevicesNBI(ctx context.Context, filter map[string]interface{}, limit, 
 	}
 	defer safeClose(resp.Body)
 	if resp.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GenieACS devices query failed with status %s: %s", resp.Status, string(body))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("GenieACS devices query failed with status %s", resp.Status)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
 	if err != nil {
 		return nil, err
 	}
@@ -245,11 +248,17 @@ func deviceSummaryFromTree(doc map[string]interface{}) DeviceSummary {
 	}
 	if v, ok := LookupString(doc, "InternetGatewayDevice.DeviceInfo.Manufacturer"); ok {
 		d.Manufacturer = v
+	} else if v, ok := LookupString(doc, "Device.DeviceInfo.Manufacturer"); ok {
+		d.Manufacturer = v
 	}
 	if v, ok := LookupString(doc, "InternetGatewayDevice.DeviceInfo.ModelName"); ok {
 		d.Model = v
+	} else if v, ok := LookupString(doc, "Device.DeviceInfo.ModelName"); ok {
+		d.Model = v
 	}
 	if v, ok := LookupString(doc, "InternetGatewayDevice.DeviceInfo.SerialNumber"); ok {
+		d.Serial = v
+	} else if v, ok := LookupString(doc, "Device.DeviceInfo.SerialNumber"); ok {
 		d.Serial = v
 	}
 	if v, ok := LookupString(doc,
@@ -304,13 +313,23 @@ func searchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	mac := r.URL.Query().Get("mac")
 	serial := r.URL.Query().Get("serial")
 	pppoe := r.URL.Query().Get("pppoe_username")
+	exact := r.URL.Query().Get("exact") == BoolStrTrue
 	if mac == "" && serial == "" && pppoe == "" {
 		sendError(w, r, http.StatusBadRequest, ErrCodeValidation, ErrDevicesSearchKeyMissing)
 		return
 	}
 
-	filter := buildDevicesSearchFilter(mac, serial, pppoe)
-	devices, err := queryDevicesNBI(r.Context(), filter, 1, 0)
+	var (
+		filter map[string]interface{}
+		limit  = 1
+	)
+	if exact && serial != "" && mac == "" {
+		filter = buildExactSerialSearchFilter(serial)
+		limit = 2
+	} else {
+		filter = buildDevicesSearchFilter(mac, serial, pppoe)
+	}
+	devices, err := queryDevicesNBI(r.Context(), filter, limit, 0)
 	if err != nil {
 		logger.Error("Devices search query failed", zap.Error(err))
 		sendError(w, r, http.StatusInternalServerError, ErrCodeGenieACS, ErrDevicesQueryFailed)
@@ -320,7 +339,30 @@ func searchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusNotFound, ErrCodeNotFound, ErrDevicesNotFound)
 		return
 	}
+	if exact && serial != "" && mac == "" {
+		if len(devices) > 1 {
+			sendError(w, r, http.StatusConflict, "AMBIGUOUS_SERIAL", "multiple devices match serial")
+			return
+		}
+		if !strings.EqualFold(devices[0].Serial, serial) {
+			sendError(w, r, http.StatusNotFound, ErrCodeNotFound, ErrDevicesNotFound)
+			return
+		}
+	}
 	sendResponse(w, http.StatusOK, DeviceSearchResponse{Device: devices[0]})
+}
+
+// buildExactSerialSearchFilter matches ONLY explicit TR-098 or TR-181
+// DeviceInfo.SerialNumber parameters using an anchored case-insensitive exact
+// regex (no _id fallback) so case-variant duplicates cannot bypass collision detection.
+func buildExactSerialSearchFilter(serial string) map[string]interface{} {
+	anchored := "^" + regexp.QuoteMeta(serial) + "$"
+	return map[string]interface{}{
+		"$or": []map[string]interface{}{
+			{"InternetGatewayDevice.DeviceInfo.SerialNumber._value": map[string]interface{}{"$regex": anchored, "$options": "i"}},
+			{"Device.DeviceInfo.SerialNumber._value": map[string]interface{}{"$regex": anchored, "$options": "i"}},
+		},
+	}
 }
 
 // buildDevicesSearchFilter builds a MongoDB-style filter for the

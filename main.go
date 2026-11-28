@@ -84,6 +84,7 @@ var (
 	logger         *zap.Logger   // Structured logger for application logging
 	middlewareAuth bool          // Whether API key authentication middleware is enabled
 	authKey        string        // API key for authenticating incoming requests
+	nocMCPAPIKey   string        // Dedicated API key for internal NOC MCP summary routes
 	staleThreshold time.Duration // Threshold for considering device as stale (default: 10 minutes)
 
 	// Optical interface health classification thresholds (dBm).

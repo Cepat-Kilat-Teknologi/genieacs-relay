@@ -186,31 +186,7 @@ func LookupTime(tree map[string]interface{}, path string) (time.Time, bool) {
 // Returns nil if the parent path is missing or contains no numeric
 // children.
 func EnumerateInstances(tree map[string]interface{}, parentPath string) []int {
-	if tree == nil || parentPath == "" {
-		return nil
-	}
-
-	cursor := interface{}(tree)
-	start := 0
-	for i := 0; i <= len(parentPath); i++ {
-		if i < len(parentPath) && parentPath[i] != '.' {
-			continue
-		}
-		segment := parentPath[start:i]
-		start = i + 1
-
-		m, ok := cursor.(map[string]interface{})
-		if !ok {
-			return nil
-		}
-		next, exists := m[segment]
-		if !exists {
-			return nil
-		}
-		cursor = next
-	}
-
-	parent, ok := cursor.(map[string]interface{})
+	parent, ok := lookupObject(tree, parentPath)
 	if !ok {
 		return nil
 	}
@@ -244,4 +220,39 @@ func CollectPaths(tree map[string]interface{}, paths []string) (found map[string
 		missing = append(missing, p)
 	}
 	return found, missing
+}
+
+// ObjectExists reports whether parentPath resolves to an object node in the
+// device tree, even when that object has no instances.
+func ObjectExists(tree map[string]interface{}, parentPath string) bool {
+	_, ok := lookupObject(tree, parentPath)
+	return ok
+}
+
+// lookupObject walks a dotted path and returns the object node it names.
+func lookupObject(tree map[string]interface{}, path string) (map[string]interface{}, bool) {
+	if tree == nil || path == "" {
+		return nil, false
+	}
+	cursor := interface{}(tree)
+	start := 0
+	for i := 0; i <= len(path); i++ {
+		if i < len(path) && path[i] != '.' {
+			continue
+		}
+		segment := path[start:i]
+		start = i + 1
+
+		m, ok := cursor.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		next, exists := m[segment]
+		if !exists {
+			return nil, false
+		}
+		cursor = next
+	}
+	obj, ok := cursor.(map[string]interface{})
+	return obj, ok
 }

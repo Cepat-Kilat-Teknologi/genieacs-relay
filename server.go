@@ -47,6 +47,7 @@ func loadNBIAuthConfig() error {
 func loadMiddlewareAuthConfig() error {
 	middlewareAuth = getEnv(EnvMiddlewareAuth, BoolStrFalse) == BoolStrTrue
 	authKey = getEnv(EnvAuthKey, DefaultAuthKey)
+	nocMCPAPIKey = getEnv(EnvNOCMCPAPIKey, "")
 
 	if middlewareAuth && authKey == "" {
 		return fmt.Errorf("MIDDLEWARE_AUTH is enabled but AUTH_KEY is not set. " +
@@ -301,65 +302,74 @@ func runServer(addr string) error {
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/api/v1/genieacs", func(r chi.Router) {
-		// Apply API key authentication middleware if enabled
-		if middlewareAuth {
-			r.Use(apiKeyAuthMiddleware)
-		}
-		// Idempotency middleware for write operations. Clients (billing-agent saga retries,
-		// NATS redelivery) send X-Idempotency-Key; repeated keys replay the cached response
-		// within the TTL window, preventing duplicate WLAN provisioning jobs.
-		r.Use(idempotencyMiddleware(defaultIdempotencyStore))
-		r.Get("/ssid/{ip}", getSSIDByIPHandler)
-		r.Get("/force"+"/ssid/{ip}", getSSIDByIPForceHandler)
-		r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
-		r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
-		r.Post("/dhcp/{ip}/refresh", refreshDHCPHandler)
-		r.Post("/cache/clear", clearCacheHandler)
-		// CPE lifecycle operations (v2.1.0)
-		r.Post("/reboot/{ip}", rebootDeviceHandler)
-		r.Get("/optical/{ip}", getOpticalStatsHandler)
-		// v2.2.0 — CPE lifecycle (factory reset, wake)
-		r.Post("/factory-reset/{ip}", factoryResetDeviceHandler)
-		r.Post("/wake/{ip}", wakeDeviceHandler)
-		// v2.2.0 — read-side device inspection (status, wan, generic params)
-		r.Get("/status/{ip}", getDeviceStatusHandler)
-		r.Get("/wan/{ip}", getWanStatusHandler)
-		r.Post("/params/{ip}", getGenericParamsHandler)
-		// v2.2.0 — provisioning (PPPoE credentials, firmware, QoS, bridge mode)
-		r.Put("/pppoe/{ip}", setPPPoECredentialsHandler)
-		r.Post("/firmware/{ip}", firmwareUpgradeHandler)
-		r.Put("/qos/{ip}", setQoSHandler)
-		r.Put("/bridge-mode/{ip}", setBridgeModeHandler)
-		// v2.2.0 — wifi inspection (M3, M7)
-		r.Get("/wifi-clients/{ip}", getWifiClientsHandler)
-		r.Get("/wifi-stats/{ip}", getWifiStatsHandler)
-		// v2.2.0 — devices collection query (M4, M5)
-		r.Get("/devices", listDevicesHandler)
-		r.Get("/devices/search", searchDevicesHandler)
-		// v2.2.0 — TR-069 diagnostics (M1, M2)
-		r.Post("/diag/ping/{ip}", dispatchPingHandler)
-		r.Post("/diag/traceroute/{ip}", dispatchTraceRouteHandler)
-		// v2.2.0 Phase 4 — LOW priority self-service features (L1-L10)
-		r.Put("/ntp/{ip}", setNTPHandler)
-		r.Put("/admin-password/{ip}", setAdminPasswordHandler)
-		r.Put("/dmz/{ip}", setDMZHandler)
-		r.Put("/ddns/{ip}", setDDNSHandler)
-		r.Put("/port-forwarding/{ip}", setPortForwardingHandler)
-		r.Put("/static-dhcp/{ip}", setStaticDHCPHandler)
-		r.Put("/wifi-schedule/{ip}", setWifiScheduleHandler)
-		r.Put("/mac-filter/{ip}", setMACFilterHandler)
-		r.Put("/tags/{ip}", setTagsHandler)
-		r.Get("/presets/{name}", getPresetHandler)
-		r.Put("/presets/{name}", putPresetHandler)
-		r.Delete("/presets/{name}", deletePresetHandler)
-		// Device capability and WLAN management endpoints
-		r.Get("/capability/{ip}", getDeviceCapabilityHandler)
-		r.Get("/wlan/available/{ip}", getAvailableWLANHandler)
-		r.Post("/wlan/create/{wlan}/{ip}", createWLANHandler)
-		r.Put("/wlan/update/{wlan}/{ip}", updateWLANHandler)
-		r.Put("/wlan/enable/{wlan}/{ip}", enableWLANHandler)
-		r.Delete("/wlan/delete/{wlan}/{ip}", deleteWLANHandler)
-		r.Put("/wlan/optimize/{wlan}/{ip}", optimizeWLANHandler)
+		// Dedicated internal NOC MCP route — isolated from shared AUTH_KEY
+		// so go-gateway credentials cannot reach it.
+		r.Group(func(r chi.Router) {
+			r.Use(nocMCPAuthMiddleware)
+			r.Get("/devices/{deviceID}/noc-summary", getDeviceNOCSummaryByIDHandler)
+		})
+
+		r.Group(func(r chi.Router) {
+			// Apply API key authentication middleware if enabled
+			if middlewareAuth {
+				r.Use(apiKeyAuthMiddleware)
+			}
+			// Idempotency middleware for write operations. Clients (billing-agent saga retries,
+			// NATS redelivery) send X-Idempotency-Key; repeated keys replay the cached response
+			// within the TTL window, preventing duplicate WLAN provisioning jobs.
+			r.Use(idempotencyMiddleware(defaultIdempotencyStore))
+			r.Get("/ssid/{ip}", getSSIDByIPHandler)
+			r.Get("/force"+"/ssid/{ip}", getSSIDByIPForceHandler)
+			r.Post("/ssid/{ip}/refresh", refreshSSIDHandler)
+			r.Get("/dhcp-client/{ip}", getDHCPClientByIPHandler)
+			r.Post("/dhcp/{ip}/refresh", refreshDHCPHandler)
+			r.Post("/cache/clear", clearCacheHandler)
+			// CPE lifecycle operations (v2.1.0)
+			r.Post("/reboot/{ip}", rebootDeviceHandler)
+			r.Get("/optical/{ip}", getOpticalStatsHandler)
+			// v2.2.0 — CPE lifecycle (factory reset, wake)
+			r.Post("/factory-reset/{ip}", factoryResetDeviceHandler)
+			r.Post("/wake/{ip}", wakeDeviceHandler)
+			// v2.2.0 — read-side device inspection (status, wan, generic params)
+			r.Get("/status/{ip}", getDeviceStatusHandler)
+			r.Get("/wan/{ip}", getWanStatusHandler)
+			r.Post("/params/{ip}", getGenericParamsHandler)
+			// v2.2.0 — provisioning (PPPoE credentials, firmware, QoS, bridge mode)
+			r.Put("/pppoe/{ip}", setPPPoECredentialsHandler)
+			r.Post("/firmware/{ip}", firmwareUpgradeHandler)
+			r.Put("/qos/{ip}", setQoSHandler)
+			r.Put("/bridge-mode/{ip}", setBridgeModeHandler)
+			// v2.2.0 — wifi inspection (M3, M7)
+			r.Get("/wifi-clients/{ip}", getWifiClientsHandler)
+			r.Get("/wifi-stats/{ip}", getWifiStatsHandler)
+			// v2.2.0 — devices collection query (M4, M5)
+			r.Get("/devices", listDevicesHandler)
+			r.Get("/devices/search", searchDevicesHandler)
+			// v2.2.0 — TR-069 diagnostics (M1, M2)
+			r.Post("/diag/ping/{ip}", dispatchPingHandler)
+			r.Post("/diag/traceroute/{ip}", dispatchTraceRouteHandler)
+			// v2.2.0 Phase 4 — LOW priority self-service features (L1-L10)
+			r.Put("/ntp/{ip}", setNTPHandler)
+			r.Put("/admin-password/{ip}", setAdminPasswordHandler)
+			r.Put("/dmz/{ip}", setDMZHandler)
+			r.Put("/ddns/{ip}", setDDNSHandler)
+			r.Put("/port-forwarding/{ip}", setPortForwardingHandler)
+			r.Put("/static-dhcp/{ip}", setStaticDHCPHandler)
+			r.Put("/wifi-schedule/{ip}", setWifiScheduleHandler)
+			r.Put("/mac-filter/{ip}", setMACFilterHandler)
+			r.Put("/tags/{ip}", setTagsHandler)
+			r.Get("/presets/{name}", getPresetHandler)
+			r.Put("/presets/{name}", putPresetHandler)
+			r.Delete("/presets/{name}", deletePresetHandler)
+			// Device capability and WLAN management endpoints
+			r.Get("/capability/{ip}", getDeviceCapabilityHandler)
+			r.Get("/wlan/available/{ip}", getAvailableWLANHandler)
+			r.Post("/wlan/create/{wlan}/{ip}", createWLANHandler)
+			r.Put("/wlan/update/{wlan}/{ip}", updateWLANHandler)
+			r.Put("/wlan/enable/{wlan}/{ip}", enableWLANHandler)
+			r.Delete("/wlan/delete/{wlan}/{ip}", deleteWLANHandler)
+			r.Put("/wlan/optimize/{wlan}/{ip}", optimizeWLANHandler)
+		})
 	})
 
 	// server
